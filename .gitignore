@@ -1,0 +1,7 @@
+node_modules
+.env
+.vite
+.vscode
+.idea
+.taskmaster
+.taskmaster.md
