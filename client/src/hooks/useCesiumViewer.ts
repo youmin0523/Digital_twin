@@ -47,6 +47,24 @@ export function useCesiumViewer(containerRef: React.RefObject<HTMLDivElement>) {
         duration: 2,
       });
 
+      // NASA GIBS MODIS Terra 위성 이미지를 배경 오버레이로 추가
+      // 경로 탐색에는 사용되지 않으며 시각적 사실감 향상 목적
+      try {
+        const gibsProvider = new Cesium.WebMapTileServiceImageryProvider({
+          url: 'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/2024-03-01/250m/{TileMatrix}/{TileRow}/{TileCol}.jpg',
+          layer: 'MODIS_Terra_CorrectedReflectance_TrueColor',
+          style: 'default',
+          format: 'image/jpeg',
+          tileMatrixSetID: '250m',
+          maximumLevel: 8,
+          tilingScheme: new Cesium.GeographicTilingScheme(),
+          credit: new Cesium.Credit('NASA GIBS / Earthdata'),
+        });
+        viewer.imageryLayers.addImageryProvider(gibsProvider);
+      } catch (e) {
+        console.warn('[useCesiumViewer] NASA GIBS 이미지 레이어 추가 실패:', e);
+      }
+
       viewerRef.current = viewer;
     });
 

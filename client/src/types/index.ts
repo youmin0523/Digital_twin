@@ -41,6 +41,10 @@ export interface Vessel {
   position: [number, number];         // current [lon, lat]
   heading: number;                    // degrees
   isInAlert: boolean;
+  computedWaypoints: Array<[number, number]> | null; // A* 계산된 경로 (null이면 정적 waypoints 사용)
+  routeNeedsRecalc: boolean;                         // true이면 다음 틱에 A* 재계산
+  lastRouteCalcMonth: number;                        // 마지막으로 경로를 계산한 월
+  staticWaypointTargetIndex: number;                 // vessel.waypoints 중 현재 A* 목표 인덱스
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────

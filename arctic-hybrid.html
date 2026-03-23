@@ -334,27 +334,71 @@ input[type=range]{accent-color:#60a5fa;width:120px;vertical-align:middle;}
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MTJlMTZiNS02MzQ1LTRmZGMtOWM0Ni1kZWJkMzQxZTJhMTEiLCJpZCI6NDA2NTU5LCJpYXQiOjE3NzM5OTY1Mjl9.lpSbE0Dchaf-IEx0J8MkS6FoisyRwd4nfSZ0GyFciLI';
 
 const WAYPOINTS = [
-  {lon:129.04,lat:35.10,label:'부산항'},   {lon:141.00,lat:41.00,label:'쓰가루해협'},
-  {lon:160.00,lat:48.00,label:'북태평양'}, {lon:-168.0,lat:66.00,label:'베링해협'},
-  {lon:-163.0,lat:72.00,label:'척치해'},   {lon:-150.0,lat:77.00,label:'동시베리아해'},
-  {lon:-120.0,lat:82.00,label:'극지 진입'},{lon: -70.0,lat:86.00,label:'고위도 북극'},
-  {lon:  20.0,lat:83.00,label:'그린란드해'},{lon:  30.0,lat:77.00,label:'바렌츠해'},
-  {lon:  20.0,lat:71.00,label:'노르웨이해'},{lon:   4.5,lat:51.90,label:'로테르담'},
+  // ── 한국 → 동해 (블라디보스톡 동쪽 경유) ─────────────────────
+  {lon:129.04, lat:35.10, label:'부산항'},
+  {lon:130.5,  lat:35.6,  label:'대한해협'},           // 쓰시마(34.75°N) 동쪽
+  {lon:132.0,  lat:37.5,  label:'동해 남부'},            // 동해 개방 해역
+  {lon:134.5,  lat:40.0,  label:'블라디보스톡 동쪽'},    // 러시아 해안(130-131°E) 동쪽 4°+ 이격
+  {lon:138.0,  lat:43.0,  label:'동해 북부'},            // 홋카이도(140°E) 서쪽 해역
+  // ── 소야해협 → 오호츠크해 ────────────────────────────────────
+  {lon:143.0,  lat:46.5,  label:'소야해협'},             // 라페루즈 해협 (Cape Sōya 45.53°N 북쪽)
+  {lon:150.0,  lat:50.5,  label:'오호츠크해'},
+  // ── 부솔해협(Bussol Strait) 통과 → 태평양 ─────────────────
+  {lon:148.5,  lat:49.5,  label:'오호츠크해 북부'},       // Sea of Okhotsk, 쿠릴 북쪽
+  {lon:150.8,  lat:46.5,  label:'부솔해협'},             // Bussol Strait (Urup ~150.5°E / Simushir SW ~151.3°E,46.7°N)
+  {lon:154.0,  lat:46.0,  label:'쿠릴 동쪽'},            // 태평양, Simushir(151.3-152.2°E) 동쪽
+  {lon:157.0,  lat:48.0,  label:'캄차카 남쪽'},          // 태평양, Cape Lopatka(156.7°E,51°N) 남쪽 3°
+  {lon:163.0,  lat:54.0,  label:'태평양'},               // 캄차카 동안(~162°E) 동쪽 1°+
+  // ── NSR 북동항로 ─────────────────────────────────────────────
+  {lon:178.0,  lat:60.0,  label:'베링해 접근'},
+  {lon:-168.0, lat:66.0,  label:'베링해협'},
+  {lon:-163.0, lat:72.0,  label:'척치해'},
+  {lon: 170.0, lat:71.0,  label:'동시베리아해 동'},       // dLon=-27° wrap
+  {lon: 152.0, lat:73.0,  label:'동시베리아해 서'},
+  {lon: 120.0, lat:75.0,  label:'랍테프해'},
+  {lon:  85.0, lat:77.0,  label:'카라해'},
+  {lon:  55.0, lat:79.0,  label:'카라해 북'},             // 노바야젬랴 북단 위
+  // ── 유럽 접근 ────────────────────────────────────────────────
+  {lon:  30.0, lat:75.0,  label:'바렌츠해'},
+  {lon:  15.0, lat:70.0,  label:'노르웨이해'},
+  {lon:   5.0, lat:60.0,  label:'북해'},
+  {lon:   4.5, lat:51.9,  label:'로테르담'},
 ];
 const TOTAL_SECONDS = 14 * 86400;
 
+// 대원 거리 (Great Circle Distance)
+function greatCircleDist(a,b){
+  const R=Math.PI/180,f1=a.lat*R,f2=b.lat*R,dl=(b.lon-a.lon)*R;
+  return Math.acos(Math.max(-1,Math.min(1,Math.sin(f1)*Math.sin(f2)+Math.cos(f1)*Math.cos(f2)*Math.cos(dl))));
+}
 function buildTimings(wps){
   const d=[0];
-  for(let i=1;i<wps.length;i++){const dx=wps[i].lon-wps[i-1].lon,dy=wps[i].lat-wps[i-1].lat;d.push(d[d.length-1]+Math.sqrt(dx*dx+dy*dy));}
+  for(let i=1;i<wps.length;i++) d.push(d[d.length-1]+greatCircleDist(wps[i-1],wps[i]));
   const tot=d[d.length-1];
   return wps.map((w,i)=>({...w,t:d[i]/tot}));
 }
 const TWP=buildTimings(WAYPOINTS);
 
+// 구면 선형 보간 (Slerp) — GEODESIC polyline과 정확히 일치
+function slerpLonLat(a,b,t){
+  const R=Math.PI/180;
+  const f1=a.lat*R,l1=a.lon*R,f2=b.lat*R,l2=b.lon*R;
+  const x1=Math.cos(f1)*Math.cos(l1),y1=Math.cos(f1)*Math.sin(l1),z1=Math.sin(f1);
+  const x2=Math.cos(f2)*Math.cos(l2),y2=Math.cos(f2)*Math.sin(l2),z2=Math.sin(f2);
+  const dot=Math.max(-1,Math.min(1,x1*x2+y1*y2+z1*z2));
+  const om=Math.acos(dot);
+  if(om<1e-10)return{lon:a.lon,lat:a.lat};
+  const s1=Math.sin((1-t)*om)/Math.sin(om),s2=Math.sin(t*om)/Math.sin(om);
+  const x=s1*x1+s2*x2,y=s1*y1+s2*y2,z=s1*z1+s2*z2;
+  return{lon:Math.atan2(y,x)/R,lat:Math.asin(Math.max(-1,Math.min(1,z)))/R};
+}
 function routePos(p){
   p=Math.max(0,Math.min(1,p));
   for(let i=0;i<TWP.length-1;i++){
-    if(p<=TWP[i+1].t){const t=(p-TWP[i].t)/(TWP[i+1].t-TWP[i].t);return{lon:TWP[i].lon+(TWP[i+1].lon-TWP[i].lon)*t,lat:TWP[i].lat+(TWP[i+1].lat-TWP[i].lat)*t,seg:i};}
+    if(p<=TWP[i+1].t){
+      const t=(p-TWP[i].t)/(TWP[i+1].t-TWP[i].t);
+      return{...slerpLonLat(TWP[i],TWP[i+1],t),seg:i};
+    }
   }
   return{lon:WAYPOINTS[WAYPOINTS.length-1].lon,lat:WAYPOINTS[WAYPOINTS.length-1].lat,seg:WAYPOINTS.length-2};
 }
@@ -476,6 +520,37 @@ window.addEventListener('keyup',e=>{
 
 let userInteracting=false, interactTimer=null;
 
+// ─── 실제 빙하 농도 데이터 ───────────────────────────────────────────────────────
+let cachedIceData = null;
+let cachedIceMonth = -1;
+
+async function loadIceData() {
+  const month = new Date().getMonth(); // 0–11
+  if (cachedIceMonth === month && cachedIceData) return;
+  const pad = String(month).padStart(2, '0');
+  try {
+    const res = await fetch(`/data/realIceData_month${pad}.json`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    cachedIceData = await res.json();
+    cachedIceMonth = month;
+    console.log('[arctic] 실제 빙하 데이터 로드 완료, 월:', month + 1, '셀 수:', cachedIceData.cells.length);
+  } catch(e) {
+    console.warn('[arctic] 실제 빙하 데이터 로드 실패 — 절차적 데이터 사용:', e);
+  }
+}
+
+// 현재 위치(lon, lat)의 해빙 농도 조회 (0–1), 데이터 없으면 null
+function sampleIceConcentration(lon, lat) {
+  if (!cachedIceData) return null;
+  let best = null, bestDist = Infinity;
+  for (const cell of cachedIceData.cells) {
+    const d = Math.abs(cell.lon - lon) + Math.abs(cell.lat - lat);
+    if (d < bestDist) { bestDist = d; best = cell; }
+    if (d < 0.6) break; // 충분히 가까우면 즉시 반환
+  }
+  return (best && bestDist < 2.0) ? best.concentration : null;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // 3. HUD
 // ═══════════════════════════════════════════════════════════════
@@ -483,9 +558,12 @@ function updateHUD(pos){
   const lat=pos.lat;
   const icData=ICE_CLASS_DATA[shipIceClass]||ICE_CLASS_DATA.NONE;
   let danger='낮음 🟢',dc='safe',iceState='개방 수역',sic=0,temp=2.1,rfi=0.0;
-  if(lat>icData.latDanger){danger='매우 높음 🔴';dc='danger';iceState='중빙 결빙 해역';sic=75+Math.random()*20;temp=-1.8;rfi=8.5+Math.random()*1.5;}
-  else if(lat>icData.latWarn){danger='높음 🟠';dc='warn';iceState='결빙 해역';sic=45+Math.random()*25;temp=-0.5;rfi=5.0+Math.random()*2;}
-  else if(lat>icData.latCaution){danger='중간 🟡';dc='warn';iceState='부빙 해역';sic=15+Math.random()*25;temp=0.8;rfi=2.2+Math.random()*1.5;}
+  // 실제 빙하 농도 데이터 우선 사용, 없으면 위도 기반 절차적 값 사용
+  const realConc = sampleIceConcentration(pos.lon, lat);
+  if(lat>icData.latDanger){danger='매우 높음 🔴';dc='danger';iceState='중빙 결빙 해역';sic=realConc!==null?Math.round(realConc*100):75+Math.random()*20;temp=-1.8;rfi=8.5+Math.random()*1.5;}
+  else if(lat>icData.latWarn){danger='높음 🟠';dc='warn';iceState='결빙 해역';sic=realConc!==null?Math.round(realConc*100):45+Math.random()*25;temp=-0.5;rfi=5.0+Math.random()*2;}
+  else if(lat>icData.latCaution){danger='중간 🟡';dc='warn';iceState='부빙 해역';sic=realConc!==null?Math.round(realConc*100):15+Math.random()*25;temp=0.8;rfi=2.2+Math.random()*1.5;}
+  else if(realConc!==null&&realConc>0.05){sic=Math.round(realConc*100);}
 
   const pct=simProgress*100;
   const spd=isManual?(shipSpeed*1.944).toFixed(1):(multiplier/1000*15).toFixed(1);
@@ -607,7 +685,7 @@ async function initCesium(){
     cv.addEventListener('mousedown',()=>{userInteracting=true;if(interactTimer)clearTimeout(interactTimer);});
     cv.addEventListener('mouseup',()=>{if(interactTimer)clearTimeout(interactTimer);interactTimer=setTimeout(()=>{userInteracting=false;},3000);});
     cv.addEventListener('wheel',()=>{userInteracting=true;if(interactTimer)clearTimeout(interactTimer);interactTimer=setTimeout(()=>{userInteracting=false;},3000);});
-    cViewer.entities.add({polyline:{positions:Cesium.Cartesian3.fromDegreesArray(WAYPOINTS.flatMap(w=>[w.lon,w.lat])),width:2.5,material:new Cesium.PolylineGlowMaterialProperty({glowPower:0.25,color:Cesium.Color.fromCssColorString('#60a5fa').withAlpha(0.9)})}});
+    cViewer.entities.add({polyline:{positions:Cesium.Cartesian3.fromDegreesArray(WAYPOINTS.flatMap(w=>[w.lon,w.lat])),width:2.5,arcType:Cesium.ArcType.GEODESIC,material:new Cesium.PolylineGlowMaterialProperty({glowPower:0.25,color:Cesium.Color.fromCssColorString('#60a5fa').withAlpha(0.9)})}});
     for(const wp of WAYPOINTS){
       cViewer.entities.add({position:Cesium.Cartesian3.fromDegrees(wp.lon,wp.lat,5000),point:{pixelSize:5,color:Cesium.Color.YELLOW,outlineColor:Cesium.Color.BLACK,outlineWidth:1,disableDepthTestDistance:Number.POSITIVE_INFINITY},label:{text:wp.label,font:'10px Courier New',fillColor:Cesium.Color.WHITE,outlineColor:Cesium.Color.BLACK,outlineWidth:2,style:Cesium.LabelStyle.FILL_AND_OUTLINE,pixelOffset:new Cesium.Cartesian2(0,-16),disableDepthTestDistance:Number.POSITIVE_INFINITY,scaleByDistance:new Cesium.NearFarScalar(1e5,1,6e6,0.3)}});
     }
@@ -619,7 +697,6 @@ async function initCesium(){
 function updateCesiumCamera(pos){
   if(!cViewer||userInteracting)return;
   if(currentMode==='SATELLITE'){cViewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(pos.lon,pos.lat,350000),orientation:{heading:0,pitch:Cesium.Math.toRadians(-90),roll:0}});}
-  else if(currentMode==='WIDE'&&currentMode!==prevMode){cViewer.camera.flyTo({destination:Cesium.Cartesian3.fromDegrees(20,80,11000000),orientation:{heading:0,pitch:Cesium.Math.toRadians(-50),roll:0},duration:1.5});}
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -765,7 +842,7 @@ const ICE_T=[
 function rng(a,b){return a+Math.random()*(b-a);}
 function buildIcebergs(){
   const closeRanges=[50,80,120,200,280,350,450,500];
-  for(const dist of closeRanges){const angle=Math.random()*Math.PI*2;spawnIceberg(Math.cos(angle)*dist,Math.sin(angle)*dist,ICE_T[3]);}
+  for(const dist of closeRanges){const angle=(Math.PI/3)+Math.random()*(Math.PI*4/3);spawnIceberg(Math.cos(angle)*dist,Math.sin(angle)*dist,ICE_T[3]);}
   for(let i=0;i<60;i++){const angle=Math.random()*Math.PI*2,dist=rng(500,5000);let r=Math.random(),type=ICE_T[ICE_T.length-1],cum=0;for(const t of ICE_T){cum+=t.p;if(r<cum){type=t;break;}}spawnIceberg(Math.cos(angle)*dist,Math.sin(angle)*dist,type);}
   for(let i=0;i<110;i++){const angle=Math.random()*Math.PI*2,dist=rng(5000,90000);let r=Math.random(),type=ICE_T[ICE_T.length-1],cum=0;for(const t of ICE_T){cum+=t.p;if(r<cum){type=t;break;}}spawnIceberg(Math.cos(angle)*dist,Math.sin(angle)*dist,type);}
 }
@@ -1152,11 +1229,11 @@ function applyCamera(){
 }
 
 function pushIcebergs(){
-  const PUSH=90;
+  const PUSH=Math.max(90,Math.min(500,multiplier*0.3));
   const sx=shipPos.x,sz=shipPos.z;  // 자동/수동 모두 shipPos 기준
   for(const ice of tIcebergs){
     const dx=ice.cx-sx,dz=ice.cz-sz,dist=Math.sqrt(dx*dx+dz*dz);
-    if(dist<PUSH&&dist>0.1){const f=((PUSH-dist)/PUSH)*0.4;ice.cx+=(dx/dist)*f;ice.cz+=(dz/dist)*f;}
+    if(dist<PUSH&&dist>0.1){const f=((PUSH-dist)/PUSH)*0.6;ice.cx+=(dx/dist)*f*2;ice.cz+=(dz/dist)*f*2;}
     ice.cx+=(ice.ox-ice.cx)*0.0006;ice.cz+=(ice.oz-ice.cz)*0.0006;
     ice.grp.position.set(ice.cx,0,ice.cz);
   }
@@ -1252,6 +1329,17 @@ function setMode(mode){
     document.getElementById('three-wrap').classList.toggle('active',useThree);
     document.getElementById('cesium-wrap').classList.toggle('hidden',useThree);
     updateHint();resetView();updateBridgeOverlay();
+    // Cesium 모드 전환 시 선박 현재 위치로 즉시 포커스
+    if(CESIUM_MODES.has(mode)&&cViewer){
+      const pos=routePos(simProgress);
+      if(mode==='SATELLITE'){
+        cViewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(pos.lon,pos.lat,350000),orientation:{heading:0,pitch:Cesium.Math.toRadians(-90),roll:0}});
+      }else if(mode==='WIDE'){
+        const hd=routeHeading(simProgress);
+        const midLon=pos.lon+Math.sin(hd)*4, midLat=pos.lat+Math.cos(hd)*4;
+        cViewer.camera.flyTo({destination:Cesium.Cartesian3.fromDegrees(midLon,midLat,5000000),orientation:{heading:hd,pitch:Cesium.Math.toRadians(-55),roll:0},duration:1.5});
+      }
+    }
     setTimeout(()=>{fade.style.opacity='0';switching=false;},300);
   },500);
 }
@@ -1317,6 +1405,10 @@ function mainLoop(ts){
     updateFoam(currentDt);             // 포말 파티클 업데이트
     updateShipMotion(currentDt,pos.lat);
     updateNightMode(pos.lat);
+    // 아이스버그: 북극권(62°N 이상)에서만 표시
+    const _iceVis=pos.lat>62;
+    if(tIcebergs.length>0&&tIcebergs[0].grp.visible!==_iceVis)
+      tIcebergs.forEach(ice=>{ice.grp.visible=_iceVis;});
     pushIcebergs();
 
     shipScaleCurrent.lerp(shipScaleTarget,0.05);
@@ -1379,6 +1471,7 @@ document.getElementById('fov-slider').addEventListener('input',e=>{
 // ═══════════════════════════════════════════════════════════════
 // 13. 시작
 // ═══════════════════════════════════════════════════════════════
+loadIceData(); // 현재 월의 실제 빙하 농도 데이터 비동기 로드
 initCesium();
 initThree();
 currentMode='SATELLITE';

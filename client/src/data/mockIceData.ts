@@ -31,7 +31,7 @@ const LAT_MAX = 90;
 const LON_MIN = -180;
 const LON_MAX = 180;
 
-function generateMonthlyDataset(month: number): IceDataset {
+export function generateMonthlyDataset(month: number): IceDataset {
   const sf = seasonalFactor(month);
   const cells: IceGridCell[] = [];
 
