@@ -1,0 +1,1806 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>북극항로 쇄빙선 시뮬레이션</title>
+    <link
+      href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css"
+      rel="stylesheet"
+    />
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+      #cesiumContainer {
+        width: 100%;
+        height: 100vh;
+      }
+
+      /* ── HUD 공통 ── */
+      .hud-panel {
+        position: absolute;
+        z-index: 10;
+        background: rgba(0, 8, 20, 0.85);
+        border: 1px solid #1e40af;
+        border-radius: 10px;
+        padding: 14px 18px;
+        color: #93c5fd;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        line-height: 1.9;
+        backdrop-filter: blur(6px);
+        box-shadow: 0 0 20px rgba(0, 30, 100, 0.6);
+        pointer-events: none;
+      }
+      .hud-panel.interactive {
+        pointer-events: all;
+      }
+      .hud-title {
+        font-size: 11px;
+        font-weight: bold;
+        color: #60a5fa;
+        border-bottom: 1px solid #1e3a8a;
+        padding-bottom: 6px;
+        margin-bottom: 8px;
+        letter-spacing: 1px;
+      }
+      .hud-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .hud-label {
+        color: #6b89b0;
+      }
+      .hud-value {
+        color: #e0f0ff;
+        font-weight: bold;
+      }
+      .hud-value.warn {
+        color: #fbbf24;
+      }
+      .hud-value.danger {
+        color: #f87171;
+      }
+      .hud-value.safe {
+        color: #4ade80;
+      }
+
+      #hud-left {
+        top: 20px;
+        left: 20px;
+        min-width: 240px;
+      }
+      #hud-right {
+        top: 20px;
+        right: 20px;
+        min-width: 220px;
+      }
+
+      /* ── 하단 조작 ── */
+      #hud-bottom {
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 12px 20px;
+        white-space: nowrap;
+      }
+      .hud-btn {
+        padding: 7px 16px;
+        border-radius: 6px;
+        border: 1px solid #2563eb;
+        background: rgba(37, 99, 235, 0.25);
+        color: #93c5fd;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .hud-btn:hover {
+        background: rgba(37, 99, 235, 0.5);
+      }
+      .hud-btn.stop {
+        border-color: #dc2626;
+        background: rgba(220, 38, 38, 0.2);
+        color: #fca5a5;
+      }
+      .hud-btn.stop:hover {
+        background: rgba(220, 38, 38, 0.4);
+      }
+      .hud-btn.accent {
+        border-color: #0891b2;
+        background: rgba(8, 145, 178, 0.2);
+        color: #67e8f9;
+      }
+      .hud-btn.accent:hover {
+        background: rgba(8, 145, 178, 0.4);
+      }
+
+      input[type='range'] {
+        accent-color: #3b82f6;
+        width: 110px;
+        vertical-align: middle;
+      }
+      .speed-label {
+        color: #93c5fd;
+        font-size: 12px;
+        min-width: 46px;
+      }
+
+      #progress-bar-wrap {
+        height: 4px;
+        background: #1e3a8a;
+        border-radius: 2px;
+        margin-top: 8px;
+        overflow: hidden;
+      }
+      #progress-bar {
+        height: 100%;
+        background: linear-gradient(to right, #2563eb, #60a5fa);
+        width: 0%;
+        transition: width 0.3s;
+      }
+
+      /* ── 십자선 ── */
+      #crosshair {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 5;
+        pointer-events: none;
+        opacity: 0.35;
+      }
+      #crosshair::before,
+      #crosshair::after {
+        content: '';
+        position: absolute;
+        background: #60a5fa;
+      }
+      #crosshair::before {
+        width: 20px;
+        height: 1px;
+        top: 0;
+        left: -10px;
+      }
+      #crosshair::after {
+        width: 1px;
+        height: 20px;
+        top: -10px;
+        left: 0;
+      }
+
+      /* ── 제목 배너 ── */
+      #hud-title-banner {
+        position: absolute;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 10;
+        text-align: center;
+        color: #93c5fd;
+        font-family: 'Courier New', monospace;
+        pointer-events: none;
+        text-shadow: 0 0 12px rgba(59, 130, 246, 0.8);
+      }
+      #hud-title-banner h1 {
+        font-size: 15px;
+        font-weight: bold;
+        letter-spacing: 2px;
+      }
+      #hud-title-banner p {
+        font-size: 10px;
+        color: #4b7ab5;
+        margin-top: 2px;
+      }
+
+      /* ── 카메라 모드 ── */
+      #hud-camera {
+        bottom: 20px;
+        left: 20px;
+        min-width: 158px;
+        padding: 12px 14px;
+      }
+      .cam-btn {
+        display: block;
+        width: 100%;
+        padding: 6px 10px;
+        border-radius: 5px;
+        border: 1px solid #1e3a8a;
+        background: rgba(30, 58, 138, 0.15);
+        color: #6b89b0;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.18s;
+        text-align: left;
+        margin-bottom: 4px;
+      }
+      .cam-btn:last-child {
+        margin-bottom: 0;
+      }
+      .cam-btn:hover {
+        background: rgba(37, 99, 235, 0.28);
+        color: #93c5fd;
+        border-color: #2563eb;
+      }
+      .cam-btn.active {
+        background: rgba(37, 99, 235, 0.42);
+        border-color: #60a5fa;
+        color: #e0f0ff;
+        font-weight: bold;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+      }
+
+      /* ── 모드 플래시 ── */
+      #mode-flash {
+        position: absolute;
+        inset: 0;
+        z-index: 20;
+        background: rgba(37, 99, 235, 0.15);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      #mode-flash.flash {
+        opacity: 1;
+      }
+
+      /* ── 항로 설정 패널 ── */
+      #hud-route {
+        bottom: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 480px;
+        max-width: 96vw;
+        padding: 16px 20px;
+        display: none;
+      }
+      #hud-route.open {
+        display: block;
+      }
+
+      .route-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .route-col label {
+        display: block;
+        font-size: 10px;
+        color: #6b89b0;
+        margin-bottom: 4px;
+      }
+
+      .port-wrap {
+        position: relative;
+      }
+      .port-input {
+        width: 100%;
+        padding: 7px 10px;
+        background: rgba(30, 58, 138, 0.3);
+        border: 1px solid #1e3a8a;
+        border-radius: 5px;
+        color: #e0f0ff;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        outline: none;
+      }
+      .port-input:focus {
+        border-color: #3b82f6;
+      }
+      .port-input::placeholder {
+        color: #4b7ab5;
+      }
+
+      .port-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 30;
+        background: rgba(0, 8, 20, 0.97);
+        border: 1px solid #1e3a8a;
+        border-top: none;
+        border-radius: 0 0 6px 6px;
+        max-height: 180px;
+        overflow-y: auto;
+        display: none;
+      }
+      .port-dropdown.open {
+        display: block;
+      }
+      .port-opt {
+        padding: 7px 10px;
+        cursor: pointer;
+        font-size: 11px;
+        color: #93c5fd;
+        border-bottom: 1px solid rgba(30, 58, 138, 0.5);
+        display: flex;
+        justify-content: space-between;
+      }
+      .port-opt:hover {
+        background: rgba(37, 99, 235, 0.3);
+      }
+      .port-opt:last-child {
+        border-bottom: none;
+      }
+      .port-opt .country {
+        color: #4b7ab5;
+        font-size: 10px;
+      }
+
+      .port-selected {
+        padding: 5px 10px;
+        background: rgba(37, 99, 235, 0.2);
+        border: 1px solid #3b82f6;
+        border-radius: 5px;
+        color: #e0f0ff;
+        font-size: 11px;
+        display: none;
+        margin-top: 4px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .port-selected.visible {
+        display: flex;
+      }
+      .port-selected button {
+        background: none;
+        border: none;
+        color: #6b89b0;
+        cursor: pointer;
+        font-size: 13px;
+        line-height: 1;
+      }
+      .port-selected button:hover {
+        color: #f87171;
+      }
+
+      .route-type-row {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+      .rtype-btn {
+        flex: 1;
+        padding: 6px 0;
+        border-radius: 5px;
+        border: 1px solid #1e3a8a;
+        background: rgba(30, 58, 138, 0.15);
+        color: #6b89b0;
+        font-family: 'Courier New', monospace;
+        font-size: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-align: center;
+      }
+      .rtype-btn:hover {
+        color: #93c5fd;
+        border-color: #2563eb;
+      }
+      .rtype-btn.active {
+        border-color: #3b82f6;
+        background: rgba(37, 99, 235, 0.4);
+        color: #e0f0ff;
+        font-weight: bold;
+      }
+
+      #btn-apply-route {
+        width: 100%;
+        padding: 9px;
+        border-radius: 6px;
+        border: 1px solid #0891b2;
+        background: rgba(8, 145, 178, 0.25);
+        color: #67e8f9;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      #btn-apply-route:hover {
+        background: rgba(8, 145, 178, 0.45);
+      }
+      #btn-apply-route:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      /* ── 자유 시점 힌트 ── */
+      #free-hint {
+        position: absolute;
+        bottom: 90px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 10;
+        color: #4b7ab5;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        text-align: center;
+        pointer-events: none;
+        display: none;
+      }
+      #free-hint.visible {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="cesiumContainer"></div>
+    <div id="crosshair"></div>
+    <div id="mode-flash"></div>
+    <div id="free-hint">
+      스크롤: 줌 | 좌클릭 드래그: 회전 | 우클릭 드래그: 이동 | 중간 버튼: 틸트
+    </div>
+
+    <!-- 제목 배너 -->
+    <div id="hud-title-banner">
+      <h1>■ 북극항로 쇄빙선 시뮬레이션</h1>
+      <p id="banner-sub">부산 → 북극항로 경유 → 로테르담 | 🎯 선교 1인칭</p>
+    </div>
+
+    <!-- 좌상단 -->
+    <div class="hud-panel" id="hud-left">
+      <div class="hud-title">▸ 항행 정보</div>
+      <div class="hud-row">
+        <span class="hud-label">속도</span
+        ><span class="hud-value" id="hud-speed">-- kn</span>
+      </div>
+      <div class="hud-row">
+        <span class="hud-label">항로 진행률</span
+        ><span class="hud-value" id="hud-progress">0.0%</span>
+      </div>
+      <div class="hud-row">
+        <span class="hud-label">현재 위치</span
+        ><span class="hud-value" id="hud-position">--</span>
+      </div>
+      <div class="hud-row">
+        <span class="hud-label">빙결 상태</span
+        ><span class="hud-value" id="hud-icestate">개방 수역</span>
+      </div>
+      <div class="hud-row">
+        <span class="hud-label">현재 단계</span
+        ><span class="hud-value" id="hud-phase">출항 대기</span>
+      </div>
+      <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+    </div>
+
+    <!-- 우상단 -->
+    <div class="hud-panel" id="hud-right">
+      <div class="hud-title">▸ 안전 / 환경 정보</div>
+      <div class="hud-row">
+        <span class="hud-label">전방 해빙 위험도</span
+        ><span class="hud-value safe" id="hud-danger">낮음 🟢</span>
+      </div>
+      <div class="hud-row">
+        <span class="hud-label">Ice Class 조건</span
+        ><span class="hud-value" id="hud-iceclass">--</span>
+      </div>
+      <div class="hud-row">
+        <span class="hud-label">시야 조건</span
+        ><span class="hud-value" id="hud-visibility">양호</span>
+      </div>
+      <div class="hud-row" id="hud-mouse-hint">
+        <span class="hud-label">마우스 드래그</span
+        ><span class="hud-value" style="color: #4b7ab5">±60° 시점 전환</span>
+      </div>
+    </div>
+
+    <!-- 카메라 모드 -->
+    <div class="hud-panel interactive" id="hud-camera">
+      <div class="hud-title">▸ 카메라 시점</div>
+      <button class="cam-btn active" data-mode="BRIDGE">🎯 선교 1인칭</button>
+      <button class="cam-btn" data-mode="MANUAL">🕹️ 직접 운전</button>
+      <button class="cam-btn" data-mode="FOLLOW">🚢 선미 추적</button>
+      <button class="cam-btn" data-mode="SATELLITE">🛰️ 위성 조감</button>
+      <button class="cam-btn" data-mode="WIDE">🌐 광역 항로</button>
+      <button class="cam-btn" data-mode="FREE">🖱️ 자유 시점</button>
+    </div>
+
+    <!-- 항로 설정 패널 -->
+    <div class="hud-panel interactive" id="hud-route">
+      <div class="hud-title">▸ 항로 설정</div>
+
+      <div class="route-row">
+        <!-- 출발항 -->
+        <div class="route-col">
+          <label>출발항</label>
+          <div class="port-wrap">
+            <input
+              class="port-input"
+              id="origin-input"
+              placeholder="항구 검색 (예: 부산)"
+              autocomplete="off"
+            />
+            <div class="port-dropdown" id="origin-dropdown"></div>
+          </div>
+          <div class="port-selected" id="origin-selected">
+            <span id="origin-selected-text"></span>
+            <button id="origin-clear">✕</button>
+          </div>
+        </div>
+        <!-- 도착항 -->
+        <div class="route-col">
+          <label>도착항</label>
+          <div class="port-wrap">
+            <input
+              class="port-input"
+              id="dest-input"
+              placeholder="항구 검색 (예: 로테르담)"
+              autocomplete="off"
+            />
+            <div class="port-dropdown" id="dest-dropdown"></div>
+          </div>
+          <div class="port-selected" id="dest-selected">
+            <span id="dest-selected-text"></span>
+            <button id="dest-clear">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 경유 항로 -->
+      <div style="font-size: 10px; color: #6b89b0; margin-bottom: 6px">
+        경유 항로
+      </div>
+      <div class="route-type-row">
+        <button class="rtype-btn active" data-rtype="NSR">
+          NSR 북동항로<br /><span style="font-size: 9px; color: #4b7ab5"
+            >베링해협 경유</span
+          >
+        </button>
+        <button class="rtype-btn" data-rtype="NWP">
+          NWP 북서항로<br /><span style="font-size: 9px; color: #4b7ab5"
+            >캐나다 제도 경유</span
+          >
+        </button>
+        <button class="rtype-btn" data-rtype="TPR">
+          TPR 횡극항로<br /><span style="font-size: 9px; color: #4b7ab5"
+            >북극점 직항</span
+          >
+        </button>
+      </div>
+
+      <button id="btn-apply-route" disabled>✓ 항로 적용</button>
+    </div>
+
+    <!-- 하단 중앙 조작 -->
+    <div class="hud-panel interactive" id="hud-bottom">
+      <button class="hud-btn" id="btn-start">▶ 출항</button>
+      <button class="hud-btn" id="btn-reset">↻ 리셋</button>
+      <button class="hud-btn accent" id="btn-route-toggle">🗺️ 항로 설정</button>
+      <span class="hud-label" style="font-size: 11px">배속</span>
+      <input
+        type="range"
+        id="speed-slider"
+        min="50"
+        max="5000"
+        step="50"
+        value="1000"
+      />
+      <span class="speed-label" id="speed-label">×1000</span>
+    </div>
+
+    <script>
+      // ═══════════════════════════════════════════════════════════════
+      // 1. Viewer 초기화
+      // ═══════════════════════════════════════════════════════════════
+      Cesium.Ion.defaultAccessToken =
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MTJlMTZiNS02MzQ1LTRmZGMtOWM0Ni1kZWJkMzQxZTJhMTEiLCJpZCI6NDA2NTU5LCJpYXQiOjE3NzM5OTY1Mjl9.lpSbE0Dchaf-IEx0J8MkS6FoisyRwd4nfSZ0GyFciLI';
+
+      const viewer = new Cesium.Viewer('cesiumContainer', {
+        animation: false,
+        timeline: false,
+        geocoder: false,
+        homeButton: false,
+        sceneModePicker: false,
+        baseLayerPicker: false,
+        navigationHelpButton: false,
+        fullscreenButton: false,
+        selectionIndicator: false,
+        infoBox: false,
+        shouldAnimate: true,
+      });
+
+      viewer.scene.globe.enableLighting = true;
+      viewer.scene.atmosphere.show = true;
+      viewer.scene.fog.enabled = true;
+      viewer.scene.fog.density = 0.00025;
+
+      const ctrl = viewer.scene.screenSpaceCameraController;
+      // 기본: 모두 비활성화 (자유 시점에서만 활성화)
+      ctrl.enableRotate = ctrl.enableTranslate = ctrl.enableZoom = false;
+      ctrl.enableTilt = ctrl.enableLook = false;
+
+      // ═══════════════════════════════════════════════════════════════
+      // 2. 항구 데이터베이스
+      // ═══════════════════════════════════════════════════════════════
+      const PORTS = [
+        // 🇰🇷 한국
+        {
+          id: 'busan',
+          name: '부산항',
+          country: '🇰🇷 한국',
+          lon: 129.04,
+          lat: 35.1,
+          region: 'pacific',
+        },
+        {
+          id: 'incheon',
+          name: '인천항',
+          country: '🇰🇷 한국',
+          lon: 126.64,
+          lat: 37.45,
+          region: 'pacific',
+        },
+        {
+          id: 'gwangyang',
+          name: '광양항',
+          country: '🇰🇷 한국',
+          lon: 127.78,
+          lat: 34.93,
+          region: 'pacific',
+        },
+        // 🇯🇵 일본
+        {
+          id: 'yokohama',
+          name: '요코하마항',
+          country: '🇯🇵 일본',
+          lon: 139.64,
+          lat: 35.44,
+          region: 'pacific',
+        },
+        {
+          id: 'kobe',
+          name: '고베항',
+          country: '🇯🇵 일본',
+          lon: 135.19,
+          lat: 34.68,
+          region: 'pacific',
+        },
+        {
+          id: 'osaka',
+          name: '오사카항',
+          country: '🇯🇵 일본',
+          lon: 135.43,
+          lat: 34.67,
+          region: 'pacific',
+        },
+        {
+          id: 'tokyo',
+          name: '도쿄항',
+          country: '🇯🇵 일본',
+          lon: 139.77,
+          lat: 35.63,
+          region: 'pacific',
+        },
+        // 🇨🇳 중국
+        {
+          id: 'shanghai',
+          name: '상하이항',
+          country: '🇨🇳 중국',
+          lon: 121.8,
+          lat: 31.3,
+          region: 'pacific',
+        },
+        {
+          id: 'tianjin',
+          name: '텐진항',
+          country: '🇨🇳 중국',
+          lon: 117.72,
+          lat: 38.99,
+          region: 'pacific',
+        },
+        {
+          id: 'dalian',
+          name: '다롄항',
+          country: '🇨🇳 중국',
+          lon: 121.64,
+          lat: 38.92,
+          region: 'pacific',
+        },
+        {
+          id: 'qingdao',
+          name: '칭다오항',
+          country: '🇨🇳 중국',
+          lon: 120.37,
+          lat: 36.07,
+          region: 'pacific',
+        },
+        {
+          id: 'ningbo',
+          name: '닝보항',
+          country: '🇨🇳 중국',
+          lon: 121.55,
+          lat: 29.87,
+          region: 'pacific',
+        },
+        // 🇷🇺 러시아
+        {
+          id: 'vladivostok',
+          name: '블라디보스토크항',
+          country: '🇷🇺 러시아',
+          lon: 131.9,
+          lat: 43.12,
+          region: 'pacific',
+        },
+        {
+          id: 'murmansk',
+          name: '무르만스크항',
+          country: '🇷🇺 러시아',
+          lon: 33.08,
+          lat: 68.97,
+          region: 'arctic',
+        },
+        {
+          id: 'sabetta',
+          name: '사베타항',
+          country: '🇷🇺 러시아',
+          lon: 72.06,
+          lat: 71.3,
+          region: 'arctic',
+        },
+        // 🇺🇸 미국
+        {
+          id: 'losangeles',
+          name: '로스앤젤레스항',
+          country: '🇺🇸 미국',
+          lon: -118.27,
+          lat: 33.73,
+          region: 'pacific',
+        },
+        {
+          id: 'seattle',
+          name: '시애틀항',
+          country: '🇺🇸 미국',
+          lon: -122.38,
+          lat: 47.6,
+          region: 'pacific',
+        },
+        // 🇨🇦 캐나다
+        {
+          id: 'vancouver',
+          name: '밴쿠버항',
+          country: '🇨🇦 캐나다',
+          lon: -123.1,
+          lat: 49.29,
+          region: 'pacific',
+        },
+        // 🇳🇱 네덜란드
+        {
+          id: 'rotterdam',
+          name: '로테르담항',
+          country: '🇳🇱 네덜란드',
+          lon: 4.48,
+          lat: 51.91,
+          region: 'europe',
+        },
+        // 🇩🇪 독일
+        {
+          id: 'hamburg',
+          name: '함부르크항',
+          country: '🇩🇪 독일',
+          lon: 9.99,
+          lat: 53.55,
+          region: 'europe',
+        },
+        {
+          id: 'bremerhaven',
+          name: '브레머하펜항',
+          country: '🇩🇪 독일',
+          lon: 8.57,
+          lat: 53.54,
+          region: 'europe',
+        },
+        // 🇧🇪 벨기에
+        {
+          id: 'antwerp',
+          name: '앤트워프항',
+          country: '🇧🇪 벨기에',
+          lon: 4.4,
+          lat: 51.22,
+          region: 'europe',
+        },
+        // 🇬🇧 영국
+        {
+          id: 'felixstowe',
+          name: '펠릭스토항',
+          country: '🇬🇧 영국',
+          lon: 1.35,
+          lat: 51.96,
+          region: 'europe',
+        },
+        {
+          id: 'southampton',
+          name: '사우샘프턴항',
+          country: '🇬🇧 영국',
+          lon: -1.4,
+          lat: 50.9,
+          region: 'europe',
+        },
+        // 🇫🇷 프랑스
+        {
+          id: 'lehavre',
+          name: '르아브르항',
+          country: '🇫🇷 프랑스',
+          lon: 0.11,
+          lat: 49.49,
+          region: 'europe',
+        },
+        // 🇳🇴 노르웨이
+        {
+          id: 'oslo',
+          name: '오슬로항',
+          country: '🇳🇴 노르웨이',
+          lon: 10.74,
+          lat: 59.91,
+          region: 'europe',
+        },
+        // 🇵🇱 폴란드
+        {
+          id: 'gdansk',
+          name: '그단스크항',
+          country: '🇵🇱 폴란드',
+          lon: 18.66,
+          lat: 54.4,
+          region: 'europe',
+        },
+        // 🇫🇮 핀란드
+        {
+          id: 'helsinki',
+          name: '헬싱키항',
+          country: '🇫🇮 핀란드',
+          lon: 24.95,
+          lat: 60.17,
+          region: 'europe',
+        },
+      ];
+
+      // ═══════════════════════════════════════════════════════════════
+      // 3. 경유 항로 템플릿 (태평양→유럽 방향)
+      // ═══════════════════════════════════════════════════════════════
+      const ROUTE_MIDPOINTS = {
+        NSR: [
+          { lon: 141, lat: 41, label: '쓰가루해협' },
+          { lon: 165, lat: 52, label: '북태평양' },
+          { lon: -168, lat: 66, label: '베링해협' },
+          { lon: -163, lat: 72, label: '척치해' },
+          { lon: -150, lat: 77, label: '동시베리아해' },
+          { lon: -120, lat: 82, label: '극지 진입' },
+          { lon: -70, lat: 86, label: '고위도 북극' },
+          { lon: 20, lat: 83, label: '그린란드해' },
+          { lon: 30, lat: 77, label: '바렌츠해' },
+          { lon: 20, lat: 71, label: '노르웨이해' },
+          { lon: 5, lat: 62, label: '노르웨이 연안' },
+          { lon: 4, lat: 58, label: '북해' },
+          { lon: 2, lat: 53, label: '영국해협' },
+        ],
+        NWP: [
+          { lon: 141, lat: 41, label: '쓰가루해협' },
+          { lon: 165, lat: 55, label: '북태평양' },
+          { lon: -168, lat: 66, label: '베링해협' },
+          { lon: -160, lat: 72, label: '보퍼트해' },
+          { lon: -130, lat: 75, label: '북서항로 진입' },
+          { lon: -100, lat: 75, label: '파리채널' },
+          { lon: -80, lat: 72, label: '허드슨해협 북부' },
+          { lon: -65, lat: 67, label: '허드슨해협' },
+          { lon: -55, lat: 60, label: '래브라도해' },
+          { lon: -25, lat: 53, label: '북대서양' },
+          { lon: -10, lat: 52, label: '아이리시해' },
+          { lon: 2, lat: 53, label: '도버해협' },
+          { lon: 4, lat: 52, label: '북해 남부' },
+        ],
+        TPR: [
+          { lon: 141, lat: 41, label: '쓰가루해협' },
+          { lon: 165, lat: 55, label: '북태평양' },
+          { lon: -168, lat: 66, label: '베링해협' },
+          { lon: -160, lat: 80, label: '척치해 북부' },
+          { lon: -90, lat: 88, label: '북극 중심' },
+          { lon: 20, lat: 83, label: '북극 출구' },
+          { lon: 30, lat: 77, label: '바렌츠해' },
+          { lon: 20, lat: 71, label: '노르웨이해' },
+          { lon: 5, lat: 62, label: '노르웨이 연안' },
+          { lon: 4, lat: 58, label: '북해' },
+          { lon: 2, lat: 53, label: '영국해협' },
+        ],
+      };
+
+      const ROUTE_DURATION = { NSR: 1209600, NWP: 1555200, TPR: 1036800 }; // 초
+
+      function buildWaypoints(origin, destination, routeType) {
+        const mid = ROUTE_MIDPOINTS[routeType] || ROUTE_MIDPOINTS.NSR;
+        const isPacEU =
+          origin.region === 'pacific' && destination.region === 'europe';
+        const isEUPac =
+          origin.region === 'europe' && destination.region === 'pacific';
+        let midpoints = isPacEU ? mid : isEUPac ? [...mid].reverse() : mid;
+        return [
+          { lon: origin.lon, lat: origin.lat, label: origin.name },
+          ...midpoints,
+          {
+            lon: destination.lon,
+            lat: destination.lat,
+            label: destination.name,
+          },
+        ];
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 4. 초기 항로 Waypoints & Clock
+      // ═══════════════════════════════════════════════════════════════
+      let TOTAL_SECONDS = ROUTE_DURATION.NSR;
+      let WAYPOINTS = buildWaypoints(
+        PORTS.find((p) => p.id === 'busan'),
+        PORTS.find((p) => p.id === 'rotterdam'),
+        'NSR',
+      );
+
+      let startTime = Cesium.JulianDate.now();
+      let positionProperty;
+
+      function rebuildPositionProperty(wps, totalSec) {
+        const prop = new Cesium.SampledPositionProperty();
+        prop.setInterpolationOptions({
+          interpolationDegree: 3,
+          interpolationAlgorithm: Cesium.LagrangePolynomialApproximation,
+        });
+        // 누적 거리로 시간 배분
+        const dists = [0];
+        for (let i = 1; i < wps.length; i++) {
+          const dx = wps[i].lon - wps[i - 1].lon,
+            dy = wps[i].lat - wps[i - 1].lat;
+          dists.push(dists[dists.length - 1] + Math.sqrt(dx * dx + dy * dy));
+        }
+        const total = dists[dists.length - 1] || 1;
+        wps.forEach((wp, i) => {
+          const t = Cesium.JulianDate.addSeconds(
+            startTime,
+            (dists[i] / total) * totalSec,
+            new Cesium.JulianDate(),
+          );
+          prop.addSample(t, Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, 0));
+        });
+        return prop;
+      }
+
+      positionProperty = rebuildPositionProperty(WAYPOINTS, TOTAL_SECONDS);
+
+      const stopTimeFirst = Cesium.JulianDate.addSeconds(
+        startTime,
+        TOTAL_SECONDS,
+        new Cesium.JulianDate(),
+      );
+      viewer.clock.startTime = startTime.clone();
+      viewer.clock.stopTime = stopTimeFirst;
+      viewer.clock.currentTime = startTime.clone();
+      viewer.clock.clockRange = Cesium.ClockRange.LOOP_STOP;
+      viewer.clock.multiplier = 1000;
+      viewer.clock.shouldAnimate = false;
+
+      // ═══════════════════════════════════════════════════════════════
+      // 5. 선박 Entity
+      // ═══════════════════════════════════════════════════════════════
+      const shipEntity = viewer.entities.add({
+        name: '쇄빙선',
+        position: positionProperty,
+        orientation: new Cesium.VelocityOrientationProperty(positionProperty),
+        box: {
+          dimensions: new Cesium.Cartesian3(30000, 100000, 20000),
+          material: Cesium.Color.STEELBLUE.withAlpha(0.88),
+          outline: true,
+          outlineColor: Cesium.Color.WHITE,
+        },
+      });
+
+      // ═══════════════════════════════════════════════════════════════
+      // 6. 빙하 Entity 300개
+      // ═══════════════════════════════════════════════════════════════
+      const icebergData = [];
+      const rng = (a, b) => a + Math.random() * (b - a);
+
+      const ICE_TYPES = [
+        { prob: 0.05, w:[2000,10000], d:[1500,8000], h:[500,2000], name:'tabular' },
+        { prob: 0.10, w:[500,3000],   d:[400,2500],  h:[200,800],  name:'large'   },
+        { prob: 0.30, w:[100,800],    d:[80,600],     h:[80,300],   name:'medium'  },
+        { prob: 0.35, w:[10,150],     d:[8,120],      h:[20,100],   name:'small'   },
+        { prob: 0.20, w:[2,20],       d:[2,15],       h:[5,25],     name:'growler' },
+      ];
+      const ICE_COLORS = {
+        tabular: '#e8f4ff', large: '#c0dcf0',
+        medium:  '#b0d0e8', small: '#a8cce0', growler: '#d0e8f8',
+      };
+
+      for (let i = 0; i < 1000; i++) {
+        const lon = rng(-180, 180);  // 전체 북극권
+        const lat = rng(65, 89);
+
+        let r = Math.random(), type = ICE_TYPES[ICE_TYPES.length - 1], cumul = 0;
+        for (const t of ICE_TYPES) {
+          cumul += t.prob;
+          if (r < cumul) { type = t; break; }
+        }
+
+        const w = rng(type.w[0], type.w[1]);
+        const d = rng(type.d[0], type.d[1]);
+        const h = rng(type.h[0], type.h[1]); // 시각화용 과장 높이
+        const alpha = type.name === 'tabular' ? 0.90 : 0.93;
+        const iceColor = Cesium.Color.fromCssColorString(ICE_COLORS[type.name]).withAlpha(alpha);
+
+        const surfacePos = Cesium.Cartesian3.fromDegrees(lon, lat, h / 2);
+
+        // 수면 위: 절두원추 (좁은 꼭대기, 넓은 밑면), 7각형으로 불규칙한 자연 실루엣
+        const entity = viewer.entities.add({
+          position: new Cesium.ConstantPositionProperty(surfacePos),
+          cylinder: {
+            length: h,
+            topRadius: w * rng(0.03, 0.10),
+            bottomRadius: w * rng(0.35, 0.50),
+            material: iceColor,
+            outline: true,
+            outlineColor: Cesium.Color.WHITE.withAlpha(0.25),
+            slices: 7,
+          },
+        });
+
+        // 수중 부분 (~90%는 수면 아래)
+        const subH = h * (type.name === 'tabular' ? 4 : 9);
+        viewer.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(lon, lat, -(subH / 2)),
+          cylinder: {
+            length: subH,
+            topRadius: w * 0.48,
+            bottomRadius: w * 0.32,
+            material: Cesium.Color.fromCssColorString('#0a3a5a').withAlpha(0.22),
+            outline: false,
+            slices: 7,
+          },
+        });
+
+        icebergData.push({
+          originalPos: surfacePos.clone(),
+          currentPos:  surfacePos.clone(),
+          entity,
+        });
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 7. 해빙 ImageryLayer
+      // ═══════════════════════════════════════════════════════════════
+      (function () {
+        try {
+          const p = new Cesium.SingleTileImageryProvider({
+            url: '/tiles/ice/2024-09.png',
+            rectangle: Cesium.Rectangle.fromDegrees(-180, 60, 180, 90),
+          });
+          const add = (p) => {
+            const l = viewer.imageryLayers.addImageryProvider(p);
+            l.alpha = 0.42;
+          };
+          if (p && typeof p.then === 'function') p.then(add).catch(fb);
+          else add(p);
+        } catch (e) {
+          fb();
+        }
+        function fb() {
+          viewer.entities.add({
+            rectangle: {
+              coordinates: Cesium.Rectangle.fromDegrees(-180, 60, 180, 90),
+              material: Cesium.Color.WHITE.withAlpha(0.12),
+              height: 1000,
+            },
+          });
+        }
+      })();
+
+      // ═══════════════════════════════════════════════════════════════
+      // 8. 항로선 (CustomDataSource — 항로 변경 시 재생성)
+      // ═══════════════════════════════════════════════════════════════
+      const routeDS = new Cesium.CustomDataSource('route');
+      viewer.dataSources.add(routeDS);
+
+      function rebuildRouteLines(wps) {
+        routeDS.entities.removeAll();
+        const coords = wps.flatMap((w) => [w.lon, w.lat]);
+        routeDS.entities.add({
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArray(coords),
+            width: 4,
+            material: new Cesium.PolylineGlowMaterialProperty({
+              color: Cesium.Color.fromCssColorString('#f59e0b'),
+              glowPower: 0.3,
+            }),
+            clampToGround: false,
+            arcType: Cesium.ArcType.GEODESIC,
+          },
+        });
+        const dangerWps = wps.filter((w) => w.lat > 70);
+        if (dangerWps.length >= 2) {
+          routeDS.entities.add({
+            polyline: {
+              positions: Cesium.Cartesian3.fromDegreesArray(
+                dangerWps.flatMap((w) => [w.lon, w.lat]),
+              ),
+              width: 3,
+              material: new Cesium.PolylineGlowMaterialProperty({
+                color: Cesium.Color.fromCssColorString('#ef4444'),
+                glowPower: 0.45,
+              }),
+              clampToGround: false,
+            },
+          });
+        }
+        wps.forEach((wp, idx) => {
+          if (
+            idx === 0 ||
+            idx === wps.length - 1 ||
+            (wp.label && idx % 2 === 0)
+          ) {
+            routeDS.entities.add({
+              position: Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, 8000),
+              label: {
+                text: wp.label || '',
+                font: '11px sans-serif',
+                fillColor: Cesium.Color.WHITE,
+                outlineColor: Cesium.Color.BLACK,
+                outlineWidth: 2,
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                pixelOffset: new Cesium.Cartesian2(0, -14),
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                scaleByDistance: new Cesium.NearFarScalar(1e5, 1, 6e6, 0.3),
+              },
+              point: {
+                pixelSize: 6,
+                color: Cesium.Color.ORANGE,
+                outlineColor: Cesium.Color.WHITE,
+                outlineWidth: 1,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              },
+            });
+          }
+        });
+      }
+
+      rebuildRouteLines(WAYPOINTS);
+
+      // ═══════════════════════════════════════════════════════════════
+      // 9. 카메라 모드
+      // ═══════════════════════════════════════════════════════════════
+      let currentMode = 'BRIDGE',
+        isSimulating = false,
+        lastHeading = 0,
+        mouseHeadingOffset = 0;
+      const MAX_OFFSET = Cesium.Math.toRadians(60);
+
+      // ── 직접 운전 상태 ──
+      let manualLon = 33, manualLat = 69, manualSpeedMs = 0;
+      const MANUAL_MAX_SPEED_MS = 20;          // ~40 knots
+      const TURN_RATE_RAD = Cesium.Math.toRadians(1.2); // 프레임당 회전량
+      const keys = {};
+      window.addEventListener('keydown', (e) => {
+        keys[e.code] = true;
+        if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(e.code))
+          e.preventDefault(); // 스크롤 방지
+      });
+      window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+      const MODE_META = {
+        BRIDGE: {
+          label: '🎯 선교 1인칭',
+          crosshair: true,
+          mouseHint: true,
+          free: false,
+        },
+        MANUAL: {
+          label: '🕹️ 직접 운전 (W/S: 속도, A/D: 조향)',
+          crosshair: true,
+          mouseHint: true,
+          free: false,
+        },
+        FOLLOW: {
+          label: '🚢 선미 추적',
+          crosshair: false,
+          mouseHint: false,
+          free: false,
+        },
+        SATELLITE: {
+          label: '🛰️ 위성 조감',
+          crosshair: false,
+          mouseHint: false,
+          free: false,
+        },
+        WIDE: {
+          label: '🌐 광역 항로',
+          crosshair: false,
+          mouseHint: false,
+          free: false,
+        },
+        FREE: {
+          label: '🖱️ 자유 시점',
+          crosshair: false,
+          mouseHint: false,
+          free: true,
+        },
+      };
+
+      function activateMode(mode) {
+        // 직접 운전 진입 시 현재 선박 위치에서 시작
+        if (mode === 'MANUAL') {
+          const t = viewer.clock.currentTime;
+          const pos = positionProperty.getValue(t);
+          if (pos) {
+            const c = Cesium.Ellipsoid.WGS84.cartesianToCartographic(pos);
+            manualLon = Cesium.Math.toDegrees(c.longitude);
+            manualLat = Cesium.Math.toDegrees(c.latitude);
+          } else {
+            manualLon = WAYPOINTS[0].lon;
+            manualLat = WAYPOINTS[0].lat;
+          }
+          manualSpeedMs = 0;
+        }
+        currentMode = mode;
+        const meta = MODE_META[mode];
+        document
+          .querySelectorAll('.cam-btn')
+          .forEach((b) =>
+            b.classList.toggle('active', b.dataset.mode === mode),
+          );
+        document.getElementById('crosshair').style.display = meta.crosshair
+          ? 'block'
+          : 'none';
+        document.getElementById('hud-mouse-hint').style.display = meta.mouseHint
+          ? 'flex'
+          : 'none';
+        document
+          .getElementById('free-hint')
+          .classList.toggle('visible', meta.free);
+        document.getElementById('banner-sub').textContent =
+          `${WAYPOINTS[0]?.label} → 북극항로 경유 → ${WAYPOINTS.at(-1)?.label} | ${meta.label}`;
+        // Cesium 카메라 제어 활성화 여부
+        ctrl.enableRotate =
+          ctrl.enableTranslate =
+          ctrl.enableZoom =
+          ctrl.enableTilt =
+          ctrl.enableLook =
+            meta.free;
+        // 전환 플래시
+        const fl = document.getElementById('mode-flash');
+        fl.classList.add('flash');
+        setTimeout(() => fl.classList.remove('flash'), 300);
+        if (mode !== 'BRIDGE') mouseHeadingOffset = 0;
+      }
+
+      document
+        .querySelectorAll('.cam-btn')
+        .forEach((b) =>
+          b.addEventListener('click', () => activateMode(b.dataset.mode)),
+        );
+
+      // ── 헬퍼: camPos → targetPos 바라보기 ──
+      function setCameraLookAt(camPos, targetPos) {
+        const enu = Cesium.Transforms.eastNorthUpToFixedFrame(camPos);
+        const inv = Cesium.Matrix4.inverseTransformation(
+          enu,
+          new Cesium.Matrix4(),
+        );
+        const toT = Cesium.Cartesian3.subtract(
+          targetPos,
+          camPos,
+          new Cesium.Cartesian3(),
+        );
+        const loc = Cesium.Matrix4.multiplyByPointAsVector(
+          inv,
+          toT,
+          new Cesium.Cartesian3(),
+        );
+        const h = Math.atan2(loc.x, loc.y);
+        const p = Math.atan2(loc.z, Math.sqrt(loc.x * loc.x + loc.y * loc.y));
+        viewer.camera.setView({
+          destination: camPos,
+          orientation: { heading: h, pitch: p, roll: 0 },
+        });
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 10. preRender — 카메라 + 빙하 + HUD
+      // ═══════════════════════════════════════════════════════════════
+      viewer.scene.canvas.addEventListener('mousemove', (e) => {
+        if (currentMode !== 'BRIDGE' || e.buttons !== 1) return;
+        mouseHeadingOffset += (e.movementX || 0) * 0.005;
+        mouseHeadingOffset = Cesium.Math.clamp(
+          mouseHeadingOffset,
+          -MAX_OFFSET,
+          MAX_OFFSET,
+        );
+      });
+      viewer.scene.canvas.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        mouseHeadingOffset = 0;
+      });
+
+      viewer.scene.preRender.addEventListener(() => {
+        const t = viewer.clock.currentTime;
+
+        // ── 직접 운전 모드: 전체 제어권 수동 ──
+        if (currentMode === 'MANUAL') {
+          if (keys['KeyW'] || keys['ArrowUp'])
+            manualSpeedMs = Math.min(manualSpeedMs + 0.4, MANUAL_MAX_SPEED_MS);
+          else
+            manualSpeedMs *= 0.97; // 자연 감속
+          if (keys['KeyS'] || keys['ArrowDown'])
+            manualSpeedMs = Math.max(manualSpeedMs - 1.0, -MANUAL_MAX_SPEED_MS * 0.3);
+          if (keys['KeyA'] || keys['ArrowLeft']) lastHeading -= TURN_RATE_RAD;
+          if (keys['KeyD'] || keys['ArrowRight']) lastHeading += TURN_RATE_RAD;
+
+          const dt = 0.033; // ~30fps 기준
+          const cosLat = Math.cos(Cesium.Math.toRadians(manualLat));
+          manualLon += (Math.sin(lastHeading) * manualSpeedMs * dt) / (111320 * cosLat);
+          manualLat += (Math.cos(lastHeading) * manualSpeedMs * dt) / 110540;
+          manualLat = Cesium.Math.clamp(manualLat, 60, 89);
+
+          // 선박 엔티티 위치 업데이트
+          shipEntity.position = new Cesium.ConstantPositionProperty(
+            Cesium.Cartesian3.fromDegrees(manualLon, manualLat, 0)
+          );
+
+          // 1인칭 선교 카메라 (수면 위 15m)
+          viewer.camera.setView({
+            destination: Cesium.Cartesian3.fromDegrees(manualLon, manualLat, 15),
+            orientation: {
+              heading: lastHeading + mouseHeadingOffset,
+              pitch: Cesium.Math.toRadians(-3),
+              roll: 0,
+            },
+          });
+          return;
+        }
+
+        const shipPos = positionProperty.getValue(t);
+        if (!shipPos) return;
+
+        // 헤딩 (시뮬레이션 중에만 업데이트, 부드럽게 보간)
+        if (isSimulating) {
+          const t2 = Cesium.JulianDate.addSeconds(t, 3, new Cesium.JulianDate());
+          const nextPos = positionProperty.getValue(t2);
+          if (nextPos) {
+            const tf = Cesium.Transforms.eastNorthUpToFixedFrame(shipPos);
+            const inv = Cesium.Matrix4.inverseTransformation(
+              tf,
+              new Cesium.Matrix4(),
+            );
+            const diff = Cesium.Cartesian3.subtract(
+              nextPos,
+              shipPos,
+              new Cesium.Cartesian3(),
+            );
+            const loc = Cesium.Matrix4.multiplyByPointAsVector(
+              inv,
+              diff,
+              new Cesium.Cartesian3(),
+            );
+            if (Cesium.Cartesian3.magnitude(loc) > 0.001) {
+              const raw = Math.atan2(loc.x, loc.y);
+              let delta = raw - lastHeading;
+              // 각도 래핑 (-π ~ π) 으로 최단 경로 보간
+              while (delta > Math.PI) delta -= 2 * Math.PI;
+              while (delta < -Math.PI) delta += 2 * Math.PI;
+              lastHeading += delta * 0.08;
+            }
+          }
+        }
+
+        const elapsed = Cesium.JulianDate.secondsDifference(t, startTime);
+        const roll = Math.sin(elapsed * 0.1) * 0.004; // 미세 흔들림만
+        const carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(shipPos);
+
+        // 카메라 모드 (시뮬 여부와 무관하게 항상 적용 — 버튼 즉시 반응)
+        if (currentMode === 'BRIDGE') {
+          const camPos = Cesium.Cartesian3.fromRadians(
+            carto.longitude,
+            carto.latitude,
+            Math.max(carto.height, 0) + 15, // 최소 수면 위 15m 보장
+          );
+          viewer.camera.setView({
+            destination: camPos,
+            orientation: {
+              heading: lastHeading + mouseHeadingOffset,
+              pitch: Cesium.Math.toRadians(-3), // 살짝 아래를 봄
+              roll,
+            },
+          });
+        } else if (currentMode === 'FOLLOW') {
+          const enu = Cesium.Transforms.eastNorthUpToFixedFrame(shipPos);
+          const bx = -Math.sin(lastHeading) * 80000,
+            by = -Math.cos(lastHeading) * 80000;
+          const camPos = Cesium.Matrix4.multiplyByPoint(
+            enu,
+            new Cesium.Cartesian3(bx, by, 25000),
+            new Cesium.Cartesian3(),
+          );
+          setCameraLookAt(camPos, shipPos);
+        } else if (currentMode === 'SATELLITE') {
+          const camPos = Cesium.Cartesian3.fromRadians(
+            carto.longitude,
+            carto.latitude,
+            carto.height + 100000,
+          );
+          viewer.camera.setView({
+            destination: camPos,
+            orientation: {
+              heading: lastHeading,
+              pitch: Cesium.Math.toRadians(-90),
+              roll: 0,
+            },
+          });
+        } else if (currentMode === 'WIDE') {
+          const enu = Cesium.Transforms.eastNorthUpToFixedFrame(shipPos);
+          const bx = -Math.sin(lastHeading) * 500000,
+            by = -Math.cos(lastHeading) * 500000;
+          const camPos = Cesium.Matrix4.multiplyByPoint(
+            enu,
+            new Cesium.Cartesian3(bx, by, 300000),
+            new Cesium.Cartesian3(),
+          );
+          setCameraLookAt(camPos, shipPos);
+        }
+        // FREE 모드: 카메라 개입 없음
+
+        if (!isSimulating) return;
+
+        // 빙하 push
+        const PUSH = 50000;
+        for (const ice of icebergData) {
+          const dist = Cesium.Cartesian3.distance(shipPos, ice.currentPos);
+          if (dist < PUSH && dist > 200) {
+            const dir = Cesium.Cartesian3.subtract(
+              ice.currentPos,
+              shipPos,
+              new Cesium.Cartesian3(),
+            );
+            Cesium.Cartesian3.normalize(dir, dir);
+            const pv = Cesium.Cartesian3.multiplyByScalar(
+              dir,
+              (PUSH - dist) * 0.0004,
+              new Cesium.Cartesian3(),
+            );
+            ice.currentPos = Cesium.Cartesian3.add(
+              ice.currentPos,
+              pv,
+              new Cesium.Cartesian3(),
+            );
+            ice.entity.position = new Cesium.ConstantPositionProperty(
+              ice.currentPos,
+            );
+          }
+        }
+
+        updateHUD(t, carto);
+      });
+
+      // ═══════════════════════════════════════════════════════════════
+      // 11. HUD 업데이트
+      // ═══════════════════════════════════════════════════════════════
+      function updateHUD(t, carto) {
+        const elapsed = Math.max(
+          0,
+          Cesium.JulianDate.secondsDifference(t, startTime),
+        );
+        const pct = Math.min(100, (elapsed / TOTAL_SECONDS) * 100);
+        document.getElementById('hud-progress').textContent =
+          pct.toFixed(1) + '%';
+        document.getElementById('progress-bar').style.width =
+          pct.toFixed(1) + '%';
+        const lat = Cesium.Math.toDegrees(carto.latitude).toFixed(2);
+        const lon = Cesium.Math.toDegrees(carto.longitude).toFixed(2);
+        document.getElementById('hud-position').textContent =
+          `${lat}°N, ${lon}°E`;
+        document.getElementById('hud-speed').textContent =
+          ((viewer.clock.multiplier / 1000) * 15).toFixed(1) + ' kn';
+        const latN = parseFloat(lat);
+        const dangerEl = document.getElementById('hud-danger');
+        dangerEl.className = 'hud-value';
+        let danger = '낮음 🟢';
+        if (latN > 82) {
+          danger = '매우 높음 🔴';
+          dangerEl.classList.add('danger');
+        } else if (latN > 76) {
+          danger = '높음 🟠';
+          dangerEl.classList.add('warn');
+        } else if (latN > 70) {
+          danger = '중간 🟡';
+          dangerEl.classList.add('warn');
+        } else {
+          dangerEl.classList.add('safe');
+        }
+        dangerEl.textContent = danger;
+        let iceState = '개방 수역',
+          iceClass = '일반 선박 가능';
+        if (latN > 80) {
+          iceState = '중빙 결빙 해역';
+          iceClass = 'PC2 이상 필수';
+        } else if (latN > 75) {
+          iceState = '결빙 해역';
+          iceClass = 'PC3 이상 권고';
+        } else if (latN > 65) {
+          iceState = '부빙 해역';
+          iceClass = 'PC5 이상 권고';
+        }
+        document.getElementById('hud-icestate').textContent = iceState;
+        document.getElementById('hud-iceclass').textContent = iceClass;
+        const pi = WAYPOINTS.findIndex(
+          (_, i) => !WAYPOINTS[i + 1] || elapsed < (WAYPOINTS[i + 1]._t || 0),
+        );
+        // phase: 누적 비율로 현재 waypoint 결정
+        const fracNow = elapsed / TOTAL_SECONDS;
+        const totalDists = [0];
+        for (let i = 1; i < WAYPOINTS.length; i++) {
+          const dx = WAYPOINTS[i].lon - WAYPOINTS[i - 1].lon,
+            dy = WAYPOINTS[i].lat - WAYPOINTS[i - 1].lat;
+          totalDists.push(
+            totalDists[totalDists.length - 1] + Math.sqrt(dx * dx + dy * dy),
+          );
+        }
+        const td = totalDists[totalDists.length - 1] || 1;
+        const phaseIdx = totalDists.findIndex((d) => d / td > fracNow);
+        const phase =
+          WAYPOINTS[
+            Math.max(0, (phaseIdx < 0 ? WAYPOINTS.length : phaseIdx) - 1)
+          ];
+        document.getElementById('hud-phase').textContent = (
+          phase || WAYPOINTS.at(-1)
+        ).label;
+        document.getElementById('hud-visibility').textContent =
+          latN > 82 ? '불량 (극야/결빙 안개)' : latN > 70 ? '보통' : '양호';
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 12. 버튼 이벤트
+      // ═══════════════════════════════════════════════════════════════
+      const btnStart = document.getElementById('btn-start');
+      const btnReset = document.getElementById('btn-reset');
+
+      btnStart.addEventListener('click', () => {
+        isSimulating = !isSimulating;
+        viewer.clock.shouldAnimate = isSimulating;
+        btnStart.textContent = isSimulating ? '⏸ 정지' : '▶ 출항';
+        btnStart.classList.toggle('stop', isSimulating);
+      });
+
+      btnReset.addEventListener('click', () => {
+        isSimulating = false;
+        viewer.clock.shouldAnimate = false;
+        viewer.clock.currentTime = startTime.clone();
+        mouseHeadingOffset = 0;
+        lastHeading = 0;
+        btnStart.textContent = '▶ 출항';
+        btnStart.classList.remove('stop');
+        document.getElementById('hud-progress').textContent = '0.0%';
+        document.getElementById('progress-bar').style.width = '0%';
+        document.getElementById('hud-phase').textContent = '출항 대기';
+        for (const ice of icebergData) {
+          ice.currentPos = ice.originalPos.clone();
+          ice.entity.position = new Cesium.ConstantPositionProperty(
+            ice.currentPos,
+          );
+        }
+        viewer.camera.setView({
+          destination: Cesium.Cartesian3.fromDegrees(
+            WAYPOINTS[0].lon,
+            WAYPOINTS[0].lat,
+            8,
+          ),
+          orientation: {
+            heading: Cesium.Math.toRadians(10),
+            pitch: 0,
+            roll: 0,
+          },
+        });
+      });
+
+      document.getElementById('speed-slider').addEventListener('input', (e) => {
+        const v = parseInt(e.target.value, 10);
+        viewer.clock.multiplier = v;
+        document.getElementById('speed-label').textContent =
+          '×' + v.toLocaleString();
+      });
+
+      // 항로 설정 패널 토글
+      const routePanel = document.getElementById('hud-route');
+      document
+        .getElementById('btn-route-toggle')
+        .addEventListener('click', () => {
+          routePanel.classList.toggle('open');
+        });
+
+      // ═══════════════════════════════════════════════════════════════
+      // 13. 항구 자동완성
+      // ═══════════════════════════════════════════════════════════════
+      let selectedOrigin = PORTS.find((p) => p.id === 'busan');
+      let selectedDest = PORTS.find((p) => p.id === 'rotterdam');
+      let selectedRouteType = 'NSR';
+
+      // 선택 포트 초기 표시
+      setSelectedPort('origin', selectedOrigin);
+      setSelectedPort('dest', selectedDest);
+
+      function setSelectedPort(side, port) {
+        const txtEl = document.getElementById(`${side}-selected-text`);
+        const boxEl = document.getElementById(`${side}-selected`);
+        const inputEl = document.getElementById(`${side}-input`);
+        if (port) {
+          txtEl.textContent = `${port.country} ${port.name}`;
+          boxEl.classList.add('visible');
+          inputEl.value = '';
+          inputEl.style.display = 'none';
+        } else {
+          boxEl.classList.remove('visible');
+          inputEl.style.display = 'block';
+          inputEl.value = '';
+          inputEl.focus();
+        }
+        if (side === 'origin') selectedOrigin = port;
+        else selectedDest = port;
+        checkApplyReady();
+      }
+
+      function checkApplyReady() {
+        document.getElementById('btn-apply-route').disabled = !(
+          selectedOrigin &&
+          selectedDest &&
+          selectedOrigin.id !== selectedDest.id
+        );
+      }
+
+      function setupAutocomplete(side) {
+        const input = document.getElementById(`${side}-input`);
+        const dropdown = document.getElementById(`${side}-dropdown`);
+
+        input.addEventListener('input', () => {
+          const q = input.value.trim().toLowerCase();
+          if (!q) {
+            dropdown.classList.remove('open');
+            return;
+          }
+          const matches = PORTS.filter(
+            (p) =>
+              p.name.includes(q) ||
+              p.id.includes(q) ||
+              p.country.toLowerCase().includes(q),
+          ).slice(0, 8);
+          dropdown.innerHTML = matches
+            .map(
+              (p) =>
+                `<div class="port-opt" data-id="${p.id}"><span>${p.name}</span><span class="country">${p.country}</span></div>`,
+            )
+            .join('');
+          dropdown.classList.toggle('open', matches.length > 0);
+        });
+
+        input.addEventListener('focus', () => {
+          if (input.value.trim()) {
+            input.dispatchEvent(new Event('input'));
+          }
+        });
+
+        dropdown.addEventListener('click', (e) => {
+          const opt = e.target.closest('.port-opt');
+          if (!opt) return;
+          const port = PORTS.find((p) => p.id === opt.dataset.id);
+          dropdown.classList.remove('open');
+          setSelectedPort(side, port);
+        });
+
+        document.addEventListener('click', (e) => {
+          if (!input.contains(e.target) && !dropdown.contains(e.target))
+            dropdown.classList.remove('open');
+        });
+
+        document
+          .getElementById(`${side}-clear`)
+          .addEventListener('click', () => setSelectedPort(side, null));
+      }
+
+      setupAutocomplete('origin');
+      setupAutocomplete('dest');
+
+      // 경유 항로 버튼
+      document.querySelectorAll('.rtype-btn').forEach((b) => {
+        b.addEventListener('click', () => {
+          selectedRouteType = b.dataset.rtype;
+          document
+            .querySelectorAll('.rtype-btn')
+            .forEach((x) => x.classList.toggle('active', x === b));
+        });
+      });
+
+      // ═══════════════════════════════════════════════════════════════
+      // 14. 항로 적용
+      // ═══════════════════════════════════════════════════════════════
+      document
+        .getElementById('btn-apply-route')
+        .addEventListener('click', () => {
+          if (!selectedOrigin || !selectedDest) return;
+
+          // 시뮬레이션 정지
+          isSimulating = false;
+          viewer.clock.shouldAnimate = false;
+          btnStart.textContent = '▶ 출항';
+          btnStart.classList.remove('stop');
+
+          WAYPOINTS = buildWaypoints(
+            selectedOrigin,
+            selectedDest,
+            selectedRouteType,
+          );
+          TOTAL_SECONDS =
+            ROUTE_DURATION[selectedRouteType] || ROUTE_DURATION.NSR;
+
+          startTime = Cesium.JulianDate.now();
+          positionProperty = rebuildPositionProperty(WAYPOINTS, TOTAL_SECONDS);
+
+          const newStop = Cesium.JulianDate.addSeconds(
+            startTime,
+            TOTAL_SECONDS,
+            new Cesium.JulianDate(),
+          );
+          viewer.clock.startTime = startTime.clone();
+          viewer.clock.stopTime = newStop;
+          viewer.clock.currentTime = startTime.clone();
+
+          shipEntity.position = positionProperty;
+          shipEntity.orientation = new Cesium.VelocityOrientationProperty(
+            positionProperty,
+          );
+
+          rebuildRouteLines(WAYPOINTS);
+
+          // 출발항으로 카메라 이동
+          viewer.camera.setView({
+            destination: Cesium.Cartesian3.fromDegrees(
+              selectedOrigin.lon,
+              selectedOrigin.lat,
+              8,
+            ),
+            orientation: {
+              heading: Cesium.Math.toRadians(10),
+              pitch: 0,
+              roll: 0,
+            },
+          });
+
+          // 제목 배너 업데이트
+          document.getElementById('banner-sub').textContent =
+            `${selectedOrigin.name} → 북극항로(${selectedRouteType}) 경유 → ${selectedDest.name} | ${MODE_META[currentMode].label}`;
+
+          // 패널 닫기
+          routePanel.classList.remove('open');
+
+          lastHeading = 0;
+          mouseHeadingOffset = 0;
+        });
+
+      // ═══════════════════════════════════════════════════════════════
+      // 15. 초기 카메라
+      // ═══════════════════════════════════════════════════════════════
+      viewer.camera.setView({
+        destination: Cesium.Cartesian3.fromDegrees(129.04, 35.1, 8),
+        orientation: { heading: Cesium.Math.toRadians(10), pitch: 0, roll: 0 },
+      });
+    </script>
+  </body>
+</html>
