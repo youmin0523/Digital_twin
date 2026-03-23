@@ -3,6 +3,7 @@ import React, {
   useContext,
   useReducer,
   useRef,
+  useEffect,
   ReactNode,
 } from 'react';
 import * as Cesium from 'cesium';
@@ -10,9 +11,12 @@ import {
   AppAction,
   AppState,
   IceClass,
+  IceDataset,
   VesselProfile,
 } from '../types';
 import { ICE_CLASS_MAX_CONCENTRATION, TONNAGE_SPEED } from '../data/vesselTypes';
+import { loadIceDataset, getIceDatasetSync } from '../data/realIceData';
+import { initLandMask } from '../services/arcticPathfinder';
 
 // ─── Initial State ────────────────────────────────────────────────────────────
 
@@ -112,6 +116,7 @@ interface AppContextValue {
   state: AppState;
   dispatch: React.Dispatch<AppAction>;
   viewerRef: React.MutableRefObject<Cesium.Viewer | null>;
+  iceDataRef: React.MutableRefObject<Record<number, IceDataset>>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -120,9 +125,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   // Viewer is kept in a plain ref — never in React state — to avoid re-render loops
   const viewerRef = useRef<Cesium.Viewer | null>(null);
+  // iceDataRef: 모든 레이어/선박 컴포넌트가 공유하는 해빙 데이터 캐시
+  const iceDataRef = useRef<Record<number, IceDataset>>({});
+
+  // 앱 시작 시 1회 — 육지 마스크 로드
+  useEffect(() => {
+    initLandMask();
+  }, []);
+
+  // 월이 바뀔 때 실데이터 비동기 로드 → 로드 완료 시 ref 업데이트
+  useEffect(() => {
+    const month = state.currentMonth;
+    // 즉시 절차적 데이터로 초기화 (로드 전 빈 화면 방지)
+    if (!iceDataRef.current[month]) {
+      iceDataRef.current[month] = getIceDatasetSync(month);
+    }
+    // 실데이터 백그라운드 로드
+    loadIceDataset(month).then((dataset) => {
+      iceDataRef.current[month] = dataset;
+    });
+  }, [state.currentMonth]);
 
   return (
-    <AppContext.Provider value={{ state, dispatch, viewerRef }}>
+    <AppContext.Provider value={{ state, dispatch, viewerRef, iceDataRef }}>
       {children}
     </AppContext.Provider>
   );

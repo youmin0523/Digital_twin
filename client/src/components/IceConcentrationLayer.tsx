@@ -1,10 +1,9 @@
 import { useEffect, useRef } from 'react';
 import * as Cesium from 'cesium';
 import { useAppContext } from '../context/AppContext';
-import { getIceDataset } from '../data/mockIceData';
 
 export default function IceConcentrationLayer() {
-  const { state, viewerRef } = useAppContext();
+  const { state, viewerRef, iceDataRef } = useAppContext();
   const dataSourceRef = useRef<Cesium.CustomDataSource | null>(null);
 
   // Initialize the data source once
@@ -37,7 +36,8 @@ export default function IceConcentrationLayer() {
 
     if (!state.layerVisibility.iceConcentration) return;
 
-    const dataset = getIceDataset(state.currentMonth);
+    const dataset = iceDataRef.current[state.currentMonth];
+    if (!dataset) return;
 
     for (const cell of dataset.cells) {
       const { lon, lat, lonStep, latStep, concentration } = cell;
@@ -72,7 +72,7 @@ export default function IceConcentrationLayer() {
         },
       });
     }
-  }, [state.currentMonth, state.layerVisibility.iceConcentration]);
+  }, [state.currentMonth, state.layerVisibility.iceConcentration, iceDataRef]);
 
   return null;
 }

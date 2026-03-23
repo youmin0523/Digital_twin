@@ -54,9 +54,13 @@ export const MOCK_VESSELS: Vessel[] = [
       [125, 76], [145, 74], [160, 70], [170, 66],
     ],
     currentWaypointIndex: 1,
+    staticWaypointTargetIndex: 2,  // 현재 위치(50,71)에서 waypoints[2]=[80,75]로 이동
     position: [50, 71],
     heading: 90,
     isInAlert: false,
+    computedWaypoints: null,
+    routeNeedsRecalc: true,
+    lastRouteCalcMonth: -1,
   },
   {
     id: 'v2',
@@ -71,9 +75,13 @@ export const MOCK_VESSELS: Vessel[] = [
       [125, 76], [145, 74], [160, 70], [170, 66],
     ],
     currentWaypointIndex: 3,
+    staticWaypointTargetIndex: 4,  // waypoints[4]=[125,76]
     position: [100, 79],
     heading: 75,
     isInAlert: false,
+    computedWaypoints: null,
+    routeNeedsRecalc: true,
+    lastRouteCalcMonth: -1,
   },
   {
     id: 'v3',
@@ -88,12 +96,17 @@ export const MOCK_VESSELS: Vessel[] = [
       [160, 70], [170, 66],
     ],
     currentWaypointIndex: 2,
+    staticWaypointTargetIndex: 3,  // waypoints[3]=[145,74]
     position: [120, 77],
     heading: 65,
     isInAlert: false,
+    computedWaypoints: null,
+    routeNeedsRecalc: true,
+    lastRouteCalcMonth: -1,
   },
 
   // ── NWP (Northwest Passage) ──────────────────────────────────────────
+  // 실제 NWP 항로: 데이비스 해협 → 랭커스터 해협 → 배로 해협 → 보퍼트해 → 베링해
   {
     id: 'v4',
     name: '한국해양-3',
@@ -103,13 +116,22 @@ export const MOCK_VESSELS: Vessel[] = [
     speedKnots: 18,
     colorHex: '#ef4444', // red
     waypoints: [
-      [-65, 72], [-85, 74], [-105, 75], [-118, 74],
-      [-125, 71], [-140, 70], [-168, 66],
+      [-60, 70],    // 데이비스 해협 (Davis Strait) — 개방 해수
+      [-80, 74],    // 랭커스터 해협 서쪽 입구 (Lancaster Sound)
+      [-94, 74.5],  // 배로 해협 (Barrow Strait)
+      [-110, 74],   // 맥클린턱 해협 (M'Clintock Channel) 접근
+      [-125, 71],   // 보퍼트해 동쪽 (Beaufort Sea)
+      [-145, 70],   // 알래스카 북쪽 해안 외측
+      [-168, 66],   // 베링 해협 (Bering Strait)
     ],
     currentWaypointIndex: 1,
+    staticWaypointTargetIndex: 2,  // waypoints[2]=[-94,74.5] 배로 해협
     position: [-75, 73],
     heading: 270,
     isInAlert: false,
+    computedWaypoints: null,
+    routeNeedsRecalc: true,
+    lastRouteCalcMonth: -1,
   },
   {
     id: 'v5',
@@ -120,13 +142,22 @@ export const MOCK_VESSELS: Vessel[] = [
     speedKnots: 14,
     colorHex: '#a855f7', // purple
     waypoints: [
-      [-65, 72], [-85, 74], [-105, 75], [-118, 74],
-      [-125, 71], [-140, 70], [-168, 66],
+      [-60, 70],    // 데이비스 해협 (Davis Strait) — 개방 해수
+      [-80, 74],    // 랭커스터 해협 서쪽 입구 (Lancaster Sound)
+      [-94, 74.5],  // 배로 해협 (Barrow Strait)
+      [-110, 74],   // 맥클린턱 해협 (M'Clintock Channel) 접근
+      [-125, 71],   // 보퍼트해 동쪽 (Beaufort Sea)
+      [-145, 70],   // 알래스카 북쪽 해안 외측
+      [-168, 66],   // 베링 해협 (Bering Strait)
     ],
     currentWaypointIndex: 3,
-    position: [-115, 74.5],
+    staticWaypointTargetIndex: 4,  // waypoints[4]=[-125,71] 보퍼트해
+    position: [-100, 74],
     heading: 255,
     isInAlert: false,
+    computedWaypoints: null,
+    routeNeedsRecalc: true,
+    lastRouteCalcMonth: -1,
   },
 
   // ── Intermediate/Cross routes ─────────────────────────────────────────
@@ -143,9 +174,13 @@ export const MOCK_VESSELS: Vessel[] = [
       [120, 78], [150, 72],
     ],
     currentWaypointIndex: 1,
+    staticWaypointTargetIndex: 2,  // waypoints[2]=[60,85]
     position: [20, 77],
     heading: 45,
     isInAlert: false,
+    computedWaypoints: null,
+    routeNeedsRecalc: true,
+    lastRouteCalcMonth: -1,
   },
   {
     id: 'v7',
@@ -160,9 +195,13 @@ export const MOCK_VESSELS: Vessel[] = [
       [80, 74], [60, 72], [33, 69],
     ],
     currentWaypointIndex: 2,
+    staticWaypointTargetIndex: 3,  // waypoints[3]=[100,73]
     position: [135, 69],
     heading: 255,
     isInAlert: false,
+    computedWaypoints: null,
+    routeNeedsRecalc: true,
+    lastRouteCalcMonth: -1,
   },
 
   // ── Stationary (anchored near Svalbard) ──────────────────────────────
@@ -176,8 +215,12 @@ export const MOCK_VESSELS: Vessel[] = [
     colorHex: '#64748b', // slate
     waypoints: [[15, 78], [15, 78]],
     currentWaypointIndex: 0,
+    staticWaypointTargetIndex: 0,  // 정박 선박 — 이동 없음
     position: [15, 78],
     heading: 0,
     isInAlert: false,
+    computedWaypoints: null,
+    routeNeedsRecalc: false,
+    lastRouteCalcMonth: -1,
   },
 ];
