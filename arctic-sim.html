@@ -507,6 +507,7 @@
     <div class="hud-panel interactive" id="hud-camera">
       <div class="hud-title">▸ 카메라 시점</div>
       <button class="cam-btn active" data-mode="BRIDGE">🎯 선교 1인칭</button>
+      <button class="cam-btn" data-mode="MANUAL">🕹️ 직접 운전</button>
       <button class="cam-btn" data-mode="FOLLOW">🚢 선미 추적</button>
       <button class="cam-btn" data-mode="SATELLITE">🛰️ 위성 조감</button>
       <button class="cam-btn" data-mode="WIDE">🌐 광역 항로</button>
@@ -1011,38 +1012,69 @@
       // 6. 빙하 Entity 300개
       // ═══════════════════════════════════════════════════════════════
       const icebergData = [];
-      for (let i = 0; i < 300; i++) {
-        const lon = Math.random() * 360 - 180,
-          lat = 65 + Math.random() * 23;
-        const w = (10 + Math.random() * 70) * 1000,
-          h = 500 + Math.random() * 3500,
-          d = (10 + Math.random() * 50) * 1000;
-        const mix = Math.random();
-        const iceColor = new Cesium.Color(
-          1,
-          0.85 + mix * 0.15,
-          0.88 + mix * 0.12,
-          0.82 + mix * 0.08,
-        );
+      const rng = (a, b) => a + Math.random() * (b - a);
+
+      const ICE_TYPES = [
+        { prob: 0.05, w:[2000,10000], d:[1500,8000], h:[500,2000], name:'tabular' },
+        { prob: 0.10, w:[500,3000],   d:[400,2500],  h:[200,800],  name:'large'   },
+        { prob: 0.30, w:[100,800],    d:[80,600],     h:[80,300],   name:'medium'  },
+        { prob: 0.35, w:[10,150],     d:[8,120],      h:[20,100],   name:'small'   },
+        { prob: 0.20, w:[2,20],       d:[2,15],       h:[5,25],     name:'growler' },
+      ];
+      const ICE_COLORS = {
+        tabular: '#e8f4ff', large: '#c0dcf0',
+        medium:  '#b0d0e8', small: '#a8cce0', growler: '#d0e8f8',
+      };
+
+      for (let i = 0; i < 1000; i++) {
+        const lon = rng(-180, 180);  // 전체 북극권
+        const lat = rng(65, 89);
+
+        let r = Math.random(), type = ICE_TYPES[ICE_TYPES.length - 1], cumul = 0;
+        for (const t of ICE_TYPES) {
+          cumul += t.prob;
+          if (r < cumul) { type = t; break; }
+        }
+
+        const w = rng(type.w[0], type.w[1]);
+        const d = rng(type.d[0], type.d[1]);
+        const h = rng(type.h[0], type.h[1]); // 시각화용 과장 높이
+        const alpha = type.name === 'tabular' ? 0.90 : 0.93;
+        const iceColor = Cesium.Color.fromCssColorString(ICE_COLORS[type.name]).withAlpha(alpha);
+
         const surfacePos = Cesium.Cartesian3.fromDegrees(lon, lat, h / 2);
+
+        // 수면 위: 절두원추 (좁은 꼭대기, 넓은 밑면), 7각형으로 불규칙한 자연 실루엣
         const entity = viewer.entities.add({
           position: new Cesium.ConstantPositionProperty(surfacePos),
-          box: {
-            dimensions: new Cesium.Cartesian3(w, d, h),
+          cylinder: {
+            length: h,
+            topRadius: w * rng(0.03, 0.10),
+            bottomRadius: w * rng(0.35, 0.50),
             material: iceColor,
+            outline: true,
+            outlineColor: Cesium.Color.WHITE.withAlpha(0.25),
+            slices: 7,
           },
         });
+
+        // 수중 부분 (~90%는 수면 아래)
+        const subH = h * (type.name === 'tabular' ? 4 : 9);
         viewer.entities.add({
-          position: Cesium.Cartesian3.fromDegrees(lon, lat, -(h * 0.3)),
-          box: {
-            dimensions: new Cesium.Cartesian3(w * 0.8, d * 0.8, h * 0.6),
-            material:
-              Cesium.Color.fromCssColorString('#1a4a7a').withAlpha(0.28),
+          position: Cesium.Cartesian3.fromDegrees(lon, lat, -(subH / 2)),
+          cylinder: {
+            length: subH,
+            topRadius: w * 0.48,
+            bottomRadius: w * 0.32,
+            material: Cesium.Color.fromCssColorString('#0a3a5a').withAlpha(0.22),
+            outline: false,
+            slices: 7,
           },
         });
+
         icebergData.push({
           originalPos: surfacePos.clone(),
-          currentPos: surfacePos.clone(),
+          currentPos:  surfacePos.clone(),
           entity,
         });
       }
@@ -1155,9 +1187,27 @@
         mouseHeadingOffset = 0;
       const MAX_OFFSET = Cesium.Math.toRadians(60);
 
+      // ── 직접 운전 상태 ──
+      let manualLon = 33, manualLat = 69, manualSpeedMs = 0;
+      const MANUAL_MAX_SPEED_MS = 20;          // ~40 knots
+      const TURN_RATE_RAD = Cesium.Math.toRadians(1.2); // 프레임당 회전량
+      const keys = {};
+      window.addEventListener('keydown', (e) => {
+        keys[e.code] = true;
+        if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(e.code))
+          e.preventDefault(); // 스크롤 방지
+      });
+      window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
       const MODE_META = {
         BRIDGE: {
           label: '🎯 선교 1인칭',
+          crosshair: true,
+          mouseHint: true,
+          free: false,
+        },
+        MANUAL: {
+          label: '🕹️ 직접 운전 (W/S: 속도, A/D: 조향)',
           crosshair: true,
           mouseHint: true,
           free: false,
@@ -1189,6 +1239,20 @@
       };
 
       function activateMode(mode) {
+        // 직접 운전 진입 시 현재 선박 위치에서 시작
+        if (mode === 'MANUAL') {
+          const t = viewer.clock.currentTime;
+          const pos = positionProperty.getValue(t);
+          if (pos) {
+            const c = Cesium.Ellipsoid.WGS84.cartesianToCartographic(pos);
+            manualLon = Cesium.Math.toDegrees(c.longitude);
+            manualLat = Cesium.Math.toDegrees(c.latitude);
+          } else {
+            manualLon = WAYPOINTS[0].lon;
+            manualLat = WAYPOINTS[0].lat;
+          }
+          manualSpeedMs = 0;
+        }
         currentMode = mode;
         const meta = MODE_META[mode];
         document
@@ -1270,60 +1334,102 @@
       });
 
       viewer.scene.preRender.addEventListener(() => {
-        if (!isSimulating) return;
         const t = viewer.clock.currentTime;
-        const t2 = Cesium.JulianDate.addSeconds(t, 3, new Cesium.JulianDate());
+
+        // ── 직접 운전 모드: 전체 제어권 수동 ──
+        if (currentMode === 'MANUAL') {
+          if (keys['KeyW'] || keys['ArrowUp'])
+            manualSpeedMs = Math.min(manualSpeedMs + 0.4, MANUAL_MAX_SPEED_MS);
+          else
+            manualSpeedMs *= 0.97; // 자연 감속
+          if (keys['KeyS'] || keys['ArrowDown'])
+            manualSpeedMs = Math.max(manualSpeedMs - 1.0, -MANUAL_MAX_SPEED_MS * 0.3);
+          if (keys['KeyA'] || keys['ArrowLeft']) lastHeading -= TURN_RATE_RAD;
+          if (keys['KeyD'] || keys['ArrowRight']) lastHeading += TURN_RATE_RAD;
+
+          const dt = 0.033; // ~30fps 기준
+          const cosLat = Math.cos(Cesium.Math.toRadians(manualLat));
+          manualLon += (Math.sin(lastHeading) * manualSpeedMs * dt) / (111320 * cosLat);
+          manualLat += (Math.cos(lastHeading) * manualSpeedMs * dt) / 110540;
+          manualLat = Cesium.Math.clamp(manualLat, 60, 89);
+
+          // 선박 엔티티 위치 업데이트
+          shipEntity.position = new Cesium.ConstantPositionProperty(
+            Cesium.Cartesian3.fromDegrees(manualLon, manualLat, 0)
+          );
+
+          // 1인칭 선교 카메라 (수면 위 15m)
+          viewer.camera.setView({
+            destination: Cesium.Cartesian3.fromDegrees(manualLon, manualLat, 15),
+            orientation: {
+              heading: lastHeading + mouseHeadingOffset,
+              pitch: Cesium.Math.toRadians(-3),
+              roll: 0,
+            },
+          });
+          return;
+        }
+
         const shipPos = positionProperty.getValue(t);
         if (!shipPos) return;
 
-        // 헤딩
-        const nextPos = positionProperty.getValue(t2);
-        if (nextPos) {
-          const tf = Cesium.Transforms.eastNorthUpToFixedFrame(shipPos);
-          const inv = Cesium.Matrix4.inverseTransformation(
-            tf,
-            new Cesium.Matrix4(),
-          );
-          const diff = Cesium.Cartesian3.subtract(
-            nextPos,
-            shipPos,
-            new Cesium.Cartesian3(),
-          );
-          const loc = Cesium.Matrix4.multiplyByPointAsVector(
-            inv,
-            diff,
-            new Cesium.Cartesian3(),
-          );
-          if (Cesium.Cartesian3.magnitude(loc) > 0.001)
-            lastHeading = Math.atan2(loc.x, loc.y);
+        // 헤딩 (시뮬레이션 중에만 업데이트, 부드럽게 보간)
+        if (isSimulating) {
+          const t2 = Cesium.JulianDate.addSeconds(t, 3, new Cesium.JulianDate());
+          const nextPos = positionProperty.getValue(t2);
+          if (nextPos) {
+            const tf = Cesium.Transforms.eastNorthUpToFixedFrame(shipPos);
+            const inv = Cesium.Matrix4.inverseTransformation(
+              tf,
+              new Cesium.Matrix4(),
+            );
+            const diff = Cesium.Cartesian3.subtract(
+              nextPos,
+              shipPos,
+              new Cesium.Cartesian3(),
+            );
+            const loc = Cesium.Matrix4.multiplyByPointAsVector(
+              inv,
+              diff,
+              new Cesium.Cartesian3(),
+            );
+            if (Cesium.Cartesian3.magnitude(loc) > 0.001) {
+              const raw = Math.atan2(loc.x, loc.y);
+              let delta = raw - lastHeading;
+              // 각도 래핑 (-π ~ π) 으로 최단 경로 보간
+              while (delta > Math.PI) delta -= 2 * Math.PI;
+              while (delta < -Math.PI) delta += 2 * Math.PI;
+              lastHeading += delta * 0.08;
+            }
+          }
         }
 
         const elapsed = Cesium.JulianDate.secondsDifference(t, startTime);
-        const roll = Math.sin(elapsed * 0.25) * 0.018;
+        const roll = Math.sin(elapsed * 0.1) * 0.004; // 미세 흔들림만
         const carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(shipPos);
 
-        // 카메라 모드 (FREE는 Cesium이 직접 제어)
+        // 카메라 모드 (시뮬 여부와 무관하게 항상 적용 — 버튼 즉시 반응)
         if (currentMode === 'BRIDGE') {
           const camPos = Cesium.Cartesian3.fromRadians(
             carto.longitude,
             carto.latitude,
-            carto.height + 8,
+            Math.max(carto.height, 0) + 15, // 최소 수면 위 15m 보장
           );
           viewer.camera.setView({
             destination: camPos,
             orientation: {
               heading: lastHeading + mouseHeadingOffset,
-              pitch: 0,
+              pitch: Cesium.Math.toRadians(-3), // 살짝 아래를 봄
               roll,
             },
           });
         } else if (currentMode === 'FOLLOW') {
           const enu = Cesium.Transforms.eastNorthUpToFixedFrame(shipPos);
-          const bx = -Math.sin(lastHeading) * 450000,
-            by = -Math.cos(lastHeading) * 450000;
+          const bx = -Math.sin(lastHeading) * 80000,
+            by = -Math.cos(lastHeading) * 80000;
           const camPos = Cesium.Matrix4.multiplyByPoint(
             enu,
-            new Cesium.Cartesian3(bx, by, 130000),
+            new Cesium.Cartesian3(bx, by, 25000),
             new Cesium.Cartesian3(),
           );
           setCameraLookAt(camPos, shipPos);
@@ -1331,7 +1437,7 @@
           const camPos = Cesium.Cartesian3.fromRadians(
             carto.longitude,
             carto.latitude,
-            carto.height + 600000,
+            carto.height + 100000,
           );
           viewer.camera.setView({
             destination: camPos,
@@ -1343,16 +1449,18 @@
           });
         } else if (currentMode === 'WIDE') {
           const enu = Cesium.Transforms.eastNorthUpToFixedFrame(shipPos);
-          const bx = -Math.sin(lastHeading) * 2000000,
-            by = -Math.cos(lastHeading) * 2000000;
+          const bx = -Math.sin(lastHeading) * 500000,
+            by = -Math.cos(lastHeading) * 500000;
           const camPos = Cesium.Matrix4.multiplyByPoint(
             enu,
-            new Cesium.Cartesian3(bx, by, 1800000),
+            new Cesium.Cartesian3(bx, by, 300000),
             new Cesium.Cartesian3(),
           );
           setCameraLookAt(camPos, shipPos);
         }
         // FREE 모드: 카메라 개입 없음
+
+        if (!isSimulating) return;
 
         // 빙하 push
         const PUSH = 50000;
