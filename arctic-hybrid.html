@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <title>북극항로 쇄빙선 시뮬레이션 — Cesium + Three.js</title>
+  <title> Digital Twin - 북극항로 쇄빙선 시뮬레이션 Project </title>
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -371,7 +371,7 @@
 
     /* 선박 제원 패널 */
     #hud-specs {
-      top: 285px;
+      top: 240px;
       right: 12px;
       min-width: 248px;
       z-index: 200;
@@ -475,6 +475,142 @@
 
     #btn-apply:hover {
       background: rgba(16, 185, 129, 0.45);
+    }
+
+    /* ── NSR 항로 적합성 평가 패널 ── */
+    #hud-routing {
+      position: fixed;
+      bottom: 30px;
+      right: 12px;
+      min-width: 260px;
+      max-width: 280px;
+      max-height: 40vh;
+      overflow-y: auto;
+      z-index: 200;
+      background: rgba(4, 10, 28, 0.88);
+      border: 1px solid #1e40af;
+      border-radius: 6px;
+      padding: 10px 12px 12px;
+      font-family: 'Courier New', monospace;
+      backdrop-filter: blur(6px);
+    }
+
+    #routing-status-badge {
+      display: inline-block;
+      margin: 6px 0 4px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      background: rgba(30,30,60,0.6);
+      border: 1px solid #334;
+      color: #aaa;
+      width: 100%;
+      box-sizing: border-box;
+      text-align: center;
+    }
+
+    #routing-status-badge.approved  { background: rgba(0,180,80,0.18);  border-color:#00c85a; color:#00ff88; }
+    #routing-status-badge.restricted{ background: rgba(200,120,0,0.18); border-color:#cc8800; color:#ffaa00; }
+    #routing-status-badge.suez      { background: rgba(200,70,0,0.18);  border-color:#cc4400; color:#ff6600; }
+    #routing-status-badge.cape      { background: rgba(200,20,20,0.18); border-color:#aa1111; color:#ff2222; }
+
+    #routing-rio-row {
+      font-size: 11px;
+      color: #93c5fd;
+      margin-bottom: 4px;
+    }
+
+    #routing-rio-val {
+      font-weight: bold;
+      color: #e0f0ff;
+    }
+
+    #routing-reason {
+      font-size: 10px;
+      color: #7a9ccc;
+      line-height: 1.5;
+      margin-bottom: 8px;
+      max-height: 80px;
+      overflow-y: auto;
+      border-top: 1px solid rgba(30,64,175,0.3);
+      padding-top: 5px;
+    }
+
+    .routing-section-title {
+      font-size: 10px;
+      color: #4a6a8a;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin: 8px 0 4px;
+      border-bottom: 1px solid rgba(30,64,175,0.3);
+      padding-bottom: 2px;
+    }
+
+    .routing-input-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 3px 0;
+    }
+
+    .routing-input-group label {
+      color: #93c5fd;
+      font-size: 10px;
+      min-width: 110px;
+    }
+
+    .routing-input-group input[type="number"] {
+      background: #0a1628;
+      border: 1px solid #1e40af;
+      color: #e0f0ff;
+      border-radius: 3px;
+      padding: 2px 5px;
+      font-family: 'Courier New', monospace;
+      font-size: 10px;
+      width: 58px;
+    }
+
+    .routing-checks {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3px 8px;
+      margin: 5px 0 8px;
+    }
+
+    .routing-checks label {
+      color: #93c5fd;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    .routing-checks input[type="checkbox"] {
+      accent-color: #3b82f6;
+      width: 12px;
+      height: 12px;
+    }
+
+    #btn-evaluate-routing {
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid #3b82f6;
+      color: #93c5fd;
+      padding: 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      letter-spacing: 1px;
+      width: 100%;
+      margin-top: 4px;
+      transition: background 0.15s;
+    }
+
+    #btn-evaluate-routing:hover {
+      background: rgba(59, 130, 246, 0.45);
     }
 
     /* 토스트 */
@@ -710,6 +846,30 @@
       pointer-events: none;
       white-space: nowrap;
     }
+
+    /* ─── GEBCO 수심 범례 & 클릭 프로브 팝업 ─── */
+    #gebco-legend {
+      user-select: none;
+    }
+    #gebco-depth-popup {
+      position: absolute;
+      z-index: 300;
+      background: rgba(8, 15, 30, 0.92);
+      border: 1px solid #059669;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      color: #34d399;
+      pointer-events: none;
+      display: none;
+      white-space: nowrap;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+    }
+    #gebco-depth-popup.show {
+      display: block;
+    }
   </style>
 </head>
 
@@ -871,10 +1031,12 @@
           padding-bottom: 8px;
         ">
       <span class="spec-label">목표 항로</span>
-      <select class="spec-select" id="spec-route" style="width: 135px; font-weight: bold">
-        <option value="NSR" selected>북동항로(NSR)</option>
-        <option value="NWP">북서항로(NWP)</option>
-        <option value="TSR">북극횡단항로(TSR)</option>
+      <select class="spec-select" id="spec-route" style="width: 155px; font-weight: bold">
+        <option value="NSR" selected>❄ 북동항로(NSR)</option>
+        <option value="NWP">❄ 북서항로(NWP)</option>
+        <option value="TSR">❄ 북극횡단항로(TSR)</option>
+        <option value="SUEZ">↩ 수에즈 우회(SUEZ)</option>
+        <option value="CAPE">⛔ 희망봉 우회(CAPE)</option>
       </select>
     </div>
 
@@ -912,6 +1074,67 @@
       </select>
     </div>
     <button id="btn-apply">⚡ 적용하기</button>
+  </div>
+
+  <!-- NSR 항로 적합성 평가 패널 -->
+  <div id="hud-routing">
+    <div class="hud-title">&#x1F9ED; NSR 항로 적합성 평가</div>
+    <div id="routing-status-badge">-- 미평가 --</div>
+    <div id="routing-rio-row">POLARIS RIO: <span id="routing-rio-val">--</span></div>
+    <div id="routing-reason">선박 제원을 설정하고 평가를 실행하세요.</div>
+
+    <!-- 거리 비교 패널 -->
+    <div class="routing-section-title" style="margin-top:8px;">항로 거리 비교</div>
+    <div style="font-size:12px; margin-bottom:12px; background:rgba(0,0,0,0.3); padding:8px; border-radius:4px; border:1px solid rgba(147,197,253,0.2);">
+      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+        <span style="color:#93c5fd" id="lbl-dist-current">현재 목표 항로:</span>
+        <span id="dist-current" style="color:#ffffff; font-weight:bold">-- km</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+        <span style="color:#93c5fd">수에즈 운하 우회:</span>
+        <span id="dist-suez" style="color:#ffffff; font-weight:bold">-- km</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; border-top:1px solid rgba(147,197,253,0.3); padding-top:6px; margin-top:4px;">
+        <span style="color:#34d399">거리 단축 효과:</span>
+        <span id="dist-saved" style="color:#34d399; font-weight:bold">-- km</span>
+      </div>
+    </div>
+
+    <div class="routing-section-title">Polar Code 안전 기준</div>
+    <div class="routing-input-group">
+      <label>흘수 Draft</label>
+      <input id="r-draft" type="number" value="8.5" step="0.1" min="1" max="25">
+      <span style="color:#4a6a8a;font-size:10px">m</span>
+    </div>
+    <div class="routing-input-group">
+      <label>생존 장비 Rescue</label>
+      <input id="r-rescue-days" type="number" value="7" min="0" max="60">
+      <span style="color:#4a6a8a;font-size:10px">일</span>
+    </div>
+    <div class="routing-input-group">
+      <label>설계 온도 여유</label>
+      <input id="r-temp-margin" type="number" value="12" step="1" min="-20" max="50">
+      <span style="color:#4a6a8a;font-size:10px">°C</span>
+    </div>
+
+    <div class="routing-section-title">행정·설비 체크</div>
+    <div class="routing-checks">
+      <label><input type="checkbox" id="r-pwom" checked> PWOM 비치</label>
+      <label><input type="checkbox" id="r-nsra" checked> NSRA 허가</label>
+      <label><input type="checkbox" id="r-winter" checked> 방한 설비</label>
+      <label><input type="checkbox" id="r-zero-dis" checked> 무배출 탱크</label>
+      <label><input type="checkbox" id="r-comms" checked> 극지 통신</label>
+      <label><input type="checkbox" id="r-navigator" checked> 극지 항해사</label>
+      <label><input type="checkbox" id="r-sanctioned" style="accent-color:#ef4444"> &#x26A0; 제재국</label>
+      <label><input type="checkbox" id="r-cold-route"> 기온 -10°C↓</label>
+    </div>
+
+    <button id="btn-evaluate-routing">&#x1F4CB; 항로 적합성 평가 실행</button>
+  </div>
+
+  <!-- //* [Modified Code] 플로팅 UI로 "선박 위치로 복귀" 버튼 분리 -->
+  <div id="btn-recenter-float" style="position: absolute; bottom: 85px; right: 300px; z-index: 250; display: none;">
+    <button style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #34d399; padding: 10px 20px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 13px; font-weight: bold; cursor: pointer; transition: all 0.2s; backdrop-filter: blur(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.5);">⌖ 선박 위치로 복귀</button>
   </div>
 
   <!-- 미니맵 -->
@@ -968,35 +1191,239 @@
     <div class="hud-title" style="color: #34d399">
       🌍 실시간 API 레이어 (WMS)
     </div>
-    <div class="hud-row" style="justify-content: flex-start; gap: 8px; margin: 6px 0">
+    <div class="hud-row" style="justify-content: flex-start; gap: 8px; margin: 6px 0" title="북극해 해빙의 면적 대비 얼음의 비율(%)을 실시간 시각화합니다.">
       <input type="checkbox" id="layer-nsidc-conc" class="api-cb" style="accent-color: #34d399" />
       <label for="layer-nsidc-conc" class="hud-label" style="cursor: pointer">NSIDC 해빙 농도</label>
     </div>
-    <div class="hud-row" style="justify-content: flex-start; gap: 8px; margin: 6px 0">
+    <div class="hud-row" style="justify-content: flex-start; gap: 8px; margin: 6px 0" title="Copernicus 모델 기반의 해빙 두께 예측값을 시각화합니다.">
       <input type="checkbox" id="layer-cop-thick" class="api-cb" style="accent-color: #34d399" />
       <label for="layer-cop-thick" class="hud-label" style="cursor: pointer">Copernicus 해빙 두께</label>
     </div>
-    <div class="hud-row" style="justify-content: flex-start; gap: 8px; margin: 6px 0">
+    <div class="hud-row" style="justify-content: flex-start; gap: 8px; margin: 6px 0" title="위성 밝기온도 데이터 기반으로 오늘의 해빙 경계선을 표시합니다.">
       <input type="checkbox" id="layer-nsidc-edge" class="api-cb" style="accent-color: #34d399" />
       <label for="layer-nsidc-edge" class="hud-label" style="cursor: pointer">NSIDC 경계선 (Today)</label>
     </div>
-    <div class="hud-row" style="justify-content: flex-start; gap: 8px; margin: 6px 0">
+    <div class="hud-row" style="justify-content: flex-start; gap: 8px; margin: 6px 0" title="ESA 주관 센티넬-1 위성의 합성개구레이더(SAR) 영상을 제공합니다.">
       <input type="checkbox" id="layer-esa-sar" class="api-cb" style="accent-color: #34d399" />
       <label for="layer-esa-sar" class="hud-label" style="cursor: pointer">ESA Sentinel-1 위성</label>
     </div>
-    <div class="hud-row" style="justify-content: flex-start; gap: 8px; margin: 6px 0">
+    <div class="hud-row" style="justify-content: flex-start; gap: 8px; margin: 6px 0" title="EMODnet/GEBCO 수심 척도 및 해저 지형을 시각화합니다.">
       <input type="checkbox" id="layer-gebco-bathy" class="api-cb" style="accent-color: #34d399" />
       <label for="layer-gebco-bathy" class="hud-label" style="cursor: pointer">GEBCO 해저 수심도</label>
     </div>
-    <div class="hud-row" style="justify-content: flex-start; gap: 8px; margin: 6px 0">
+    <!-- GEBCO 투명도 슬라이더 (체크 시 표시) -->
+    <div id="gebco-opacity-row" style="display:none; align-items:center; gap:8px; margin:2px 0 6px 20px;">
+      <span class="hud-label" style="font-size:10px; white-space:nowrap;">투명도</span>
+      <input type="range" id="gebco-opacity-slider" min="30" max="100" step="5" value="75"
+        style="width:90px; accent-color:#34d399; vertical-align:middle;" />
+      <span id="gebco-opacity-label" class="hud-value" style="font-size:10px; min-width:28px;">75%</span>
+    </div>
+    <div class="hud-row" style="justify-content: flex-start; gap: 8px; margin: 6px 0" title="광학 위성의 자연색 및 고해상도 구름 이미지를 시각화합니다.">
       <input type="checkbox" id="layer-s2-true" class="api-cb" style="accent-color: #34d399" />
       <label for="layer-s2-true" class="hud-label" style="cursor: pointer">Sentinel-2 자연색</label>
     </div>
-    <div class="hud-row" style="justify-content: flex-start; gap: 8px; margin: 6px 0">
+    <div class="hud-row" style="justify-content: flex-start; gap: 8px; margin: 6px 0" title="해빙 탐지 지수(NDSI)를 표시하여 눈과 구름을 명확히 구분합니다.">
       <input type="checkbox" id="layer-s2-ndsi" class="api-cb" style="accent-color: #34d399" />
       <label for="layer-s2-ndsi" class="hud-label" style="cursor: pointer">Sentinel-2 NDSI (해빙 탐지)</label>
     </div>
   </div>
+
+  <!-- 우측 하단 겹침 방지를 위해 툴바 아래(좌측 상단부)로 이동 및 스태킹하는 Legends 컨테이너 -->
+  <div id="legends-container" style="position:fixed; top:250px; left:232px; z-index:200; display:flex; flex-direction:column; gap:10px; pointer-events:none;">
+
+    <!-- GEBCO 수심 범례 패널 -->
+    <div id="gebco-legend" style="
+      display: none;
+      background: rgba(6, 12, 28, 0.92);
+      border: 1px solid #059669;
+      border-radius: 8px;
+      padding: 12px 16px 10px;
+      font-family: 'Courier New', monospace;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+      min-width: 320px;
+      pointer-events: auto;
+    ">
+      <!-- 제목 -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <span style="color:#34d399; font-size:11px; letter-spacing:1px; font-weight:bold;">🌊 해저 수심도</span>
+        <span style="color:#4a7a6a; font-size:9px;">EMODnet / GEBCO 2024</span>
+      </div>
+
+      <!-- 컬러바 (가로) + 커서 -->
+      <div style="position:relative; margin-bottom:6px;">
+        <div id="gebco-colorbar-h" style="
+          width: 100%;
+          height: 18px;
+          border-radius: 4px;
+          background: linear-gradient(to right,
+            #6600cc 0%,
+            #0000ff 20%,
+            #0099ff 40%,
+            #00cc66 55%,
+            #ccff00 70%,
+            #ffaa00 85%,
+            #ff3300 100%
+          );
+          border: 1px solid rgba(52,211,153,0.25);
+        "></div>
+        <!-- 수심 커서 (클릭 시 이동) -->
+        <div id="gebco-depth-cursor" style="
+          display: none;
+          position: absolute;
+          top: -4px;
+          width: 3px;
+          height: 26px;
+          background: #ffffff;
+          border-radius: 2px;
+          box-shadow: 0 0 6px rgba(255,255,255,0.8);
+          transform: translateX(-50%);
+          pointer-events: none;
+        "></div>
+      </div>
+
+      <!-- 눈금 레이블 -->
+      <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+        <span style="font-size:9px; color:#bb88ff;">6000m+</span>
+        <span style="font-size:9px; color:#5599ff;">4000m</span>
+        <span style="font-size:9px; color:#00ccff;">2000m</span>
+        <span style="font-size:9px; color:#00dd77;">1000m</span>
+        <span style="font-size:9px; color:#ddff44;">200m</span>
+        <span style="font-size:9px; color:#ffbb33;">50m</span>
+        <span style="font-size:9px; color:#ff4411;">0m</span>
+      </div>
+
+      <!-- 수심 존 구분 라벨 -->
+      <div style="display:flex; justify-content:space-between; border-top:1px solid rgba(52,211,153,0.15); padding-top:7px; gap:2px;">
+        <div style="text-align:center; flex:1.2;">
+          <div style="font-size:8px; color:#9966cc; margin-bottom:2px;">●</div>
+          <div style="font-size:8px; color:#9966cc; line-height:1.2;">초심해<br/><span style="color:#555;">&gt;6000m</span></div>
+        </div>
+        <div style="text-align:center; flex:1;">
+          <div style="font-size:8px; color:#4477ff; margin-bottom:2px;">●</div>
+          <div style="font-size:8px; color:#4477ff; line-height:1.2;">심해<br/><span style="color:#555;">2~6km</span></div>
+        </div>
+        <div style="text-align:center; flex:1;">
+          <div style="font-size:8px; color:#00ccaa; margin-bottom:2px;">●</div>
+          <div style="font-size:8px; color:#00ccaa; line-height:1.2;">대륙사면<br/><span style="color:#555;">200~2km</span></div>
+        </div>
+        <div style="text-align:center; flex:0.8;">
+          <div style="font-size:8px; color:#aaee22; margin-bottom:2px;">●</div>
+          <div style="font-size:8px; color:#aaee22; line-height:1.2;">대륙붕<br/><span style="color:#555;">&lt;200m</span></div>
+        </div>
+        <div style="text-align:center; flex:0.7;">
+          <div style="font-size:8px; color:#ff6622; margin-bottom:2px;">●</div>
+          <div style="font-size:8px; color:#ff6622; line-height:1.2;">연안<br/><span style="color:#555;">&lt;50m</span></div>
+        </div>
+      </div>
+
+      <!-- 클릭 수심 표시 -->
+      <div id="gebco-probe-readout" style="
+        display: none;
+        margin-top: 8px;
+        padding: 5px 8px;
+        background: rgba(52,211,153,0.12);
+        border: 1px solid rgba(52,211,153,0.35);
+        border-radius: 4px;
+        font-size: 11px;
+        color: #34d399;
+        text-align: center;
+      ">
+        📍 <span id="gebco-probe-text">—</span>
+      </div>
+    </div> <!-- /gebco-legend -->
+
+    <!-- NASA AMSRU2 해빙 농도 범례 패널 -->
+    <div id="nsidc-legend" style="
+      display: none;
+      background: rgba(6, 12, 28, 0.92);
+      border: 1px solid #3b82f6;
+      border-radius: 8px;
+      padding: 12px 16px 10px;
+      font-family: 'Courier New', monospace;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+      min-width: 320px;
+      pointer-events: auto;
+    ">
+      <!-- 제목 -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <span style="color:#60a5fa; font-size:11px; letter-spacing:1px; font-weight:bold;">❄️ 해빙 농도 (Ice Concentration)</span>
+        <span style="color:#3b82f6; font-size:9px;">NASA AMSRU2 25km</span>
+      </div>
+      <!-- 컬러바 (가로) -->
+      <div style="position:relative; margin-bottom:6px;">
+        <div style="
+          width: 100%;
+          height: 18px;
+          border-radius: 4px;
+          background: linear-gradient(to right,
+            #0a192f 0%,
+            #0055ff 25%,
+            #00aaff 50%,
+            #e0f7fa 75%,
+            #ffffff 100%
+          );
+          border: 1px solid rgba(59,130,246,0.3);
+        "></div>
+      </div>
+      <!-- 눈금 레이블 -->
+      <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+        <span style="font-size:9px; color:#4a6a8a;">0%</span>
+        <span style="font-size:9px; color:#60a5fa;">25%</span>
+        <span style="font-size:9px; color:#93c5fd;">50%</span>
+        <span style="font-size:9px; color:#e0f7fa;">75%</span>
+        <span style="font-size:9px; color:#ffffff;">100%</span>
+      </div>
+    </div> <!-- /nsidc-legend -->
+
+    <!-- Copernicus 해빙 두께 범례 패널 -->
+    <div id="cop-legend" style="
+      display: none;
+      background: rgba(6, 12, 28, 0.92);
+      border: 1px solid #a855f7;
+      border-radius: 8px;
+      padding: 12px 16px 10px;
+      font-family: 'Courier New', monospace;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+      min-width: 320px;
+      pointer-events: auto;
+    ">
+      <!-- 제목 -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <span style="color:#c084fc; font-size:11px; letter-spacing:1px; font-weight:bold;">🧊 해빙 두께 (Ice Thickness)</span>
+        <span style="color:#a855f7; font-size:9px;">Copernicus Marine</span>
+      </div>
+      <!-- 컬러바 (가로) -->
+      <div style="position:relative; margin-bottom:6px;">
+        <div style="
+          width: 100%;
+          height: 18px;
+          border-radius: 4px;
+          background: linear-gradient(to right,
+            #1e1b4b 0%,
+            #4c1d95 20%,
+            #7c3aed 40%,
+            #a855f7 60%,
+            #d8b4fe 80%,
+            #ffffff 100%
+          );
+          border: 1px solid rgba(168,85,247,0.3);
+        "></div>
+      </div>
+      <!-- 눈금 레이블 -->
+      <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+        <span style="font-size:9px; color:#4a6a8a;">0m</span>
+        <span style="font-size:9px; color:#7c3aed;">1m</span>
+        <span style="font-size:9px; color:#a855f7;">2m</span>
+        <span style="font-size:9px; color:#d8b4fe;">3m</span>
+        <span style="font-size:9px; color:#e9d5ff;">4m</span>
+        <span style="font-size:9px; color:#ffffff;">5m+</span>
+      </div>
+    </div> <!-- /cop-legend -->
+
+  </div> <!-- /legends-container -->
 
   <!-- 하단 컨트롤 (운항 및 타임라인) -->
   <div class="hud" id="hud-bottom" style="flex-direction: column; padding: 10px 18px 8px; min-width: 400px">
@@ -1017,6 +1444,7 @@
     </div>
     <div id="banner">부산 → 북극항로 → 로테르담 | 14일 운항</div>
     <div id="toast"></div>
+    <div id="gebco-depth-popup"></div>
 
     <script>
       'use strict';
@@ -1028,92 +1456,255 @@
 
       const ROUTES = {
         NSR: [
-          // 북동항로 (내륙 관통 철저 배제 - 100km 간격 초정밀 연안 핀)
-          { lon: 129.04, lat: 35.1, label: '부산항' },
-          { lon: 130.8, lat: 35.8, label: '대한해협 우회' },
-          { lon: 132.5, lat: 37.5, label: '동해 중앙' },
-          { lon: 138.0, lat: 43.0, label: '홋카이도 서해안' },
-          { lon: 140.5, lat: 44.5, label: '소야 해협 접근' },
-          { lon: 141.2, lat: 45.4, label: '소야 해협' },
+          // 북동항로 — 한국 → 소야 해협
+          { lon: 129.04, lat: 35.1,  label: '부산항' },
+          { lon: 130.8,  lat: 35.8,  label: '대한해협 우회' },
+          { lon: 132.5,  lat: 37.5,  label: '동해 중앙' },
+          { lon: 138.0,  lat: 43.0,  label: '홋카이도 서해안' },
+          { lon: 140.5,  lat: 44.5,  label: '소야 해협 접근' },
+          { lon: 141.2,  lat: 45.4,  label: '소야 해협' },
           { lon: 141.93, lat: 45.65, label: '소야 해협 통과' },
-          { lon: 143.5, lat: 46.2, label: '오호츠크해' },
-          { lon: 145.5, lat: 47.0, label: '오호츠크해 중부' },
-          { lon: 148.0, lat: 48.0, label: '부솔 해협 접근' },
-          { lon: 151.3, lat: 46.5, label: '부솔 해협 (쿠릴 패주)' },
-          { lon: 153.0, lat: 46.0, label: '북태평양' },
-          { lon: 157.0, lat: 49.0, label: '캄차카 반도 우회' },
-          { lon: 161.0, lat: 53.0, label: '캄차카 동해안' },
-          { lon: 164.0, lat: 57.0, label: '베링해 진입' },
-          { lon: 170.0, lat: 60.0, label: '베링해 중부' },
-          { lon: 175.0, lat: 63.0, label: '아나디르 만' },
-          { lon: 180.0, lat: 64.5, label: '날짜변경선' },
-          { lon: -175.0, lat: 65.0, label: '베링해협 접근' },
-          { lon: -168.8, lat: 66.0, label: '베링해협 통과' },
-          { lon: -168.0, lat: 67.5, label: '척치해 진입' },
-          { lon: -175.0, lat: 70.0, label: '척치해 외곽' },
-          { lon: 180.0, lat: 72.5, label: '브랑겔 섬 북방 안심 우회' },
-          { lon: 165.0, lat: 73.0, label: '동시베리아해' },
-          { lon: 150.0, lat: 77.0, label: '뉴시베리아 제도 우회' },
-          { lon: 140.0, lat: 77.0, label: '랍테프해' },
-          { lon: 130.0, lat: 77.5, label: '랍테프해 서부' },
-          { lon: 115.0, lat: 77.5, label: '타이미르 반도 우회' },
-          { lon: 110.0, lat: 77.8, label: '빌키츠키 접근' },
-          { lon: 104.0, lat: 77.92, label: '빌키츠키 통과' },
-          { lon: 98.0, lat: 77.5, label: '카라해 진입' },
-          { lon: 80.0, lat: 77.0, label: '카라해 중앙' },
-          { lon: 69.0, lat: 77.5, label: '노바야젬랴 섬 우회' },
-          { lon: 60.0, lat: 76.0, label: '바렌츠해 동부' },
-          { lon: 45.0, lat: 73.0, label: '바렌츠해 중앙' },
-          { lon: 30.0, lat: 72.5, label: '노스케이프 우회' },
-          { lon: 18.0, lat: 69.5, label: '노르웨이해' },
-          { lon: 5.0, lat: 62.0, label: '북해' },
-          { lon: 4.5, lat: 51.9, label: '로테르담' },
+          // 사할린 남단 우회 — 케이프 크릴론(46°N) 남방에서 동방으로 우회 후 오호츠크해 진입
+          { lon: 144.0,  lat: 46.0,  label: '소야 동방 외해' },
+          { lon: 145.5,  lat: 47.0,  label: '오호츠크해' },
+          { lon: 148.0,  lat: 48.0,  label: '부솔 해협 접근' },
+          { lon: 151.3,  lat: 46.5,  label: '부솔 해협 (쿠릴 패주)' },
+          // 캄차카 반도 우회 — 반도 동쪽 충분한 이격(165-167°E) 확보
+          { lon: 154.0,  lat: 46.0,  label: '북태평양 진입' },
+          { lon: 160.0,  lat: 48.5,  label: '캄차카 반도 남방 외해' },
+          { lon: 163.5,  lat: 51.5,  label: '캄차카 동해안 남부' },
+          { lon: 165.0,  lat: 53.5,  label: '캄차카 동해안 중부' },
+          { lon: 166.0,  lat: 56.0,  label: '캄차카 동해안 북부' },
+          { lon: 167.0,  lat: 58.5,  label: '베링해 진입' },
+          // 베링해 → 베링해협
+          { lon: 170.0,  lat: 60.0,  label: '베링해 중부' },
+          { lon: 175.0,  lat: 63.0,  label: '아나디르 만' },
+          { lon: 180.0,  lat: 64.5,  label: '날짜변경선' },
+          { lon: -175.0, lat: 65.0,  label: '베링해협 접근' },
+          { lon: -170.0, lat: 65.5,  label: '베링해협 서측' },
+          { lon: -168.8, lat: 66.5,  label: '베링해협 통과' },
+          { lon: -168.0, lat: 67.5,  label: '척치해 진입' },
+          // 브랑겔 섬 북방 우회 — 72.5°N 이상 유지하여 섬(최고 71.3°N) 확실히 북방 통과
+          { lon: -175.0, lat: 70.5,  label: '척치해 외곽 북상' },
+          { lon: -179.5, lat: 72.5,  label: '브랑겔 섬 서방 북상' },
+          { lon: 178.5,  lat: 72.8,  label: '브랑겔 섬 북방 통과' },
+          { lon: 175.0,  lat: 73.0,  label: '브랑겔 섬 완전 통과' },
+          // 동시베리아해 → 뉴시베리아 제도 — 산니코프·드미트리 랍테프 해협 경유
+          { lon: 168.0,  lat: 73.0,  label: '동시베리아해 서진' },
+          { lon: 160.0,  lat: 73.5,  label: '동시베리아해 중부' },
+          { lon: 153.0,  lat: 73.5,  label: '뉴시베리아 제도 동방 외해' },
+          { lon: 148.5,  lat: 73.5,  label: '산니코프 해협 진입' },
+          { lon: 145.0,  lat: 73.8,  label: '산니코프 해협 통과' },
+          { lon: 142.0,  lat: 74.0,  label: '드미트리 랍테프 해협' },
+          { lon: 140.0,  lat: 74.5,  label: '랍테프해 진입' },
+          // 랍테프해 서부 → 빌키츠키 해협 → 카라해 → 바렌츠해 → 로테르담
+          { lon: 130.0,  lat: 77.5,  label: '랍테프해 서부' },
+          { lon: 115.0,  lat: 77.5,  label: '타이미르 반도 우회' },
+          { lon: 110.0,  lat: 77.8,  label: '빌키츠키 접근' },
+          { lon: 104.0,  lat: 77.92, label: '빌키츠키 통과' },
+          { lon: 98.0,   lat: 77.5,  label: '카라해 진입' },
+          { lon: 80.0,   lat: 77.0,  label: '카라해 중앙' },
+          { lon: 69.0,   lat: 77.5,  label: '노바야젬랴 섬 우회' },
+          { lon: 60.0,   lat: 76.0,  label: '바렌츠해 동부' },
+          { lon: 45.0,   lat: 73.0,  label: '바렌츠해 중앙' },
+          { lon: 32.0,   lat: 73.5,  label: '바렌츠해 서부' },
+          { lon: 20.0,   lat: 73.0,  label: '노스케이프 북방 외해' },
+          { lon: 14.0,   lat: 72.0,  label: '노르웨이해 북부' },
+          { lon: 6.0,    lat: 69.0,  label: '노르웨이해 중부' },
+          { lon: 2.0,    lat: 64.0,  label: '노르웨이해 남부' },
+          { lon: 1.0,    lat: 60.0,  label: '북해 입구' },
+          { lon: 4.5,    lat: 57.0,  label: '북해 중부' },
+          { lon: 4.5,    lat: 51.9,  label: '로테르담' },
         ],
         NWP: [
-          // 북서항로 (맥클루어 심층 - 육상 충돌 원천 차단)
-          { lon: 129.04, lat: 35.1, label: '부산항' },
-          { lon: 130.8, lat: 35.8, label: '대한해협 우회' },
-          { lon: 138.0, lat: 43.0, label: '홋카이도 외곽' },
+          // 북서항로 — 한국 → 소야 해협
+          { lon: 129.04, lat: 35.1,  label: '부산항' },
+          { lon: 130.8,  lat: 35.8,  label: '대한해협 우회' },
+          { lon: 138.0,  lat: 43.0,  label: '홋카이도 외곽' },
           { lon: 141.93, lat: 45.65, label: '소야 해협' },
-          { lon: 144.5, lat: 47.0, label: '오호츠크해' },
-          { lon: 151.3, lat: 46.5, label: '부솔 해협' },
-          { lon: 157.0, lat: 49.0, label: '캄차카 반도 우회' },
-          { lon: 164.0, lat: 57.0, label: '베링해 진입' },
-          { lon: 180.0, lat: 64.5, label: '날짜변경선' },
-          { lon: -168.8, lat: 66.0, label: '베링해협 통과' },
-          { lon: -165.0, lat: 69.0, label: '척치-보퍼트' },
-          { lon: -156.0, lat: 71.8, label: '포인트배로 우회' },
-          { lon: -140.0, lat: 72.0, label: '보퍼트해 연안 우회' },
-          { lon: -130.0, lat: 73.5, label: '보퍼트해 북상' },
-          { lon: -122.0, lat: 74.5, label: '매클루어 입구 우회' },
-          { lon: -115.0, lat: 74.5, label: '매클루어 관통' },
-          { lon: -105.0, lat: 74.5, label: '바이카운트멜빌 해협' },
-          { lon: -90.0, lat: 74.2, label: '랭커스터 해협' },
-          { lon: -75.0, lat: 73.0, label: '배핀 만 진입' },
-          { lon: -65.0, lat: 70.0, label: '배핀 만 내해' },
-          { lon: -60.0, lat: 65.0, label: '데이비스 해협' },
-          { lon: -50.0, lat: 60.0, label: '래브라도 해' },
-          { lon: -30.0, lat: 55.0, label: '대서양 중앙' },
-          { lon: -10.0, lat: 50.0, label: '영국 해협 서측' },
-          { lon: 0.0, lat: 51.0, label: '도버 해협' },
-          { lon: 4.5, lat: 51.9, label: '로테르담' },
+          // 사할린 남단 우회
+          { lon: 144.0,  lat: 46.0,  label: '소야 동방 외해' },
+          { lon: 145.5,  lat: 47.0,  label: '오호츠크해' },
+          { lon: 148.0,  lat: 48.0,  label: '부솔 해협 접근' },
+          { lon: 151.3,  lat: 46.5,  label: '부솔 해협' },
+          // 캄차카 반도 우회 — 반도 동쪽 충분한 이격(165-167°E) 확보
+          { lon: 154.0,  lat: 46.0,  label: '북태평양 진입' },
+          { lon: 160.0,  lat: 48.5,  label: '캄차카 반도 남방 외해' },
+          { lon: 163.5,  lat: 51.5,  label: '캄차카 동해안 남부' },
+          { lon: 165.0,  lat: 53.5,  label: '캄차카 동해안 중부' },
+          { lon: 166.0,  lat: 56.0,  label: '캄차카 동해안 북부' },
+          { lon: 167.0,  lat: 58.5,  label: '베링해 진입' },
+          // 베링해 → 베링해협 → 보퍼트해
+          { lon: 180.0,  lat: 64.5,  label: '날짜변경선' },
+          { lon: -173.0, lat: 65.0,  label: '베링해 동부' },
+          { lon: -170.0, lat: 65.5,  label: '베링해협 서측' },
+          { lon: -168.8, lat: 66.5,  label: '베링해협 통과' },
+          { lon: -165.0, lat: 69.0,  label: '척치-보퍼트' },
+          { lon: -156.0, lat: 71.8,  label: '포인트배로 우회' },
+          { lon: -140.0, lat: 72.0,  label: '보퍼트해 연안 우회' },
+          { lon: -130.0, lat: 73.5,  label: '보퍼트해 북상' },
+          // 캐나다 북극 제도 — 맥클루어→바이카운트멜빌→배로우→랭커스터 해협 정밀 경유
+          { lon: -124.5, lat: 74.0,  label: '뱅크스 섬 북방 진입' },
+          { lon: -119.0, lat: 74.8,  label: '맥클루어 해협 서부' },
+          { lon: -115.5, lat: 75.0,  label: '맥클루어 해협 중앙' },
+          { lon: -112.0, lat: 74.8,  label: '맥클루어 해협 동부' },
+          { lon: -109.5, lat: 74.7,  label: '바이카운트멜빌 해협 서부' },
+          { lon: -106.0, lat: 74.6,  label: '바이카운트멜빌 해협 중앙' },
+          { lon: -102.5, lat: 74.5,  label: '바이카운트멜빌 해협 동부' },
+          { lon: -97.0,  lat: 74.0,  label: '배로우 해협 서부' },
+          { lon: -93.5,  lat: 74.0,  label: '배로우 해협 중앙' },
+          { lon: -87.0,  lat: 74.0,  label: '랭커스터 해협 서부' },
+          { lon: -84.0,  lat: 74.0,  label: '랭커스터 해협 중앙' },
+          // 바일럿 섬 남방 우회 → 배핀 만
+          { lon: -80.5,  lat: 73.3,  label: '배핀 만 입구' },
+          { lon: -75.0,  lat: 72.5,  label: '배핀 만 서부' },
+          { lon: -65.0,  lat: 70.0,  label: '배핀 만 내해' },
+          // 데이비스 해협 → 로테르담
+          { lon: -60.0,  lat: 65.0,  label: '데이비스 해협' },
+          { lon: -50.0,  lat: 60.0,  label: '래브라도 해' },
+          { lon: -30.0,  lat: 55.0,  label: '대서양 중앙' },
+          { lon: -10.0,  lat: 50.0,  label: '영국 해협 서측' },
+          { lon: 0.0,    lat: 51.0,  label: '도버 해협' },
+          { lon: 4.5,    lat: 51.9,  label: '로테르담' },
         ],
         TSR: [
-          // 북극횡단항로
-          { lon: 129.04, lat: 35.1, label: '부산항' },
-          { lon: 130.8, lat: 35.8, label: '대한해협 우회' },
+          // 북극횡단항로 — 한국 → 소야 해협
+          { lon: 129.04, lat: 35.1,  label: '부산항' },
+          { lon: 130.8,  lat: 35.8,  label: '대한해협 우회' },
           { lon: 141.93, lat: 45.65, label: '소야 해협 통과' },
-          { lon: 151.3, lat: 46.5, label: '부솔 해협' },
-          { lon: 164.0, lat: 57.0, label: '베링해 진입' },
-          { lon: 180.0, lat: 64.5, label: '날짜변경선' },
-          { lon: -168.8, lat: 66.0, label: '베링해협 통과' },
-          { lon: -168.0, lat: 70.0, label: '척치해 북방' },
-          { lon: 180.0, lat: 80.0, label: '북극해 심해' },
-          { lon: 0.0, lat: 89.9, label: '북극점 돌파' },
-          { lon: 10.0, lat: 80.0, label: '스발바르 북방' },
-          { lon: 10.0, lat: 70.0, label: '노르웨이해' },
-          { lon: 5.0, lat: 62.0, label: '북해' },
-          { lon: 4.5, lat: 51.9, label: '로테르담' },
+          { lon: 144.0,  lat: 46.0,  label: '소야 동방 외해' },
+          { lon: 145.5,  lat: 47.0,  label: '오호츠크해' },
+          { lon: 148.0,  lat: 48.0,  label: '부솔 해협 접근' },
+          { lon: 151.3,  lat: 46.5,  label: '부솔 해협' },
+          // 캄차카 반도 우회 — 반도 동쪽 충분한 이격(165-167°E) 확보
+          { lon: 154.0,  lat: 46.0,  label: '북태평양 진입' },
+          { lon: 160.0,  lat: 48.5,  label: '캄차카 반도 남방 외해' },
+          { lon: 163.5,  lat: 51.5,  label: '캄차카 동해안 남부' },
+          { lon: 165.0,  lat: 53.5,  label: '캄차카 동해안 중부' },
+          { lon: 166.0,  lat: 56.0,  label: '캄차카 동해안 북부' },
+          { lon: 167.0,  lat: 58.5,  label: '베링해 진입' },
+          // 베링해 → 척치해 → 북극해 → 북극점 → 스발바르 → 로테르담
+          { lon: 180.0,  lat: 64.5,  label: '날짜변경선' },
+          { lon: -173.0, lat: 65.0,  label: '베링해 동부' },
+          { lon: -170.0, lat: 65.5,  label: '베링해협 서측' },
+          { lon: -168.8, lat: 66.5,  label: '베링해협 통과' },
+          { lon: -168.0, lat: 70.0,  label: '척치해 북방' },
+          { lon: 180.0,  lat: 80.0,  label: '북극해 심해' },
+          { lon: 0.0,    lat: 89.9,  label: '북극점 돌파' },
+          { lon: 10.0,   lat: 80.0,  label: '스발바르 북방' },
+          { lon: 10.0,   lat: 70.0,  label: '노르웨이해' },
+          { lon: 5.0,    lat: 62.0,  label: '북해' },
+          { lon: 4.5,    lat: 51.9,  label: '로테르담' },
+        ],
+
+        // ─── 수에즈 운하 우회항로 ──────────────────────────────────────────
+        // 부산 → 말라카 해협 → 인도양 → 홍해 → 수에즈 운하 → 지중해 → 로테르담
+        // 총 거리: 약 21,000km / 소요: 21~24일 (기준 항속 15노트)
+        SUEZ: [
+          { lon: 129.04, lat:  35.10, label: '부산항 출항' },
+          { lon: 127.00, lat:  33.50, label: '제주도 서방 통과' },
+          { lon: 124.00, lat:  29.00, label: '동중국해' },
+          { lon: 121.50, lat:  24.00, label: '대만 해협' },
+          { lon: 118.00, lat:  20.00, label: '루손 해협 서측 외해' },
+          { lon: 114.00, lat:  16.00, label: '남중국해 북부' },
+          { lon: 110.00, lat:  10.50, label: '남중국해 중부' },
+          { lon: 107.50, lat:   6.00, label: '남중국해 남부' },
+          { lon: 105.50, lat:   3.50, label: '말라카 해협 북단' },
+          { lon: 104.20, lat:   1.80, label: '말라카 해협 중앙' },
+          { lon: 103.80, lat:   1.30, label: '싱가포르 (말라카 해협 출구)' },
+          // 인도양 북상 → 아라비아해
+          { lon:  98.00, lat:  -1.00, label: '인도양 북서향' },
+          { lon:  90.00, lat:   5.00, label: '인도양 중앙부' },
+          { lon:  80.00, lat:   7.00, label: '스리랑카 남방 외해' },
+          { lon:  75.00, lat:  10.00, label: '아라비아해 동부' },
+          { lon:  68.00, lat:  12.00, label: '아라비아해 중앙' },
+          { lon:  62.00, lat:  13.50, label: '아라비아해 서부' },
+          { lon:  55.00, lat:  12.50, label: '아덴만 진입' },
+          { lon:  49.00, lat:  12.00, label: '아덴만 중앙' },
+          { lon:  45.50, lat:  12.00, label: '아덴만 서부 (예멘 외해)' },
+          { lon:  44.00, lat:  12.80, label: '바브엘만데브 해협 접근' },
+          { lon:  43.00, lat:  13.80, label: '바브엘만데브 해협 통과' },
+          // 홍해 북상
+          { lon:  43.00, lat:  15.50, label: '홍해 남부' },
+          { lon:  42.50, lat:  18.50, label: '홍해 중앙' },
+          { lon:  41.00, lat:  21.50, label: '홍해 중부 북상' },
+          { lon:  38.50, lat:  24.00, label: '홍해 북부' },
+          { lon:  36.80, lat:  26.50, label: '홍해 최북단' },
+          { lon:  34.50, lat:  28.50, label: '수에즈만 남단' },
+          // 수에즈 운하 (길이 193km, 13~16시간 통과)
+          { lon:  32.55, lat:  29.93, label: '수에즈 운하 남단 (Suez)' },
+          { lon:  32.42, lat:  30.42, label: '그레이트 비터 호수 (운하 통과 중)' },
+          { lon:  32.27, lat:  30.62, label: '이스마일리아 (운하 중간 대합소)' },
+          { lon:  32.33, lat:  31.25, label: '수에즈 운하 북단 (Port Said)' },
+          // 지중해 서진 → 지브롤터
+          { lon:  32.50, lat:  32.00, label: '지중해 진입 (동지중해)' },
+          { lon:  30.00, lat:  33.50, label: '동지중해 북부' },
+          { lon:  24.00, lat:  34.80, label: '크레타 섬 남방 통과' },
+          { lon:  18.00, lat:  35.50, label: '시칠리아 해협 접근' },
+          { lon:  12.50, lat:  37.00, label: '시칠리아 해협 통과' },
+          { lon:   9.00, lat:  38.00, label: '서지중해 동부' },
+          { lon:   4.50, lat:  38.50, label: '서지중해 중앙' },
+          { lon:  -1.50, lat:  37.00, label: '알보란해' },
+          { lon:  -5.40, lat:  35.90, label: '지브롤터 해협 통과' },
+          // 대서양 북상 → 로테르담
+          { lon:  -9.00, lat:  38.50, label: '포르투갈 남서 외해' },
+          { lon:  -9.50, lat:  43.50, label: '이베리아 반도 서안 북진' },
+          { lon:  -7.00, lat:  47.00, label: '비스케이만 북동부' },
+          { lon:  -5.50, lat:  48.50, label: '우에상 섬 (브르타뉴 외해)' },
+          { lon:  -3.00, lat:  50.00, label: '영국 해협 서측' },
+          { lon:   1.50, lat:  51.10, label: '영국 해협 동측' },
+          { lon:   4.50, lat:  51.90, label: '로테르담 (목적항)' },
+        ],
+
+        // ─── 희망봉 우회항로 ────────────────────────────────────────────────
+        // 부산 → 말라카 해협 → 인도양 남부 → 희망봉 → 대서양 → 로테르담
+        // 총 거리: 약 26,000km / 소요: 28~32일 (기준 항속 15노트)
+        CAPE: [
+          { lon: 129.04, lat:  35.10, label: '부산항 출항' },
+          { lon: 127.00, lat:  33.50, label: '제주도 서방 통과' },
+          { lon: 124.00, lat:  29.00, label: '동중국해' },
+          { lon: 121.50, lat:  24.00, label: '대만 해협' },
+          { lon: 118.00, lat:  20.00, label: '루손 해협 서측 외해' },
+          { lon: 114.00, lat:  16.00, label: '남중국해 북부' },
+          { lon: 110.00, lat:  10.50, label: '남중국해 중부' },
+          { lon: 107.50, lat:   6.00, label: '남중국해 남부' },
+          { lon: 105.50, lat:   3.50, label: '말라카 해협 북단' },
+          { lon: 104.20, lat:   1.80, label: '말라카 해협 중앙' },
+          { lon: 103.80, lat:   1.30, label: '싱가포르 (말라카 해협 출구)' },
+          // 순다 해협 방향으로 남하 → 인도양 남부
+          { lon: 107.00, lat:  -4.00, label: '자바해 서측' },
+          { lon: 105.80, lat:  -6.20, label: '순다 해협 통과 (자바-수마트라)' },
+          { lon: 103.00, lat:  -8.00, label: '인도양 북동부 진입' },
+          // 인도양 남서향 대권항로
+          { lon:  97.00, lat: -12.00, label: '인도양 북부 남하' },
+          { lon:  90.00, lat: -18.00, label: '인도양 중앙 서남향' },
+          { lon:  80.00, lat: -25.00, label: '인도양 중남부' },
+          { lon:  70.00, lat: -29.00, label: '인도양 남부' },
+          { lon:  58.00, lat: -33.00, label: '인도양 남서부 (마다가스카르 동방)' },
+          // 희망봉 접근
+          { lon:  40.00, lat: -35.50, label: '아굴하스 곶 동방 외해' },
+          { lon:  30.00, lat: -36.00, label: '희망봉 동방 접근' },
+          { lon:  22.00, lat: -35.50, label: '아굴하스 뱅크 통과' },
+          { lon:  18.50, lat: -34.40, label: '희망봉 (Cape of Good Hope)' },
+          { lon:  16.00, lat: -33.00, label: '케이프타운 북서방 통과' },
+          // 대서양 북상
+          { lon:  12.00, lat: -28.00, label: '대서양 동부 남부 북상' },
+          { lon:   8.00, lat: -20.00, label: '나미비아 외해' },
+          { lon:   5.00, lat: -12.00, label: '앙골라 외해' },
+          { lon:   2.00, lat:  -4.00, label: '콩고 외해' },
+          { lon:   0.00, lat:   3.00, label: '기니만 동부' },
+          { lon:  -2.50, lat:   8.00, label: '기니만 북부' },
+          { lon:  -8.00, lat:  14.00, label: '서아프리카 북상' },
+          { lon: -17.00, lat:  21.00, label: '서아프리카 서안' },
+          { lon: -18.00, lat:  28.00, label: '카나리아 제도 외해' },
+          { lon: -15.50, lat:  35.00, label: '모로코 서방 외해' },
+          { lon: -10.50, lat:  38.50, label: '포르투갈 남서 외해' },
+          { lon:  -9.50, lat:  43.50, label: '이베리아 반도 서안 북진' },
+          { lon:  -7.00, lat:  47.00, label: '비스케이만 북동부' },
+          { lon:  -5.50, lat:  48.50, label: '우에상 섬 (브르타뉴 외해)' },
+          { lon:  -3.00, lat:  50.00, label: '영국 해협 서측' },
+          { lon:   1.50, lat:  51.10, label: '영국 해협 동측' },
+          { lon:   4.50, lat:  51.90, label: '로테르담 (목적항)' },
         ],
       };
 
@@ -1147,6 +1738,16 @@
         return wps.map((w, i) => ({ ...w, t: d[i] / tot }));
       }
       let TWP = buildTimings(WAYPOINTS);
+
+      // 거리 계산 (km 반환)
+      function calculateRouteDistanceKM(wps) {
+        if (!wps || wps.length < 2) return 0;
+        let dist = 0;
+        for (let i = 1; i < wps.length; i++) {
+          dist += greatCircleDist(wps[i - 1], wps[i]);
+        }
+        return dist * 6371.0; // 지구 반지름 약 6371km
+      }
 
       // [동적 경로 탐색기 (A* / Raycast Heuristic)]
       // Base 항로를 따라가되, 해빙 농도가 높은 구역을 만나면 확연하게 거리를 두고 크게 곡선으로 빙 돌아가게 만듭니다.
@@ -1245,12 +1846,22 @@
         let rawWaypoints = ROUTES[currentRouteKey];
 
         // 2. 빙결 상태 및 쇄빙 등급 연동 동적 회피 기동
+        // SUEZ·CAPE 항로는 빙해역을 통과하지 않으므로 회피 기동 생략
+        const isAlternateRoute = (currentRouteKey === 'SUEZ' || currentRouteKey === 'CAPE');
         const icData = ICE_CLASS_DATA[shipIceClass] || ICE_CLASS_DATA.NONE;
-        // Ice Class 능력치 비례: PC1(20kn) -> 0.8, NONE(10kn) -> 0.4
-        const maxSafeConc = icData.maxKn / 25.0;
+        const maxSafeConc = isAlternateRoute ? 1.0 : icData.maxKn / 25.0;
 
         WAYPOINTS = applyDynamicDetour(rawWaypoints, maxSafeConc);
         TWP = buildTimings(WAYPOINTS);
+
+        // 항로별 라인 색상
+        const routeColor = {
+          NSR:  '#60a5fa',  // 파랑 — 북동항로
+          NWP:  '#a78bfa',  // 보라 — 북서항로
+          TSR:  '#34d399',  // 녹청 — 횡단항로
+          SUEZ: '#fbbf24',  // 황금 — 수에즈 우회
+          CAPE: '#f87171',  // 빨강 — 희망봉 우회
+        }[currentRouteKey] || '#60a5fa';
 
         if (cViewer) {
           if (routeLineEntity) cViewer.entities.remove(routeLineEntity);
@@ -1266,8 +1877,7 @@
               arcType: Cesium.ArcType.GEODESIC,
               material: new Cesium.PolylineGlowMaterialProperty({
                 glowPower: 0.25,
-                color:
-                  Cesium.Color.fromCssColorString('#60a5fa').withAlpha(0.9),
+                color: Cesium.Color.fromCssColorString(routeColor).withAlpha(0.9),
               }),
             },
           });
@@ -1435,6 +2045,378 @@
         },
       };
 
+      // ═══════════════════════════════════════════════════════════════
+      // POLARIS Master Routing Algorithm
+      // KR Polar Code Implementation Guide + IMO MSC.1/Circ.1519
+      // ═══════════════════════════════════════════════════════════════
+
+      // RIV(Risk Index Value) 룩업 테이블
+      // 행: 내빙 등급 (NONE = 일반 선박, PC7 최저~PC1 최고)
+      // 열: WMO 빙질 분류 (9종)
+      // 양수 → 안전, 음수 → 위험 (절대값이 클수록 위험)
+      const RIV_TABLE = {
+        'NONE': {
+          'Open Water':             2,
+          'Grey Ice':               1,
+          'Grey-White Ice':        -1,
+          'Thin First-Year (FY)':  -2,
+          'Medium First-Year (FY)':-4,
+          'Thick First-Year (FY)': -6,
+          'Multi-Year (MY)':       -8,
+          'Ridged/Hummocked':     -10,
+          'Glacier Ice':          -20,
+        },
+        'IC': {
+          'Open Water':             2,
+          'Grey Ice':               2,
+          'Grey-White Ice':         1,
+          'Thin First-Year (FY)':  -1,
+          'Medium First-Year (FY)':-3,
+          'Thick First-Year (FY)': -5,
+          'Multi-Year (MY)':       -6,
+          'Ridged/Hummocked':      -8,
+          'Glacier Ice':          -16,
+        },
+        'IB': {
+          'Open Water':             2,
+          'Grey Ice':               2,
+          'Grey-White Ice':         1,
+          'Thin First-Year (FY)':   1,
+          'Medium First-Year (FY)':-2,
+          'Thick First-Year (FY)': -4,
+          'Multi-Year (MY)':       -5,
+          'Ridged/Hummocked':      -7,
+          'Glacier Ice':          -14,
+        },
+        'IA': {
+          'Open Water':             2,
+          'Grey Ice':               2,
+          'Grey-White Ice':         2,
+          'Thin First-Year (FY)':   1,
+          'Medium First-Year (FY)': 1,
+          'Thick First-Year (FY)': -2,
+          'Multi-Year (MY)':       -4,
+          'Ridged/Hummocked':      -5,
+          'Glacier Ice':          -12,
+        },
+        'IA Super': {
+          'Open Water':             2,
+          'Grey Ice':               2,
+          'Grey-White Ice':         2,
+          'Thin First-Year (FY)':   2,
+          'Medium First-Year (FY)': 1,
+          'Thick First-Year (FY)': -1,
+          'Multi-Year (MY)':       -3,
+          'Ridged/Hummocked':      -4,
+          'Glacier Ice':          -10,
+        },
+        'PC7': {
+          'Open Water':             2,
+          'Grey Ice':               2,
+          'Grey-White Ice':         2,
+          'Thin First-Year (FY)':   1,
+          'Medium First-Year (FY)': 1,
+          'Thick First-Year (FY)': -1,
+          'Multi-Year (MY)':       -3,
+          'Ridged/Hummocked':      -4,
+          'Glacier Ice':           -9,
+        },
+        'PC6': {
+          'Open Water':             2,
+          'Grey Ice':               2,
+          'Grey-White Ice':         2,
+          'Thin First-Year (FY)':   2,
+          'Medium First-Year (FY)': 1,
+          'Thick First-Year (FY)':  1,
+          'Multi-Year (MY)':       -2,
+          'Ridged/Hummocked':      -3,
+          'Glacier Ice':           -8,
+        },
+        'PC5': {
+          'Open Water':             2,
+          'Grey Ice':               2,
+          'Grey-White Ice':         2,
+          'Thin First-Year (FY)':   2,
+          'Medium First-Year (FY)': 1,
+          'Thick First-Year (FY)':  1,
+          'Multi-Year (MY)':       -2,
+          'Ridged/Hummocked':      -3,
+          'Glacier Ice':          -20,
+        },
+        'PC4': {
+          'Open Water':             2,
+          'Grey Ice':               2,
+          'Grey-White Ice':         2,
+          'Thin First-Year (FY)':   2,
+          'Medium First-Year (FY)': 2,
+          'Thick First-Year (FY)':  1,
+          'Multi-Year (MY)':        1,
+          'Ridged/Hummocked':      -1,
+          'Glacier Ice':           -6,
+        },
+        'PC3': {
+          'Open Water':             2,
+          'Grey Ice':               2,
+          'Grey-White Ice':         2,
+          'Thin First-Year (FY)':   2,
+          'Medium First-Year (FY)': 2,
+          'Thick First-Year (FY)':  1,
+          'Multi-Year (MY)':        1,
+          'Ridged/Hummocked':       1,
+          'Glacier Ice':           -3,
+        },
+        'PC2': {
+          'Open Water':             2,
+          'Grey Ice':               2,
+          'Grey-White Ice':         2,
+          'Thin First-Year (FY)':   2,
+          'Medium First-Year (FY)': 2,
+          'Thick First-Year (FY)':  2,
+          'Multi-Year (MY)':        2,
+          'Ridged/Hummocked':       1,
+          'Glacier Ice':           -1,
+        },
+        'PC1': {
+          'Open Water':             2,
+          'Grey Ice':               2,
+          'Grey-White Ice':         2,
+          'Thin First-Year (FY)':   2,
+          'Medium First-Year (FY)': 2,
+          'Thick First-Year (FY)':  2,
+          'Multi-Year (MY)':        2,
+          'Ridged/Hummocked':       2,
+          'Glacier Ice':            1,
+        },
+      };
+
+      // POLARIS RIO 산출 함수
+      // RIO = Σ (concentration_tenths_i × RIV(iceClass, iceType_i))
+      function calculateRIO(iceClass, iceConditions) {
+        const classRivs = RIV_TABLE[iceClass] || RIV_TABLE['NONE'];
+        let rio = 0;
+        for (const entry of iceConditions) {
+          const riv = classRivs[entry.type];
+          if (riv === undefined) continue; // 알 수 없는 빙질은 건너뜀
+          rio += entry.concentration_tenths * riv;
+        }
+        return Math.round(rio * 10000) / 10000;
+      }
+
+      // 현재 선박 위치(lat/lon)와 실제 해빙 농도 데이터를 기반으로
+      // POLARIS 입력에 필요한 ice_conditions 배열 자동 생성
+      function deriveIceConditions(lon, lat) {
+        const conc = Math.max(0, Math.min(1, sampleIceConcentration(lon, lat) || 0));
+        const openWater = Math.max(0, 1 - conc);
+        const conditions = [];
+
+        if (lat > 82) {
+          // 극고위도: 다년생 빙(MY) + 압퇴빙 지배
+          if (conc * 0.6 > 0) conditions.push({ type: 'Multi-Year (MY)',     concentration_tenths: conc * 0.6 });
+          if (conc * 0.3 > 0) conditions.push({ type: 'Ridged/Hummocked',    concentration_tenths: conc * 0.3 });
+          if (conc * 0.1 > 0) conditions.push({ type: 'Thick First-Year (FY)', concentration_tenths: conc * 0.1 });
+        } else if (lat > 78) {
+          // 고위도: 후기 1년생 + 다년생
+          if (conc * 0.5 > 0) conditions.push({ type: 'Thick First-Year (FY)', concentration_tenths: conc * 0.5 });
+          if (conc * 0.35 > 0) conditions.push({ type: 'Multi-Year (MY)',      concentration_tenths: conc * 0.35 });
+          if (conc * 0.15 > 0) conditions.push({ type: 'Ridged/Hummocked',     concentration_tenths: conc * 0.15 });
+        } else if (lat > 74) {
+          // 중위도: 중간 두께 1년생 빙 지배
+          if (conc * 0.6 > 0) conditions.push({ type: 'Medium First-Year (FY)', concentration_tenths: conc * 0.6 });
+          if (conc * 0.3 > 0) conditions.push({ type: 'Thin First-Year (FY)',   concentration_tenths: conc * 0.3 });
+          if (conc * 0.1 > 0) conditions.push({ type: 'Grey-White Ice',         concentration_tenths: conc * 0.1 });
+        } else if (lat > 68) {
+          // 저위도 북극 주변부: 얇은 1년생 빙
+          if (conc * 0.7 > 0) conditions.push({ type: 'Thin First-Year (FY)', concentration_tenths: conc * 0.7 });
+          if (conc * 0.2 > 0) conditions.push({ type: 'Grey-White Ice',        concentration_tenths: conc * 0.2 });
+          if (conc * 0.1 > 0) conditions.push({ type: 'Grey Ice',              concentration_tenths: conc * 0.1 });
+        } else {
+          // 개빙수역
+          if (conc * 0.5 > 0) conditions.push({ type: 'Grey Ice',  concentration_tenths: conc * 0.5 });
+          if (conc * 0.5 > 0) conditions.push({ type: 'Grey-White Ice', concentration_tenths: conc * 0.5 });
+        }
+
+        if (openWater > 0) conditions.push({ type: 'Open Water', concentration_tenths: openWater });
+        return conditions;
+      }
+
+      // 4단계 순차 라우팅 판단 트리
+      // 반환: { status, reason, rioScore }
+      function evaluateRouting(shipData) {
+        const NSR_MAX_DRAFT = 12.5;
+        const NSR_MAX_BEAM  = 35.0;
+        const MIN_RESCUE_DAYS = 5;
+        const MIN_TEMP_MARGIN = 10.0;
+
+        // Step 1: 지정학·행정 필터
+        if (shipData.isSanctionedCountry) {
+          return { status: 'REROUTE_CAPE',
+            reason: '[Step 1a] 선박 국적이 대러시아 제재 참여국입니다. NSR 통과 시 국제 제재 위반 및 선박·화물 압류 위험 → 희망봉(CAPE) 우회.',
+            rioScore: null };
+        }
+        if (!shipData.hasNsraPermit) {
+          return { status: 'REROUTE_SUEZ',
+            reason: '[Step 1b] NSRA(러시아 북극항로청) 사전 운항 허가 미취득. NSR은 45일 전 신청 필수 → 수에즈 우회.',
+            rioScore: null };
+        }
+        if (!shipData.hasPwom) {
+          return { status: 'REROUTE_SUEZ',
+            reason: '[Step 1b] 극지해역 운항 매뉴얼(PWOM) 미비치. IMO Polar Code 필수 문서 → 수에즈 우회.',
+            rioScore: null };
+        }
+
+        // Step 2: 물리적 크기 필터
+        if (shipData.draft > NSR_MAX_DRAFT) {
+          return { status: 'REROUTE_SUEZ',
+            reason: `[Step 2a] 흘수 ${shipData.draft.toFixed(1)}m > NSR 수심 제한 ${NSR_MAX_DRAFT}m (빌키츠키·사니코프 해협). 수에즈 우회.`,
+            rioScore: null };
+        }
+        if (shipData.beam > NSR_MAX_BEAM) {
+          return { status: 'REROUTE_SUEZ',
+            reason: `[Step 2b] 선폭 ${shipData.beam.toFixed(1)}m > 쇄빙선 수로 허용 ${NSR_MAX_BEAM}m. 에스코트 불가 → 수에즈 우회.`,
+            rioScore: null };
+        }
+
+        // Step 3: Polar Code 생존·설비 기준
+        if (shipData.maxRescueDays < MIN_RESCUE_DAYS) {
+          return { status: 'REROUTE_SUEZ',
+            reason: `[Step 3a] 생존 장비 ${shipData.maxRescueDays}일 < KR Polar Code 최소 기준 ${MIN_RESCUE_DAYS}일. SAR 대응 지연 시 승무원 안전 불보장 → 수에즈 우회.`,
+            rioScore: null };
+        }
+        if (shipData.isTempBelowMinus10 && shipData.designTempMargin < MIN_TEMP_MARGIN) {
+          return { status: 'REROUTE_SUEZ',
+            reason: `[Step 3b] 저온 해역(-10°C↓) 운항 시 설계 온도 여유 ${shipData.designTempMargin}°C < 권고 기준 ${MIN_TEMP_MARGIN}°C. 구조 취성 파괴 위험 → 수에즈 우회.`,
+            rioScore: null };
+        }
+        const missing = [];
+        if (!shipData.hasWinterization)  missing.push('방한 설비');
+        if (!shipData.hasZeroDischarge)  missing.push('무배출 탱크');
+        if (!shipData.hasPolarComms)     missing.push('극지 통신');
+        if (!shipData.hasIceNavigator)   missing.push('극지 항해사');
+        if (missing.length > 0) {
+          return { status: 'REROUTE_SUEZ',
+            reason: `[Step 3c] Polar Code 필수 설비/인력 미비: ${missing.join(', ')}. KR 이행 가이드 9~12장 요건 미충족 → 수에즈 우회.`,
+            rioScore: null };
+        }
+
+        // Step 4: POLARIS RIO 평가
+        const rio = calculateRIO(shipData.iceClass, shipData.iceConditions);
+        if (rio >= 0) {
+          return { status: 'NSR_APPROVED',
+            reason: `[Step 4a] POLARIS RIO ${rio >= 0 ? '+' : ''}${rio.toFixed(2)}. 모든 기준 충족, 현재 빙상 조건에서 NSR 정상 통과 승인.`,
+            rioScore: rio };
+        }
+        if (rio >= -10) {
+          return { status: 'NSR_RESTRICTED',
+            reason: `[Step 4b] RIO ${rio.toFixed(2)} (경계: -10≤RIO<0). 고위험 빙해역 — 쇄빙선 에스코트 필수, 권고 속도 준수, 24h 빙상 감시 조건부 통과.`,
+            rioScore: rio };
+        }
+        return { status: 'REROUTE_SUEZ',
+          reason: `[Step 4c] RIO ${rio.toFixed(2)} < -10. POLARIS 특별 고려 대상 해역(빙하·다년생 빙 지배). 선박 설계 한계 초과, 안전 항해 계획 불가 → 수에즈 우회.`,
+          rioScore: rio };
+      }
+
+      // UI에서 값을 읽어 평가를 실행하고 패널을 갱신
+      function runRoutingEvaluation() {
+        const draft       = parseFloat(document.getElementById('r-draft').value) || 8.5;
+        const rescueDays  = parseInt(document.getElementById('r-rescue-days').value) || 0;
+        const tempMargin  = parseFloat(document.getElementById('r-temp-margin').value) || 0;
+        const hasPwom     = document.getElementById('r-pwom').checked;
+        const hasNsra     = document.getElementById('r-nsra').checked;
+        const hasWinter   = document.getElementById('r-winter').checked;
+        const hasZeroDis  = document.getElementById('r-zero-dis').checked;
+        const hasComms    = document.getElementById('r-comms').checked;
+        const hasNav      = document.getElementById('r-navigator').checked;
+        const isSanction  = document.getElementById('r-sanctioned').checked;
+        const isColdRoute = document.getElementById('r-cold-route').checked;
+
+        const lon = shipState ? shipState.lon : 135;
+        const lat = shipState ? shipState.lat : 70;
+        const seaState = getSeaState(lat);
+        const iceConditions = deriveIceConditions(lon, lat);
+
+        const result = evaluateRouting({
+          draft,
+          beam:               shipWidth,
+          iceClass:           shipIceClass,
+          hasPwom,
+          hasNsraPermit:      hasNsra,
+          maxRescueDays:      rescueDays,
+          isTempBelowMinus10: isColdRoute,
+          designTempMargin:   tempMargin,
+          hasWinterization:   hasWinter,
+          hasZeroDischarge:   hasZeroDis,
+          hasPolarComms:      hasComms,
+          hasIceNavigator:    hasNav,
+          isSanctionedCountry: isSanction,
+          iceConditions,
+        });
+
+        // 뱃지 및 상태 업데이트
+        const badge = document.getElementById('routing-status-badge');
+        const rioEl = document.getElementById('routing-rio-val');
+        const reasonEl = document.getElementById('routing-reason');
+
+        // 거리 산출 및 UI 갱신
+        const distCurrent = calculateRouteDistanceKM(WAYPOINTS); // 빙결 회피 기동이 적용된 목표 항로의 실제 거리
+        const distSuez = calculateRouteDistanceKM(ROUTES['SUEZ']); // 수에즈 운하 기본 총 거리
+        const lblCurrent = document.getElementById('lbl-dist-current');
+        const elDistCurrent = document.getElementById('dist-current');
+        const elDistSuez = document.getElementById('dist-suez');
+        const elDistSaved = document.getElementById('dist-saved');
+
+        if (lblCurrent) {
+          const names = { NSR: '북동항로 (NSR)', NWP: '북서항로 (NWP)', TSR: '북극횡단항로 (TSR)', SUEZ: '수에즈 운하', CAPE: '희망봉 우회' };
+          lblCurrent.textContent = (names[currentRouteKey] || currentRouteKey) + ':';
+          elDistCurrent.textContent = Math.round(distCurrent).toLocaleString() + ' km';
+          elDistSuez.textContent = Math.round(distSuez).toLocaleString() + ' km';
+          
+          const saved = distSuez - distCurrent;
+          if (saved > 0) {
+            elDistSaved.textContent = Math.round(saved).toLocaleString() + ' km 절감 ↓';
+            elDistSaved.style.color = '#34d399'; // 녹색 (좋음)
+          } else if (saved < 0) {
+            elDistSaved.textContent = Math.round(-saved).toLocaleString() + ' km 증가 ↑';
+            elDistSaved.style.color = '#ef4444'; // 빨강 (나쁨)
+          } else {
+            elDistSaved.textContent = '-';
+            elDistSaved.style.color = '#9ca3af'; // 회색
+          }
+        }
+
+        badge.className = '';
+        const labelMap = {
+          NSR_APPROVED:   { cls: 'approved',   text: '✔ NSR_APPROVED — 정상 통과 승인' },
+          NSR_RESTRICTED: { cls: 'restricted',  text: '⚠ NSR_RESTRICTED — 조건부 통과' },
+          REROUTE_SUEZ:   { cls: 'suez',        text: '↩ REROUTE_SUEZ — 수에즈 우회' },
+          REROUTE_CAPE:   { cls: 'cape',        text: '⛔ REROUTE_CAPE — 희망봉 우회' },
+        };
+        const lm = labelMap[result.status] || { cls: '', text: result.status };
+        badge.classList.add(lm.cls);
+        badge.textContent = lm.text;
+
+        rioEl.textContent = result.rioScore !== null
+          ? (result.rioScore >= 0 ? '+' : '') + result.rioScore.toFixed(2)
+          + `  |  Hs ${seaState.Hs.toFixed(1)}m  |  SIC ${Math.round((sampleIceConcentration(lon, lat)||0)*100)}%`
+          : `N/A  |  Hs ${seaState.Hs.toFixed(1)}m (판단 전 차단)`;
+
+        reasonEl.textContent = result.reason;
+
+        // 우회 판정 시 항로 자동 전환
+        const autoSwitchMap = {
+          REROUTE_SUEZ: 'SUEZ',
+          REROUTE_CAPE: 'CAPE',
+        };
+        const autoRoute = autoSwitchMap[result.status];
+        if (autoRoute && currentRouteKey !== autoRoute) {
+          const sel = document.getElementById('spec-route');
+          if (sel) {
+            sel.value = autoRoute;
+            applyRouteSelection();
+            showToast(`항로 자동 전환 → ${autoRoute} 우회항로`, false);
+          }
+        }
+      }
+
       const SHIP_PRESETS = {
         icebreaker: {
           disp: 20000,
@@ -1442,14 +2424,16 @@
           width: 30,
           gm: 3.2,
           iceClass: 'PC2',
+          draft: 8.5,
         },
-        lng: { disp: 95000, len: 295, width: 46, gm: 5.1, iceClass: 'PC4' },
+        lng: { disp: 95000, len: 295, width: 46, gm: 5.1, iceClass: 'PC4', draft: 12.0 },
         container: {
           disp: 55000,
           len: 240,
           width: 38,
           gm: 4.3,
           iceClass: 'NONE',
+          draft: 14.2,
         },
       };
 
@@ -1870,6 +2854,16 @@
       let cViewer = null,
         cCtrl = null;
 
+      window.apiLayers = {
+        nsidcConc: null,
+        copThick: null,
+        nsidcEdge: null,
+        esaSar: null,
+        gebcoBathy: null,
+        s2True: null,
+        s2Ndsi: null,
+      };
+
       async function initCesium() {
         try {
           const terrain = await Cesium.createWorldTerrainAsync();
@@ -1890,6 +2884,11 @@
           cViewer.scene.atmosphere.show = true;
           cViewer.scene.fog.enabled = true;
           cViewer.scene.fog.density = 0.00015;
+          // //* [Modified Code] 대규모 타일 로딩 선처리 및 캐시 최적화
+          cViewer.scene.globe.tileCacheSize = 1000;
+          cViewer.scene.globe.maximumScreenSpaceError = 3;
+          cViewer.scene.globe.preloadAncestors = true;
+          cViewer.scene.globe.loadingDescendantLimit = 20;
           cCtrl = cViewer.scene.screenSpaceCameraController;
           cCtrl.enableRotate =
             cCtrl.enableZoom =
@@ -1919,15 +2918,29 @@
           // //* [외부 API WMS 실시간 연동 (시각화 계층)]
           window.apiLayers = {};
 
-          // 1. GEBCO 수심 데이터 (베이스맵 적용)
+          // 1. GEBCO 수심 데이터 — EMODnet Bathymetry WMS (GEBCO 기반, 채색 수심도, CORS 지원)
+          // gebco.net WMS는 현재 서비스 불안정으로 EMODnet으로 대체
           window.apiLayers.gebco = cViewer.imageryLayers.addImageryProvider(
             new Cesium.WebMapServiceImageryProvider({
-              url: 'https://www.gebco.net/data_and_products/gebco_web_services/web_map_service/mapserv',
-              layers: 'GEBCO_LATEST',
-              parameters: { transparent: 'true', format: 'image/png' },
+              url: 'https://ows.emodnet-bathymetry.eu/wms',
+              layers: 'emodnet:mean_rainbowcolour',
+              parameters: {
+                transparent: 'true',
+                format: 'image/png',
+                VERSION: '1.1.1',
+                SRS: 'EPSG:4326',
+              },
+              // //* [Modified Code] 광역 권역 타일 로딩(512) 및 Fetch 오버헤드 차단
+              tileWidth: 512,
+              tileHeight: 512,
+              enablePickFeatures: false,
             }),
           );
           window.apiLayers.gebco.show = false; // 기본 OFF (UI 체크박스로 On)
+          window.apiLayers.gebco.alpha = 0.75; // 기본 투명도
+
+          // 수심 클릭 프로브 초기화 (canvas 이벤트 등록)
+          initGebcoDepthProbe(cViewer);
 
           // 2. NSIDC (해빙 농도) — NASA GIBS AMSRU2 해빙 농도 25km
           window.apiLayers.nsidcConc = cViewer.imageryLayers.addImageryProvider(
@@ -1935,6 +2948,10 @@
               url: '/nsidc-proxy/',
               layers: 'AMSRU2_Sea_Ice_Concentration_25km',
               parameters: { transparent: 'true', format: 'image/png' },
+              // //* [Modified Code] 광역 권역 타일 로딩(512) 및 Fetch 오버헤드 차단
+              tileWidth: 512,
+              tileHeight: 512,
+              enablePickFeatures: false,
             }),
           );
           window.apiLayers.nsidcConc.show = false;
@@ -1962,6 +2979,10 @@
               url: '/nsidc-proxy/',
               layers: 'AMSRU2_Sea_Ice_Brightness_Temp_6km_89H',
               parameters: { transparent: 'true', format: 'image/png' },
+              // //* [Modified Code] 광역 권역 타일 로딩(512) 및 Fetch 오버헤드 차단
+              tileWidth: 512,
+              tileHeight: 512,
+              enablePickFeatures: false,
             }),
           );
           window.apiLayers.nsidcEdge.show = false;
@@ -1973,6 +2994,7 @@
               layers: 'SENTINEL-1-GRD-EW',
               tileWidth: 512,
               tileHeight: 512,
+              enablePickFeatures: false,
               parameters: { transparent: 'true', format: 'image/png' },
             }),
           );
@@ -1985,6 +3007,7 @@
               layers: 'TRUE-COLOR',
               tileWidth: 512,
               tileHeight: 512,
+              enablePickFeatures: false,
               parameters: { transparent: 'true', format: 'image/png' },
             }),
           );
@@ -1998,6 +3021,7 @@
               layers: 'NDSI',
               tileWidth: 512,
               tileHeight: 512,
+              enablePickFeatures: false,
               parameters: { transparent: 'true', format: 'image/png' },
             }),
           );
@@ -2046,18 +3070,46 @@
 
       function updateCesiumCamera(pos) {
         if (!cViewer || userInteracting) return;
-        if (currentMode === 'SATELLITE') {
+        // //! [Original Code] 매 프레임마다 강제 SATELLITE 스냅
+        // if (currentMode === 'SATELLITE') {
+        //   cViewer.camera.setView({
+        //     ...
+        //   });
+        // }
+        // //* [Modified Code] 스냅 제거 후 BRIDGE/FOLLOW 모드에서의 실시간 시점 투영(Sync) 추가
+        if (currentMode === 'BRIDGE' || currentMode === 'FOLLOW') {
+          if (!tCamera) return;
+          const worldPos = new THREE.Vector3();
+          const worldDir = new THREE.Vector3();
+          tCamera.getWorldPosition(worldPos);
+          tCamera.getWorldDirection(worldDir);
+
+          const heading = Math.atan2(worldDir.x, -worldDir.z);
+          const pitch = Math.asin(Math.max(-1, Math.min(1, worldDir.y)));
+
+          const dx = worldPos.x - shipPos.x;
+          const dz = worldPos.z - shipPos.z;
+          const latRad = pos.lat * (Math.PI / 180);
+          const mPerDegLon = 111320 * Math.cos(latRad);
+          const camLon = pos.lon + (dx / mPerDegLon);
+          const camLat = pos.lat - (dz / 111320);
+
+          // //* [Modified Code] Cesium과 Three.js의 FOV 축 기준(가로/세로)을 삼각함수로 보정하여 완벽하게 동기화
+          if (cViewer.camera.frustum && tCamera) {
+            const vFovRad = tCamera.fov * (Math.PI / 180);
+            const aspect = innerWidth / innerHeight;
+            let cesFov = vFovRad;
+            // Cesium은 landscape일 때 fov 속성을 '가로 화각'으로 해석하므로, Three.js의 '세로 화각'을 바탕으로 가로 화각을 역산해야 함
+            if (aspect > 1.0) {
+              cesFov = 2 * Math.atan(aspect * Math.tan(vFovRad / 2));
+            }
+            cViewer.camera.frustum.fov = cesFov;
+            cViewer.camera.frustum.aspectRatio = aspect;
+          }
+
           cViewer.camera.setView({
-            destination: Cesium.Cartesian3.fromDegrees(
-              shipState.lon,
-              shipState.lat,
-              350000,
-            ),
-            orientation: {
-              heading: 0,
-              pitch: Cesium.Math.toRadians(-90),
-              roll: 0,
-            },
+            destination: Cesium.Cartesian3.fromDegrees(camLon, camLat, Math.max(5, worldPos.y)),
+            orientation: { heading: heading, pitch: pitch, roll: 0 }
           });
         }
       }
@@ -2079,7 +3131,11 @@
 
       function initThree() {
         const canvas = document.getElementById('three-canvas');
-        tRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        // //! [Original Code] 불투명 렌더러
+        // tRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        // //* [Modified Code] 하단 API 레이어 오버레이를 위한 alpha(투명도) 추가
+        tRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+        tRenderer.setClearColor(0x000000, 0);
         tRenderer.setSize(innerWidth, innerHeight);
         tRenderer.setPixelRatio(Math.min(devicePixelRatio, 2));
         tRenderer.shadowMap.enabled = true;
@@ -2269,15 +3325,18 @@
         const skyMat = new THREE.ShaderMaterial({
           side: THREE.BackSide,
           depthWrite: false,
+          transparent: true,
           uniforms: {
-            skyTop: { value: new THREE.Color(0x3a6080) },   // 북극 흐린 하늘
+            skyTop: { value: new THREE.Color(0x3a6080) },
             skyMid: { value: new THREE.Color(0x6a9ab8) },
-            skyHorizon: { value: new THREE.Color(0x8ab0c8) }, // 안개와 동일
+            skyHorizon: { value: new THREE.Color(0x8ab0c8) },
           },
           vertexShader: `varying float vH;void main(){vH=position.y;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
-          fragmentShader: `varying float vH;uniform vec3 skyTop,skyMid,skyHorizon;void main(){float t1=clamp(vH/400000.0,0.0,1.0);float t2=clamp(vH/80000.0,0.0,1.0);vec3 c=mix(skyHorizon,skyMid,t2);c=mix(c,skyTop,t1*t1);gl_FragColor=vec4(c,1.0);}`,
+          // //* [Modified Code] 거대한 폴리곤에서 발생하는 smoothstep 블렌딩 아티팩트(글리치)를 'if(vH<0.0) discard;' 하드 클리핑으로 변경하여 완벽한 수평선 절단을 구현함
+          fragmentShader: `varying float vH;uniform vec3 skyTop,skyMid,skyHorizon;void main(){if(vH<0.0) discard; float t1=clamp(vH/400000.0,0.0,1.0);float t2=clamp(vH/80000.0,0.0,1.0);vec3 c=mix(skyHorizon,skyMid,t2);gl_FragColor=vec4(mix(c,skyTop,t1*t1),1.0);}`
         });
-        tScene.add(new THREE.Mesh(skyGeo, skyMat));
+        const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+        tScene.add(skyMesh);
       }
 
       function buildLighting() {
@@ -2313,27 +3372,16 @@
             specular: 0x4a8aaa,
             shininess: 80,
             transparent: true,
-            opacity: 0.9,
+            // //* [Modified Code] 하단의 실시간 위성/기상 API(Cesium)가 선명하게 투영되도록 waveMesh의 투명도를 크게 높여 3D 파도와 데이터가 시각적으로 합성되도록 개선
+            opacity: 0.40,
           }),
         );
         waveMesh.receiveShadow = true;
         tScene.add(waveMesh);
-        farOcean = new THREE.Mesh(
-          new THREE.PlaneGeometry(2000000, 2000000).rotateX(-Math.PI / 2),
-          new THREE.MeshPhongMaterial({
-            color: 0x071820,
-            transparent: true,
-            opacity: 0.95,
-          }),
-        );
-        farOcean.position.y = -0.5;
-        tScene.add(farOcean);
       }
       function animateOcean(t, ref) {
         waveMesh.position.x = ref.x;
         waveMesh.position.z = ref.z;
-        farOcean.position.x = ref.x;
-        farOcean.position.z = ref.z;
         const pos = waveGeo.attributes.position;
         for (let i = 0; i < pos.count; i++) {
           const x = pos.getX(i) + ref.x,
@@ -3419,6 +4467,9 @@
           disp.toLocaleString() +
           't',
         );
+
+        // 항로 적합성 자동 재평가
+        runRoutingEvaluation();
       }
 
       function loadPreset(name) {
@@ -3429,6 +4480,10 @@
         document.getElementById('spec-width').value = p.width;
         document.getElementById('spec-gm').value = p.gm;
         document.getElementById('spec-iceclass').value = p.iceClass;
+        // 흘수도 프리셋에 맞게 갱신
+        if (p.draft !== undefined) {
+          document.getElementById('r-draft').value = p.draft;
+        }
         applyShipSpecs();
       }
 
@@ -3455,59 +4510,52 @@
       function setMode(mode) {
         if (switching) return;
         switching = true;
-        const fade = document.getElementById('fade');
-        fade.style.opacity = '1';
-        setTimeout(() => {
-          prevMode = currentMode;
-          currentMode = mode;
-          document
-            .querySelectorAll('.cam-btn')
-            .forEach((b) =>
-              b.classList.toggle('active', b.dataset.mode === mode),
-            );
-          const useThree = THREE_MODES.has(mode);
-          document.getElementById('minimap-wrap').style.display = useThree ? 'block' : 'none';
-          document
-            .getElementById('three-wrap')
-            .classList.toggle('active', useThree);
-          document
-            .getElementById('cesium-wrap')
-            .classList.toggle('hidden', useThree);
-          updateHint();
-          resetView();
-          updateBridgeOverlay();
-          // Cesium 모드 전환 시 선박 현재 위치로 즉시 포커스
-          if (CESIUM_MODES.has(mode) && cViewer) {
-            // shipState 기준으로 Cesium 카메라 위치 설정 (수동/자동 모두 동일)
-            const sLat = shipState.lat, sLon = shipState.lon, sHd = shipState.heading;
-            if (mode === 'SATELLITE') {
-              cViewer.camera.setView({
-                destination: Cesium.Cartesian3.fromDegrees(sLon, sLat, 350000),
-                orientation: {
-                  heading: 0,
-                  pitch: Cesium.Math.toRadians(-90),
-                  roll: 0,
-                },
-              });
-            } else if (mode === 'WIDE') {
-              const midLon = sLon + Math.sin(sHd) * 4,
-                midLat = sLat + Math.cos(sHd) * 4;
-              cViewer.camera.flyTo({
-                destination: Cesium.Cartesian3.fromDegrees(midLon, midLat, 5000000),
-                orientation: {
-                  heading: sHd,
-                  pitch: Cesium.Math.toRadians(-55),
-                  roll: 0,
-                },
-                duration: 1.5,
-              });
-            }
+        // //! [Original Code] 화면 깜빡임을 일으키는 fade 페이드아웃 및 딜레이 애니메이션
+        // const fade = document.getElementById('fade');
+        // fade.style.opacity = '1';
+        // setTimeout(() => {
+        // //* [Modified Code] 깜빡임(블랙스크린) 제거 및 즉각적인 UI Mode 전환 반영
+        prevMode = currentMode;
+        currentMode = mode;
+        document
+          .querySelectorAll('.cam-btn')
+          .forEach((b) =>
+            b.classList.toggle('active', b.dataset.mode === mode),
+          );
+        const useThree = THREE_MODES.has(mode);
+        document.getElementById('minimap-wrap').style.display = useThree ? 'block' : 'none';
+        document
+          .getElementById('three-wrap')
+          .classList.toggle('active', useThree);
+        // //! [Original Code] Three.js 모드일 때 Cesium 숨김
+        // document.getElementById('cesium-wrap').classList.toggle('hidden', useThree);
+        // //* [Modified Code] 실시간 센서/API (Cesium) 오버레이를 위해 백그라운드 구동 지속
+
+        // //* [Modified Code] 위성/광역 모드일 때만 플로팅 리센터 버튼 표시
+        const showRecenter = (mode === 'SATELLITE' || mode === 'WIDE');
+        document.getElementById('btn-recenter-float').style.display = showRecenter ? 'block' : 'none';
+
+        updateHint();
+        resetView();
+        updateBridgeOverlay();
+        // Cesium 모드 전환 시 선박 현재 위치로 즉시 포커스
+        if (CESIUM_MODES.has(mode) && cViewer) {
+          const sLat = shipState.lat, sLon = shipState.lon, sHd = shipState.heading;
+          if (mode === 'SATELLITE') {
+            cViewer.camera.setView({
+              destination: Cesium.Cartesian3.fromDegrees(sLon, sLat, 350000),
+              orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
+            });
+          } else if (mode === 'WIDE') {
+            const midLon = sLon + Math.sin(sHd) * 4, midLat = sLat + Math.cos(sHd) * 4;
+            cViewer.camera.flyTo({
+              destination: Cesium.Cartesian3.fromDegrees(midLon, midLat, 5000000),
+              orientation: { heading: sHd, pitch: Cesium.Math.toRadians(-55), roll: 0 },
+              duration: 1.5,
+            });
           }
-          setTimeout(() => {
-            fade.style.opacity = '0';
-            switching = false;
-          }, 300);
-        }, 500);
+        }
+        switching = false;
       }
 
       function toggleManual() {
@@ -3887,6 +4935,152 @@
         ctx.textAlign = 'left';
       }
 
+      // ═══════════════════════════════════════════════════════════════
+      // GEBCO 해저 수심 클릭 프로브
+      // ═══════════════════════════════════════════════════════════════
+      function parseGebcoDepth(text) {
+        // "depth = -3412" 또는 "Depth = 3412"
+        let m = text.match(/depth\s*=\s*(-?\d+\.?\d*)/i);
+        if (m) return parseFloat(m[1]);
+        // "value_list = -3412.0"
+        m = text.match(/value_list\s*=\s*(-?\d+\.?\d*)/i);
+        if (m) return parseFloat(m[1]);
+        // 단독 숫자 행 (마지막 수단)
+        m = text.match(/^\s*(-?\d{2,5})\s*$/m);
+        if (m) return parseFloat(m[1]);
+        return null;
+      }
+
+      // 수심값 → 범례 커서 위치 계산 (0~6000m → 0~100%)
+      // EMODnet rainbow: 6000m+(좌,보라) → 0m(우,빨강)
+      function depthToCursorPct(absDepth) {
+        const stops = [0, 50, 200, 1000, 2000, 4000, 6000];
+        const pcts  = [100, 85, 70, 55, 40, 20, 0]; // 범례 오른쪽=얕은 곳
+        if (absDepth <= 0)    return 100;
+        if (absDepth >= 6000) return 0;
+        for (let i = 0; i < stops.length - 1; i++) {
+          if (absDepth >= stops[i] && absDepth < stops[i + 1]) {
+            const t = (absDepth - stops[i]) / (stops[i + 1] - stops[i]);
+            return pcts[i] + t * (pcts[i + 1] - pcts[i]);
+          }
+        }
+        return 50;
+      }
+
+      // 수심값 → 한글 수심 존 이름
+      function depthToZone(absDepth) {
+        if (absDepth > 6000) return '초심해대';
+        if (absDepth > 2000) return '심해대';
+        if (absDepth > 200)  return '대륙사면';
+        if (absDepth > 50)   return '대륙붕';
+        return '연안 / 천해';
+      }
+
+      function initGebcoDepthProbe(viewer) {
+        if (!viewer) return;
+
+        const cursor   = document.getElementById('gebco-depth-cursor');
+        const readout  = document.getElementById('gebco-probe-readout');
+        const probeText = document.getElementById('gebco-probe-text');
+        let probeAbort = null;
+        let lastMouseDown = { x: 0, y: 0 };
+
+        // 범례 내 readout에 수심 표시하는 헬퍼
+        function showReadout(html, isWarning) {
+          if (!readout || !probeText) return;
+          readout.style.display = 'block';
+          readout.style.borderColor = isWarning ? 'rgba(251,191,36,0.5)' : 'rgba(52,211,153,0.35)';
+          readout.style.background  = isWarning ? 'rgba(120,80,0,0.18)' : 'rgba(52,211,153,0.12)';
+          probeText.style.color = isWarning ? '#fbbf24' : '#34d399';
+          probeText.innerHTML = html;
+        }
+
+        // 범례 커서 이동
+        function moveCursor(pct) {
+          if (!cursor) return;
+          cursor.style.display = 'block';
+          cursor.style.left = pct.toFixed(1) + '%';
+        }
+
+        viewer.scene.canvas.addEventListener('mousedown', (e) => {
+          lastMouseDown = { x: e.clientX, y: e.clientY };
+        });
+
+        viewer.scene.canvas.addEventListener('click', async (e) => {
+          if (!window._gebcoProbeActive) return;
+          if (!window.apiLayers || !window.apiLayers.gebco) return;
+          if (!window.apiLayers.gebco.show) return;
+
+          // 드래그 무시
+          if (Math.abs(e.clientX - lastMouseDown.x) > 5 ||
+              Math.abs(e.clientY - lastMouseDown.y) > 5) return;
+
+          // 스크린 → 위경도
+          const ray = viewer.camera.getPickRay(new Cesium.Cartesian2(e.clientX, e.clientY));
+          if (!ray) return;
+          const intersection = viewer.scene.globe.pick(ray, viewer.scene);
+          if (!Cesium.defined(intersection)) return;
+
+          const carto = Cesium.Cartographic.fromCartesian(intersection);
+          const lon = Cesium.Math.toDegrees(carto.longitude);
+          const lat = Cesium.Math.toDegrees(carto.latitude);
+
+          showReadout('측정 중…', false);
+
+          // WMS GetFeatureInfo (EMODnet)
+          const delta = 0.25;
+          const bbox = [lon - delta, lat - delta, lon + delta, lat + delta]
+            .map((v) => v.toFixed(6)).join(',');
+          const params = new URLSearchParams({
+            SERVICE: 'WMS', VERSION: '1.1.1', REQUEST: 'GetFeatureInfo',
+            LAYERS: 'emodnet:mean_rainbowcolour',
+            QUERY_LAYERS: 'emodnet:mean_rainbowcolour',
+            INFO_FORMAT: 'text/plain', FEATURE_COUNT: '1',
+            SRS: 'EPSG:4326', BBOX: bbox,
+            WIDTH: '101', HEIGHT: '101', X: '50', Y: '50',
+          });
+          const url = 'https://ows.emodnet-bathymetry.eu/wms?' + params.toString();
+
+          if (probeAbort) probeAbort.abort();
+          probeAbort = new AbortController();
+
+          try {
+            const resp = await fetch(url, { signal: probeAbort.signal, mode: 'cors', cache: 'no-store' });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const text = await resp.text();
+            const depth = parseGebcoDepth(text);
+
+            if (depth === null) {
+              showReadout(
+                lat.toFixed(2) + '°N &nbsp;' + lon.toFixed(2) + '°E &nbsp;— 데이터 없음',
+                true
+              );
+            } else {
+              const abs = Math.abs(depth);
+              const zone = depthToZone(abs);
+              const pct  = depthToCursorPct(abs);
+              moveCursor(pct);
+              showReadout(
+                '<b>' + abs.toLocaleString() + ' m</b>' +
+                ' &nbsp;<span style="color:#6b9a8a;">' + zone + '</span>' +
+                '<br/><span style="font-size:9px;color:#4a7a6a;">' +
+                lat.toFixed(2) + '°N, ' + lon.toFixed(2) + '°E</span>',
+                false
+              );
+            }
+          } catch (err) {
+            if (err.name === 'AbortError') return;
+            showReadout(
+              lat.toFixed(2) + '°N, ' + lon.toFixed(2) + '°E' +
+              '<br/><span style="font-size:9px;">수심 조회 불가 (CORS)</span>',
+              true
+            );
+          }
+        });
+      }
+
+      window._gebcoProbeActive = false; // 체크박스 ON 시 true
+
       function mainLoop(ts) {
         requestAnimationFrame(mainLoop);
         if (lastTS === null) lastTS = ts;
@@ -3922,6 +5116,13 @@
         updateHUD(pos);
         if (THREE_MODES.has(currentMode)) drawMinimap(pos.lat, pos.lon);
         if (CESIUM_MODES.has(currentMode)) updateCesiumCamera(pos);
+
+        // 항로 적합성 자동 갱신 — 120초 시뮬 시간마다 1회 재평가
+        if (isSimulating) {
+          const prevSlot = Math.floor((simElapsed - currentDt * multiplier) / 120);
+          const currSlot = Math.floor(simElapsed / 120);
+          if (currSlot > prevSlot) runRoutingEvaluation();
+        }
 
         if (THREE_MODES.has(currentMode) && tRenderer) {
           tTime += currentDt;
@@ -3995,17 +5196,44 @@
         document.getElementById('speed-label').textContent =
           '×' + multiplier.toLocaleString();
       });
-      document
-        .querySelectorAll('.cam-btn')
-        .forEach((b) =>
-          b.addEventListener('click', () => setMode(b.dataset.mode)),
-        );
+      // //! [Original Code] 전체 버튼 이벤트 연결
+      // document
+      //   .querySelectorAll('.cam-btn')
+      //   .forEach((b) =>
+      //     b.addEventListener('click', () => setMode(b.dataset.mode)),
+      //   );
+      // //* [Modified Code] 내 위치로 리센터 버튼 이벤트 연결 (cam-btn 클래스 분리)
+      document.querySelectorAll('.cam-btn').forEach((b) => {
+        b.addEventListener('click', () => setMode(b.dataset.mode));
+      });
+      document.querySelector('#btn-recenter-float button').addEventListener('click', () => {
+         if (!cViewer) return;
+         const sLat = shipState.lat, sLon = shipState.lon, sHd = shipState.heading;
+         if (currentMode === 'WIDE') {
+           const midLon = sLon + Math.sin(sHd) * 4;
+           const midLat = sLat + Math.cos(sHd) * 4;
+           cViewer.camera.flyTo({
+             destination: Cesium.Cartesian3.fromDegrees(midLon, midLat, 5000000),
+             orientation: { heading: sHd, pitch: Cesium.Math.toRadians(-55), roll: 0 },
+             duration: 1.5,
+           });
+         } else {
+           cViewer.camera.flyTo({
+             destination: Cesium.Cartesian3.fromDegrees(sLon, sLat, 350000),
+             orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
+             duration: 1.0,
+           });
+         }
+      });
       document
         .getElementById('btn-manual')
         .addEventListener('click', toggleManual);
       document
         .getElementById('btn-apply')
         .addEventListener('click', applyShipSpecs);
+      document
+        .getElementById('btn-evaluate-routing')
+        .addEventListener('click', runRoutingEvaluation);
       document
         .querySelectorAll('.preset-btn')
         .forEach((b) =>
@@ -4028,14 +5256,50 @@
       ];
       apiToggles.forEach((t) => {
         const el = document.getElementById(t.id);
-        if (el) {
-          el.addEventListener('change', (e) => {
-            if (window.apiLayers && window.apiLayers[t.key]) {
-              window.apiLayers[t.key].show = e.target.checked;
+        if (!el) return;
+        el.addEventListener('change', (e) => {
+          if (window.apiLayers && window.apiLayers[t.key]) {
+            window.apiLayers[t.key].show = e.target.checked;
+          }
+          // GEBCO 전용: 투명도 슬라이더 + 범례 + 수심 프로브 연동
+          if (t.key === 'gebco') {
+            const opRow  = document.getElementById('gebco-opacity-row');
+            const legend = document.getElementById('gebco-legend');
+            if (opRow)  opRow.style.display  = e.target.checked ? 'flex'  : 'none';
+            if (legend) legend.style.display  = e.target.checked ? 'block' : 'none';
+            window._gebcoProbeActive = e.target.checked;
+            if (!e.target.checked) {
+              // 범례 내 readout/커서 초기화
+              const readout = document.getElementById('gebco-probe-readout');
+              const cursor  = document.getElementById('gebco-depth-cursor');
+              if (readout) readout.style.display = 'none';
+              if (cursor)  cursor.style.display  = 'none';
             }
-          });
-        }
+          }
+          // //* [Modified Code] NSIDC 해빙 농도 및 Copernicus 해빙 두께 레이어 범례 토글 이벤트 연동
+          if (t.key === 'nsidcConc') {
+            const legend = document.getElementById('nsidc-legend');
+            if (legend) legend.style.display = e.target.checked ? 'block' : 'none';
+          }
+          if (t.key === 'copThick') {
+            const legend = document.getElementById('cop-legend');
+            if (legend) legend.style.display = e.target.checked ? 'block' : 'none';
+          }
+        });
       });
+
+      // GEBCO 투명도 슬라이더 이벤트
+      const gebcoSlider = document.getElementById('gebco-opacity-slider');
+      const gebcoOpLabel = document.getElementById('gebco-opacity-label');
+      if (gebcoSlider) {
+        gebcoSlider.addEventListener('input', (e) => {
+          const pct = parseInt(e.target.value, 10);
+          if (gebcoOpLabel) gebcoOpLabel.textContent = pct + '%';
+          if (window.apiLayers && window.apiLayers.gebco) {
+            window.apiLayers.gebco.alpha = pct / 100;
+          }
+        });
+      }
 
       // Timeline Slider Event Listeners
       window.isScrubbingTimeline = false;
