@@ -14,9 +14,9 @@ const SHIP_TYPES = {
 
 type ShipTypeKey = keyof typeof SHIP_TYPES;
 
-// //* [Feature] NASA 위성 데이터 연동 및 유기적 해빙 형태 시각화 
-function injectRealDataLayers(viewer: Cesium.Viewer) {
-  // NASA GIBS 타일 서버에서 current 포맷 거부(400 Bad Request) 에러 해결을 위해 고정 날짜 투입
+// //* [Feature] NASA 위성 데이터 및 API 연동 실제 해빙 형태 시각화 
+async function injectRealDataLayers(viewer: Cesium.Viewer) {
+  // NASA GIBS 타일 서버에서 current 포맷 거부 해결을 위해 고정 날짜 투입
   const gibsImagery = new Cesium.WebMapTileServiceImageryProvider({
     url: 'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/2023-08-01/250m/{TileMatrix}/{TileRow}/{TileCol}.jpg',
     layer: 'MODIS_Aqua_CorrectedReflectance_TrueColor',
@@ -27,39 +27,65 @@ function injectRealDataLayers(viewer: Cesium.Viewer) {
   });
   viewer.imageryLayers.addImageryProvider(gibsImagery);
 
-  // 컨테이너 박스 형태를 탈피한 유기적 3D 얼음 매핑
-  for (let lon = -180; lon < 180; lon += 18) {
-    for (let lat = 78; lat < 89; lat += 2) {
-      if (Math.random() > 0.7) continue; 
+  try {
+    // //* [Modified Code] Math.random()을 제거하고 실제 JSON 데이터를 Fetch하여 빙하 시각화 반영
+    const response = await fetch('/data/realIceData_month03.json');
+    if (!response.ok) throw new Error('Data load failed');
+    const data = await response.json();
+    const cells = data.cells;
 
-      const concentration = 0.6 + Math.random() * 0.4; 
-      const thickness = 1 + Math.random() * 3; 
-      
-      // //* [Modified Code] 다각형 버텍스 뒤틀림 오류 및 북극점(90도) 초과에 의한 모형 붕괴 연산 에러(NaN) 원천 방지
-      const offsetLon = () => (Math.random() * 2.0) - 1.0; 
-      const offsetLat = () => (Math.random() * 0.8) - 0.4; 
+    const instances: Cesium.GeometryInstance[] = [];
+
+    // //* [Mentor's Tip] 수만 개의 폴리곤을 엔티티(Entity)로 개별 생성하면 WebGL 메모리 오버헤드가 크므로,
+    // 최적화를 위해 Primitive API와 GeometryInstance 배열로 병합(Batch) 처리하여 성능을 극대화합니다.
+    for (let i = 0; i < cells.length; i++) {
+      const cell = cells[i];
+      if (cell.concentration < 0.1) continue;
+
       const clampLat = (l: number) => Math.min(89.8, Math.max(-89.8, l));
+      const lon = cell.lon;
+      const lat = cell.lat;
+      const lonS = cell.lonStep || 1.0;
+      const latS = cell.latStep || 0.75;
+      const thickness = cell.thickness || 1;
 
-      viewer.entities.add({
-        polygon: {
-          hierarchy: Cesium.Cartesian3.fromDegreesArray([
-            lon + offsetLon(), clampLat(lat + offsetLat()),
-            lon + 12 + offsetLon(), clampLat(lat + offsetLat()),
-            lon + 8 + offsetLon(), clampLat(lat + 2 + offsetLat()),
-            lon + offsetLon(), clampLat(lat + 2 + offsetLat()),
-          ]),
-          extrudedHeight: thickness * 8000, 
-          material: new Cesium.ImageMaterialProperty({
-            image: REAL_ICE_TEXTURE,
-            color: Cesium.Color.WHITE.withAlpha(concentration),
-            repeat: new Cesium.Cartesian2(2, 2)
-          }),
-          outline: false 
-        },
-        name: `북극 해빙 관측 블록`,
-        description: `NASA 관측 기반 <br/> 농도: ${(concentration * 100).toFixed(1)}% <br/> 두께 구역: ${thickness.toFixed(2)}m`
+      const polygonHierarchy = new Cesium.PolygonHierarchy(
+        Cesium.Cartesian3.fromDegreesArray([
+          lon, clampLat(lat),
+          lon + lonS, clampLat(lat),
+          lon + lonS, clampLat(lat + latS),
+          lon, clampLat(lat + latS),
+        ])
+      );
+
+      const geometry = new Cesium.PolygonGeometry({
+        polygonHierarchy: polygonHierarchy,
+        extrudedHeight: thickness * 5000, 
+        vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT
       });
+
+      const r = Math.floor(200 + 55 * cell.concentration);
+      const g = Math.floor(220 + 35 * cell.concentration);
+      const b = 255;
+      
+      instances.push(new Cesium.GeometryInstance({
+        geometry: geometry,
+        attributes: {
+          color: Cesium.ColorGeometryInstanceAttribute.fromColor(new Cesium.Color(r/255, g/255, b/255, cell.concentration * 0.9))
+        }
+      }));
     }
+
+    viewer.scene.primitives.add(new Cesium.Primitive({
+      geometryInstances: instances,
+      appearance: new Cesium.PerInstanceColorAppearance({
+        flat: true,
+        translucent: true
+      }),
+      asynchronous: true
+    }));
+  } catch (error) {
+    console.error("해빙 데이터 반입 실패. 개발 서버 경로를 확인하세요:", error);
   }
 }
 
@@ -68,6 +94,7 @@ function App() {
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   
   const [selectedShip, setSelectedShip] = useState<ShipTypeKey>('COMMERCIAL');
+  const [selectedRoute, setSelectedRoute] = useState<'NSR' | 'NWP' | 'TSR'>('NSR');
   const [isSimulating, setIsSimulating] = useState(false);
   const [cameraView, setCameraView] = useState('TRACK');
   const [progress, setProgress] = useState(0);
@@ -179,17 +206,52 @@ function App() {
     setIsSimulating(true);
     const shipProps = SHIP_TYPES[selectedShip];
 
-    const routePoints = [
-      { lon: -168, lat: 66, timeOffset: 0 },
-      { lon: -150, lat: 75, timeOffset: 12000 },
-      { lon: 180, lat: 85, timeOffset: 25000 },
-      { lon: 90, lat: 82, timeOffset: 38000 },
-      { lon: 40, lat: 75, timeOffset: 50000 }
-    ];
+    // //* [Modified Code] 내륙 관통 및 오호츠크해 V자 꺾임 문제 해결을 위해 실제 3대 북극항로 해상 웨이포인트 적용
+    const ROUTES = {
+      NSR: [ // 북동항로 (Northeast Sea Route)
+        { lon: 130, lat: 35, timeOffset: 0 },       // 대한해협
+        { lon: 142, lat: 46, timeOffset: 20000 },   // 라페루즈 해협 (오호츠크해 내륙 관통 방지)
+        { lon: 155, lat: 50, timeOffset: 45000 },   // 쿠릴 열도 인근 우회 통과
+        { lon: 170, lat: 60, timeOffset: 80000 },   // 베링 해 진입
+        { lon: -169, lat: 66, timeOffset: 110000 }, // 베링 해협
+        { lon: 175, lat: 70, timeOffset: 130000 },  // 척치 해
+        { lon: 160, lat: 73, timeOffset: 160000 },  // 동시베리아 해
+        { lon: 130, lat: 76, timeOffset: 210000 },  // 랍테프 해
+        { lon: 104, lat: 77.5, timeOffset: 260000 },// 빌키츠키 해협 (러시아 북부 관통 방지)
+        { lon: 80, lat: 76, timeOffset: 310000 },   // 카라 해
+        { lon: 50, lat: 73, timeOffset: 360000 },   // 바렌츠 해
+        { lon: 10, lat: 60, timeOffset: 430000 }    // 북유럽
+      ],
+      NWP: [ // 북서항로 (Northwest Passage)
+        { lon: 130, lat: 35, timeOffset: 0 },
+        { lon: 142, lat: 46, timeOffset: 20000 },
+        { lon: 170, lat: 60, timeOffset: 80000 },
+        { lon: -169, lat: 66, timeOffset: 110000 }, 
+        { lon: -150, lat: 72, timeOffset: 150000 }, // 보퍼트 해
+        { lon: -120, lat: 71, timeOffset: 190000 }, // 아문센만
+        { lon: -100, lat: 74, timeOffset: 230000 }, // 패리 해협
+        { lon: -65, lat: 72, timeOffset: 280000 },  // 배핀 만
+        { lon: -60, lat: 65, timeOffset: 320000 },  // 데이비스 해협
+        { lon: -30, lat: 60, timeOffset: 390000 }
+      ],
+      TSR: [ // 북극횡단항로 (Transpolar Sea Route)
+        { lon: 130, lat: 35, timeOffset: 0 },
+        { lon: 142, lat: 46, timeOffset: 20000 },
+        { lon: 170, lat: 60, timeOffset: 80000 },
+        { lon: -169, lat: 66, timeOffset: 110000 }, 
+        { lon: 180, lat: 85, timeOffset: 190000 },  // 북극해 횡단
+        { lon: 0, lat: 88, timeOffset: 240000 },    // 북극점 근방 관통
+        { lon: 40, lat: 75, timeOffset: 320000 },   // 바렌츠 해
+        { lon: 10, lat: 60, timeOffset: 400000 }
+      ]
+    };
+
+    const routePoints = ROUTES[selectedRoute];
+    const totalTimeOffset = routePoints[routePoints.length - 1].timeOffset;
 
     const positionProperty = new Cesium.SampledPositionProperty();
     const start = Cesium.JulianDate.fromDate(new Date());
-    const stop = Cesium.JulianDate.addSeconds(start, 50000 / shipProps.speed, new Cesium.JulianDate());
+    const stop = Cesium.JulianDate.addSeconds(start, totalTimeOffset / shipProps.speed, new Cesium.JulianDate());
 
     viewer.clock.startTime = start.clone();
     viewer.clock.stopTime = stop.clone();
@@ -260,6 +322,18 @@ function App() {
           {Object.entries(SHIP_TYPES).map(([key, data]) => (
             <option key={key} value={key}>{data.name}</option>
           ))}
+        </select>
+
+        {/* //* [Modified Code] 사용자가 북극 3대 항로 중 하나를 선택할 수 있도록 Dropdown 라우팅 UI 추가 */}
+        <select 
+          className="w-full bg-[#111c30] border border-blue-800/50 rounded mb-4 p-1.5 text-xs text-gray-200 outline-none"
+          value={selectedRoute}
+          onChange={(e) => setSelectedRoute(e.target.value as 'NSR' | 'NWP' | 'TSR')}
+          disabled={isSimulating}
+        >
+          <option value="NSR">북동항로 (NSR) - 러시아 연안</option>
+          <option value="NWP">북서항로 (NWP) - 캐나다 연안</option>
+          <option value="TSR">북극횡단항로 (TSR) - 북극점 관통</option>
         </select>
 
         <h2 className="text-[11px] font-bold text-gray-400 mb-3">항행 정보</h2>
