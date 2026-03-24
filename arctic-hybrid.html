@@ -878,6 +878,7 @@
       </select>
     </div>
 
+<<<<<<< HEAD
     <div class="spec-row">
       <span class="spec-label">배수량</span>
       <input class="spec-input" id="spec-disp" type="number" value="20000" min="1000" max="500000" step="1000" />
@@ -1029,6 +1030,59 @@
           0</span>
       </div>
       >>>>>>> fee3ee144fa7cefd2d380e31700f63d069fffaec
+=======
+    <!-- 미니맵 -->
+    <!-- 텔레포트 오버레이 -->
+    <div id="teleport-overlay" style="display:none;position:fixed;inset:0;z-index:400;background:rgba(0,5,15,0.92);backdrop-filter:blur(4px);">
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:700px;max-width:95vw;">
+        <div style="color:#60a5fa;font-family:'Courier New',monospace;font-size:14px;font-weight:bold;letter-spacing:2px;text-align:center;margin-bottom:12px;">
+          📍 이동할 위치를 클릭하세요
+        </div>
+        <canvas id="teleport-map" width="700" height="400"
+          style="border:1px solid #1e40af;border-radius:8px;cursor:crosshair;display:block;width:100%;"></canvas>
+        <div id="teleport-presets" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;justify-content:center;"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center;font-family:'Courier New',monospace;font-size:11px;color:#93c5fd;">
+          <span>위도</span>
+          <input type="number" id="tp-lat" placeholder="35.1" step="0.1"
+            style="width:80px;background:#0a1628;border:1px solid #1e40af;color:#e0f0ff;padding:4px 8px;border-radius:4px;font-family:inherit;"/>
+          <span>경도</span>
+          <input type="number" id="tp-lon" placeholder="129.0" step="0.1"
+            style="width:80px;background:#0a1628;border:1px solid #1e40af;color:#e0f0ff;padding:4px 8px;border-radius:4px;font-family:inherit;"/>
+          <button onclick="teleportToInput()" style="padding:5px 14px;border-radius:5px;border:1px solid #2563eb;background:rgba(37,99,235,.3);color:#93c5fd;font-family:'Courier New',monospace;font-size:11px;cursor:pointer;">✈️ 이동</button>
+          <button onclick="closeTeleport()" style="padding:5px 14px;border-radius:5px;border:1px solid #dc2626;background:rgba(220,38,38,.2);color:#fca5a5;font-family:'Courier New',monospace;font-size:11px;cursor:pointer;">✕ 닫기</button>
+        </div>
+        <div id="tp-selected" style="text-align:center;margin-top:8px;color:#4b7ab5;font-family:'Courier New',monospace;font-size:10px;">클릭하면 해당 위치로 즉시 이동합니다</div>
+      </div>
+    </div>
+
+    <div class="hud" id="minimap-wrap"
+         style="display:none;position:absolute;bottom:70px;left:12px;padding:10px;width:220px;">
+      <div class="hud-title">▸ 현재 위치</div>
+      <canvas id="minimap" width="200" height="200"
+              style="border:1px solid #1e3a8a;border-radius:4px;display:block;"></canvas>
+      <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:#4b7ab5;">
+        <span id="mm-lat">--</span>
+        <span id="mm-lon">--</span>
+        <span id="mm-pct">0%</span>
+      </div>
+      <button onclick="openTeleport()" style="width:100%;margin-top:6px;padding:5px;border-radius:5px;border:1px solid #1e40af;background:rgba(30,58,138,.2);color:#60a5fa;font-family:'Courier New',monospace;font-size:10px;cursor:pointer;">📍 위치 이동</button>
+    </div>
+
+    <!-- 하단 컨트롤 -->
+    <div class="hud" id="hud-bottom">
+      <button class="ctrl-btn" id="btn-start">▶ 출항</button>
+      <button class="ctrl-btn" id="btn-reset">↺ 리셋</button>
+      <span class="hud-label">배속</span>
+      <input
+        type="range"
+        id="speed-slider"
+        min="50"
+        max="5000"
+        step="50"
+        value="1000"
+      />
+      <span class="hud-value" id="speed-label">×1000</span>
+>>>>>>> 7e3d38c29903edbed5f989c0ec7c85f94cc27264
     </div>
     <div id="banner">부산 → 북극항로 → 로테르담 | 14일 운항</div>
     <div id="toast"></div>
@@ -3004,8 +3058,13 @@
           return;
         }
 
+<<<<<<< HEAD
         // 수동 운전 시 multiplier를 속도에 직접 작용하여 쾌속 체감
         const speedMultiplier = multiplier / 2; // 1000x가 500배속으로 적용
+=======
+        // 수동 운전: multiplier로 최고속도/선회율을 스케일 (lerp factor는 항상 1 미만 유지)
+        const speedScale = Math.max(1, multiplier / 100);
+>>>>>>> 7e3d38c29903edbed5f989c0ec7c85f94cc27264
 
         if (keys['KeyW'] || keys['ArrowUp']) shipThrottle = 1;
         else if (keys['KeyS'] || keys['ArrowDown']) shipThrottle = -0.3;
@@ -3019,6 +3078,7 @@
               ? turnMax
               : 0;
         shipTurnRate += (turnTarget - shipTurnRate) * Math.min(turnLerp, 0.9);
+<<<<<<< HEAD
 
         const maxSpd = (shift ? maxSpeedBase * 2.5 : maxSpeedBase) * speedScale;
         shipSpeed += (shipThrottle * maxSpd - shipSpeed) * Math.min(speedLerp, 0.9);
@@ -3034,6 +3094,11 @@
         shipPos.x += Math.sin(shipHeading) * shipSpeed * dt * speedMultiplier;
         shipPos.z -= Math.cos(shipHeading) * shipSpeed * dt * speedMultiplier;
 
+=======
+
+        const maxSpd = (shift ? maxSpeedBase * 2.5 : maxSpeedBase) * speedScale;
+        shipSpeed += (shipThrottle * maxSpd - shipSpeed) * Math.min(speedLerp, 0.9);
+>>>>>>> 7e3d38c29903edbed5f989c0ec7c85f94cc27264
 
         shipGroup3.position.copy(shipPos);
         shipGroup3.rotation.y = -shipHeading;
@@ -3899,6 +3964,7 @@
           }
         }
 
+<<<<<<< HEAD
 
         // 타임라인 슬라이더 동기화
         if (!window.isScrubbingTimeline) {
@@ -3912,6 +3978,12 @@
 
         const pos = routePos(simProgress);
 
+=======
+        const pos = isManual ? getShipPosLonLat() : routePos(simProgress);
+        shipState.lat = pos.lat;
+        shipState.lon = pos.lon;
+        shipState.heading = isManual ? shipHeading : routeHeading(simProgress);
+>>>>>>> 7e3d38c29903edbed5f989c0ec7c85f94cc27264
         updateHUD(pos);
         if (THREE_MODES.has(currentMode)) drawMinimap(pos.lat, pos.lon);
         if (CESIUM_MODES.has(currentMode)) updateCesiumCamera(pos);
