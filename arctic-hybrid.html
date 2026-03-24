@@ -7,6 +7,8 @@
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/deck.gl@8.9.35/dist.min.js"></script>
   <style>
     * {
       margin: 0;
@@ -31,7 +33,12 @@
       height: 100%;
     }
 
+    #cesium-wrap {
+      z-index: 1;
+    }
+
     #three-wrap {
+      z-index: 2;
       opacity: 0;
       pointer-events: none;
     }
@@ -41,15 +48,15 @@
       pointer-events: auto;
     }
 
+    #three-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
     #cesium-wrap.hidden {
       opacity: 0;
       pointer-events: none;
-    }
-
-    #three-canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
     }
 
     #fade {
@@ -719,6 +726,7 @@
     <div id="cesium-container" style="width: 100%; height: 100%"></div>
   </div>
   <div id="three-wrap"><canvas id="three-canvas"></canvas></div>
+  <canvas id="deck-canvas" style="position:absolute;inset:0;z-index:3;display:none;pointer-events:none;width:100%;height:100%;"></canvas>
 
   <!-- 선교 창문 프레임 오버레이 -->
   <div id="bridge-frame">
@@ -1121,6 +1129,62 @@
       let WAYPOINTS = ROUTES[currentRouteKey];
 
       const TOTAL_SECONDS = 14 * 86400;
+
+      // ─── deck.gl 정적 데이터 생성 ────────────────────────────────────
+      // 해빙 히트맵 포인트 (북극 해역 격자)
+      const ICE_DATA = (() => {
+        const pts = [];
+        const rng = (a, b) => a + Math.random() * (b - a);
+        // NSR / 북극해 해빙 밀집 구역 중심부 격자
+        for (let la = 65; la <= 85; la += 1.5) {
+          for (let lo = 30; lo <= 180; lo += 3) {
+            const conc = Math.max(0, Math.min(1,
+              0.9 - (la - 85) ** 2 / 600 + rng(-0.12, 0.12)));
+            if (conc > 0.05) pts.push({ lon: lo, lat: la, weight: conc });
+          }
+        }
+        for (let la = 65; la <= 82; la += 1.5) {
+          for (let lo = -180; lo <= -90; lo += 3) {
+            const conc = Math.max(0, Math.min(1,
+              0.85 - (la - 82) ** 2 / 500 + rng(-0.12, 0.12)));
+            if (conc > 0.05) pts.push({ lon: lo, lat: la, weight: conc });
+          }
+        }
+        return pts;
+      })();
+
+      // 빙산 산포 포인트
+      const BERG_DATA = (() => {
+        const bergs = [];
+        const rng = (a, b) => a + Math.random() * (b - a);
+        const regions = [
+          { latR: [70, 82], lonR: [30, 100], n: 40 },
+          { latR: [68, 78], lonR: [100, 180], n: 35 },
+          { latR: [70, 80], lonR: [-180, -100], n: 30 },
+          { latR: [65, 75], lonR: [-80, -40], n: 25 },
+        ];
+        for (const r of regions) {
+          for (let i = 0; i < r.n; i++) {
+            bergs.push({
+              lon: rng(r.lonR[0], r.lonR[1]),
+              lat: rng(r.latR[0], r.latR[1]),
+              size: rng(2000, 12000),
+            });
+          }
+        }
+        return bergs;
+      })();
+
+      // 위험 구역 (고밀집 빙역 다각형 경로)
+      const DANGER_ZONES = [
+        [[90,77],[110,77],[110,79],[90,79],[90,77]],
+        [[140,74],[160,74],[160,76],[140,76],[140,74]],
+        [[-170,68],[-155,68],[-155,71],[-170,71],[-170,68]],
+      ];
+
+      // deck.gl 상태
+      let deckInstance = null;
+      let deckVisible = false;
 
       // 대원 거리 (Great Circle Distance)
       function greatCircleDist(a, b) {
@@ -2044,6 +2108,147 @@
         }
       }
 
+      // ─── deck.gl 초기화 및 레이어 ────────────────────────────────────
+      function buildDeckLayers() {
+        const pos = isManual ? getShipPosLonLat() : routePos(simProgress);
+        const route = WAYPOINTS.map(wp => [wp.lon, wp.lat]);
+
+        return [
+          // 1. 해빙 밀도 히트맵
+          new deck.HeatmapLayer({
+            id: 'ice-heatmap',
+            data: ICE_DATA,
+            getPosition: d => [d.lon, d.lat],
+            getWeight: d => d.weight,
+            radiusPixels: 60,
+            intensity: 1.2,
+            threshold: 0.05,
+            colorRange: [
+              [0, 80, 180, 0],
+              [0, 120, 220, 80],
+              [100, 180, 255, 140],
+              [200, 230, 255, 200],
+              [255, 255, 255, 220],
+            ],
+          }),
+          // 2. 빙산 산포
+          new deck.ScatterplotLayer({
+            id: 'bergs',
+            data: BERG_DATA,
+            getPosition: d => [d.lon, d.lat],
+            getRadius: d => d.size,
+            getFillColor: [200, 240, 255, 180],
+            getLineColor: [100, 180, 255, 220],
+            stroked: true,
+            lineWidthMinPixels: 1,
+            radiusUnits: 'meters',
+            radiusMinPixels: 2,
+          }),
+          // 3. 항로 경로 (주황)
+          new deck.PathLayer({
+            id: 'route-path',
+            data: [{ path: route }],
+            getPath: d => d.path,
+            getColor: [255, 160, 30, 200],
+            getWidth: 18000,
+            widthUnits: 'meters',
+            widthMinPixels: 2,
+            capRounded: true,
+            jointRounded: true,
+          }),
+          // 4. 위험 구역 (빨강 폴리라인)
+          ...DANGER_ZONES.map((coords, i) => new deck.PathLayer({
+            id: 'danger-' + i,
+            data: [{ path: coords }],
+            getPath: d => d.path,
+            getColor: [255, 50, 50, 200],
+            getWidth: 25000,
+            widthUnits: 'meters',
+            widthMinPixels: 2,
+          })),
+          // 5. 선박 마커
+          new deck.ScatterplotLayer({
+            id: 'ship-marker',
+            data: [{ lon: pos.lon, lat: pos.lat }],
+            getPosition: d => [d.lon, d.lat],
+            getRadius: 35000,
+            getFillColor: [0, 255, 200, 240],
+            getLineColor: [255, 255, 255, 255],
+            stroked: true,
+            lineWidthMinPixels: 2,
+            radiusMinPixels: 6,
+          }),
+        ];
+      }
+
+      function syncDeckView() {
+        if (!deckInstance || !cViewer || !deckVisible) return;
+        const cam = cViewer.camera;
+        const carto = Cesium.Cartographic.fromCartesian(cam.position);
+        const lon = Cesium.Math.toDegrees(carto.longitude);
+        const lat = Cesium.Math.toDegrees(carto.latitude);
+        const alt = carto.height;
+        const zoom = Math.log2(40000000 / Math.max(alt, 1));
+        const heading = Cesium.Math.toDegrees(cam.heading);
+        const pitchDeg = Cesium.Math.toDegrees(cam.pitch);
+        deckInstance.setProps({
+          viewState: {
+            longitude: lon,
+            latitude: lat,
+            zoom: Math.max(0, Math.min(22, zoom)),
+            bearing: heading,
+            pitch: Math.max(0, Math.min(85, 90 + pitchDeg)),
+          },
+          layers: buildDeckLayers(),
+        });
+      }
+
+      function initDeck() {
+        if (!window.deck) { console.warn('deck.gl not loaded'); return; }
+        const canvas = document.getElementById('deck-canvas');
+        // match canvas size to viewport
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        window.addEventListener('resize', () => {
+          canvas.width = window.innerWidth;
+          canvas.height = window.innerHeight;
+          if (deckInstance) deckInstance.redraw(true);
+        });
+
+        deckInstance = new deck.Deck({
+          canvas: 'deck-canvas',
+          controller: false,
+          _customRender: () => {},
+          initialViewState: {
+            longitude: 100,
+            latitude: 75,
+            zoom: 3,
+            bearing: 0,
+            pitch: 0,
+          },
+          layers: [],
+        });
+
+        // Cesium render 이후 deck.gl 뷰 동기화
+        if (cViewer) {
+          cViewer.scene.postRender.addEventListener(syncDeckView);
+        }
+
+        // 초기 시점이 위성/광역이면 즉시 표시
+        if (CESIUM_MODES.has(currentMode)) {
+          setDeckVisible(true);
+        }
+      }
+
+      function setDeckVisible(visible) {
+        deckVisible = visible;
+        const canvas = document.getElementById('deck-canvas');
+        canvas.style.display = visible ? 'block' : 'none';
+        if (!visible && deckInstance) {
+          deckInstance.setProps({ layers: [] });
+        }
+      }
+
       function updateCesiumCamera(pos) {
         if (!cViewer || userInteracting) return;
         if (currentMode === 'SATELLITE') {
@@ -2087,7 +2292,7 @@
         tRenderer.toneMapping = THREE.ACESFilmicToneMapping;
         tRenderer.toneMappingExposure = 1.1;
         tScene = new THREE.Scene();
-        tScene.fog = new THREE.FogExp2(0x8ab0c8, 0.00008);
+        tScene.fog = new THREE.FogExp2(0x7a9fb5, 0.000085);
         tCamera = new THREE.PerspectiveCamera(
           90,
           innerWidth / innerHeight,
@@ -2270,9 +2475,9 @@
           side: THREE.BackSide,
           depthWrite: false,
           uniforms: {
-            skyTop: { value: new THREE.Color(0x3a6080) },   // 북극 흐린 하늘
-            skyMid: { value: new THREE.Color(0x6a9ab8) },
-            skyHorizon: { value: new THREE.Color(0x8ab0c8) }, // 안개와 동일
+            skyTop:    { value: new THREE.Color(0x3a5f7a) },
+            skyMid:    { value: new THREE.Color(0x5e8fa8) },
+            skyHorizon:{ value: new THREE.Color(0x7a9fb5) },
           },
           vertexShader: `varying float vH;void main(){vH=position.y;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
           fragmentShader: `varying float vH;uniform vec3 skyTop,skyMid,skyHorizon;void main(){float t1=clamp(vH/400000.0,0.0,1.0);float t2=clamp(vH/80000.0,0.0,1.0);vec3 c=mix(skyHorizon,skyMid,t2);c=mix(c,skyTop,t1*t1);gl_FragColor=vec4(c,1.0);}`,
@@ -2281,13 +2486,10 @@
       }
 
       function buildLighting() {
-        // 북극 흐린 날: 강한 ambient로 그림자 너무 어둡지 않게
-        tAmbientLight = new THREE.AmbientLight(0x7a9aaa, 0.9);
+        tAmbientLight = new THREE.AmbientLight(0x8aaabb, 1.1);
         tScene.add(tAmbientLight);
-        tScene.add(new THREE.HemisphereLight(0x9ab8d4, 0x1a3a5a, 0.35));
-        // 저각 북극 태양 (동쪽 낮게)
-        tSunLight = new THREE.DirectionalLight(0xfff5e0, 0.7);
-        tSunLight.position.set(1000, 200, -500);
+        tSunLight = new THREE.DirectionalLight(0xffeedd, 0.65);
+        tSunLight.position.set(500, 200, -800);
         tSunLight.castShadow = true;
         tSunLight.shadow.mapSize.set(2048, 2048);
         tSunLight.shadow.camera.near = 1;
@@ -2297,10 +2499,9 @@
         tSunLight.shadow.camera.top = 40000;
         tSunLight.shadow.camera.bottom = -40000;
         tScene.add(tSunLight);
-        // 하늘 반사광 (파란 fill light)
-        const skyFill = new THREE.DirectionalLight(0x88aacc, 0.35);
-        skyFill.position.set(-300, 800, 200);
-        tScene.add(skyFill);
+        const sky = new THREE.DirectionalLight(0x6699bb, 0.45);
+        sky.position.set(-300, 800, 400);
+        tScene.add(sky);
       }
 
       function buildOcean() {
@@ -2312,8 +2513,6 @@
             color: 0x0a2a3f,
             specular: 0x4a8aaa,
             shininess: 80,
-            transparent: true,
-            opacity: 0.9,
           }),
         );
         waveMesh.receiveShadow = true;
@@ -2322,8 +2521,6 @@
           new THREE.PlaneGeometry(2000000, 2000000).rotateX(-Math.PI / 2),
           new THREE.MeshPhongMaterial({
             color: 0x071820,
-            transparent: true,
-            opacity: 0.95,
           }),
         );
         farOcean.position.y = -0.5;
@@ -2349,57 +2546,36 @@
         waveGeo.computeVertexNormals();
       }
 
-      const ICE_T = [
-        { p: 0.05, w: [1000, 25000], h: [200, 2000], n: 'tabular', c: 0xe8f4ff },
-        { p: 0.1, w: [600, 3000], h: [50, 400], n: 'large', c: 0xc8e8ff },
-        { p: 0.3, w: [100, 800], h: [80, 300], n: 'medium', c: 0xb0d0e8 },
-        { p: 0.35, w: [10, 150], h: [20, 100], n: 'small', c: 0xa8cce0 },
-        { p: 0.2, w: [2, 20], h: [5, 25], n: 'growler', c: 0xd0e8f8 },
+      const ICE_TYPES = [
+        { name:'tabular', prob:.05, w:[400,1000], d:[300,800], h:[20,45], subRatio:4 },
+        { name:'large',   prob:.10, w:[ 300,1200], d:[ 250,1000], h:[ 80,250], subRatio:8 },
+        { name:'medium',  prob:.30, w:[  60, 300], d:[  50, 250], h:[ 25, 80], subRatio:7 },
+        { name:'small',   prob:.35, w:[  15,  60], d:[  12,  50], h:[  8, 25], subRatio:6 },
+        { name:'growler', prob:.20, w:[   3,  15], d:[   2,  12], h:[  1,  5], subRatio:5 },
       ];
       const MAX_LOCAL_ICEBERGS = 180;
 
       function rng(a, b) {
         return a + Math.random() * (b - a);
       }
+      function pickType() {
+        let r = Math.random(), cum = 0;
+        for (const t of ICE_TYPES) { cum += t.prob; if (r < cum) return t; }
+        return ICE_TYPES[ICE_TYPES.length - 1];
+      }
       function buildIcebergs() {
         const closeRanges = [50, 80, 120, 200, 280, 350, 450, 500];
         for (const dist of closeRanges) {
           const angle = Math.PI / 3 + Math.random() * ((Math.PI * 4) / 3);
-          spawnIceberg(
-            Math.cos(angle) * dist,
-            Math.sin(angle) * dist,
-            ICE_T[3],
-          );
+          spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, ICE_TYPES[3]);
         }
         for (let i = 0; i < 60; i++) {
-          const angle = Math.random() * Math.PI * 2,
-            dist = rng(500, 5000);
-          let r = Math.random(),
-            type = ICE_T[ICE_T.length - 1],
-            cum = 0;
-          for (const t of ICE_T) {
-            cum += t.p;
-            if (r < cum) {
-              type = t;
-              break;
-            }
-          }
-          spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, type);
+          const angle = Math.random() * Math.PI * 2, dist = rng(500, 5000);
+          spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, pickType());
         }
         for (let i = 0; i < 110; i++) {
-          const angle = Math.random() * Math.PI * 2,
-            dist = rng(5000, 90000);
-          let r = Math.random(),
-            type = ICE_T[ICE_T.length - 1],
-            cum = 0;
-          for (const t of ICE_T) {
-            cum += t.p;
-            if (r < cum) {
-              type = t;
-              break;
-            }
-          }
-          spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, type);
+          const angle = Math.random() * Math.PI * 2, dist = rng(5000, 90000);
+          spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, pickType());
         }
       }
 
@@ -2433,198 +2609,124 @@
         }
       }
 
-      // ─── 빙산 형태 생성 ──────────────────────────────────────────────────────
-      function addIceVertexColors(geo, h) {
+      // ─── 빙산 형태 생성 ─────────────────────────────────────────────────────
+      function makeIceGeo(type, w, h, d) {
+        if (type === 'tabular') {
+          const g = new THREE.CylinderGeometry(w * 0.48, w * 0.52, h, 16, 3);
+          const p = g.attributes.position;
+          for (let i = 0; i < p.count; i++) {
+            const y = p.getY(i);
+            const a = Math.atan2(p.getZ(i), p.getX(i));
+            const n = 1 + Math.sin(a * 4) * 0.07 + (Math.random() - 0.5) * 0.05;
+            p.setX(i, p.getX(i) * n);
+            p.setZ(i, p.getZ(i) * n * (d / w));
+            if (y > h * 0.3) {
+              p.setX(i, p.getX(i) * 0.92);
+              p.setZ(i, p.getZ(i) * 0.92);
+            }
+          }
+          p.needsUpdate = true;
+          g.computeVertexNormals();
+          return g;
+        }
+        if (type === 'large') {
+          const g = new THREE.ConeGeometry(w * 0.5, h, 9, 5);
+          const p = g.attributes.position;
+          for (let i = 0; i < p.count; i++) {
+            const a = Math.atan2(p.getZ(i), p.getX(i));
+            const n = 1 + Math.sin(a * 3) * 0.12 + Math.sin(a * 7) * 0.06 + (Math.random() - 0.5) * 0.08;
+            p.setX(i, p.getX(i) * n);
+            p.setZ(i, p.getZ(i) * n * (d / w));
+            p.setY(i, p.getY(i) + (Math.random() - 0.5) * h * 0.03);
+          }
+          p.needsUpdate = true;
+          g.computeVertexNormals();
+          return g;
+        }
+        // medium / small / growler
+        const segs = type === 'growler' ? 6 : 8;
+        const g = new THREE.SphereGeometry(1, segs, segs - 1);
+        const p = g.attributes.position;
+        for (let i = 0; i < p.count; i++) {
+          const y = p.getY(i);
+          const n = 0.7 + Math.random() * 0.6;
+          p.setX(i, p.getX(i) * w * 0.5 * n);
+          p.setY(i, y > 0
+            ? y * h * (0.85 + Math.random() * 0.3)
+            : y * h * (type === 'growler' ? 0.15 : 0.4));
+          p.setZ(i, p.getZ(i) * d * 0.5 * n);
+        }
+        p.needsUpdate = true;
+        g.computeVertexNormals();
+        return g;
+      }
+
+      function setIceColors(geo, h) {
         const pos = geo.attributes.position;
-        const cols = new Float32Array(pos.count * 3);
+        const col = new Float32Array(pos.count * 3);
         for (let i = 0; i < pos.count; i++) {
-          const t = Math.max(0, Math.min(1, (pos.getY(i) + h * 0.5) / h));
-          cols[i * 3] = 0.08 + (0.82 - 0.08) * t; // R: 짙은 파랑 → 청백
-          cols[i * 3 + 1] = 0.18 + (0.90 - 0.18) * t; // G
-          cols[i * 3 + 2] = 0.28 + (0.98 - 0.28) * t; // B
+          const t = Math.max(0, Math.min(1, (pos.getY(i) + h * 0.1) / (h * 1.1)));
+          col[i * 3]     = 0.12 + t * 0.78;
+          col[i * 3 + 1] = 0.25 + t * 0.68;
+          col[i * 3 + 2] = 0.42 + t * 0.56;
         }
-        geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+        geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
       }
 
-      function createIcebergGeo(w, h, typeName) {
-        let geo, bR, d = w;
+      const _iceMat = new THREE.MeshLambertMaterial({
+        vertexColors: true, side: THREE.FrontSide,
+      });
+      const _subMat = new THREE.MeshLambertMaterial({
+        color: 0x0d2535, transparent: true, opacity: 0.18, depthWrite: false,
+      });
 
-        if (typeName === 'tabular') {
-          d = w * rng(0.55, 1.0);
-          geo = new THREE.BoxGeometry(w, h, d, 8, 4, 8); // 충분한 subdivision
-          const pos = geo.attributes.position;
-          for (let i = 0; i < pos.count; i++) {
-            const y = pos.getY(i);
-            // 위로 갈수록 안쪽으로 (사다리꼴)
-            const taper = y > 0 ? 1 - (y / h) * 0.25 : 1;
-            pos.setX(i, pos.getX(i) * taper + (Math.random() - 0.5) * w * 0.015);
-            pos.setY(i, y + (Math.random() - 0.5) * h * 0.04);
-            pos.setZ(i, pos.getZ(i) * taper + (Math.random() - 0.5) * d * 0.015);
-          }
-          bR = Math.max(w, d) * 0.55;
-          pos.needsUpdate = true;
-          geo.computeVertexNormals();
-
-        } else if (typeName === 'large' || typeName === 'medium') {
-          bR = w * 0.48;
-          geo = new THREE.CylinderGeometry(w * 0.12, w * 0.48, h, 12, 6, false);
-          const pos = geo.attributes.position;
-          for (let i = 0; i < pos.count; i++) {
-            const y = pos.getY(i);
-            const angle = Math.atan2(pos.getZ(i), pos.getX(i));
-            // sin 조합으로 Perlin-like 윤곽 노이즈
-            const noiseScale = Math.sin(angle * 3) * 0.08
-              + Math.sin(angle * 7) * 0.04
-              + (Math.random() - 0.5) * 0.06;
-            pos.setX(i, pos.getX(i) * (1 + noiseScale));
-            pos.setZ(i, pos.getZ(i) * (1 + noiseScale));
-            pos.setY(i, y + Math.sin(angle * 5) * h * 0.02);
-          }
-          pos.needsUpdate = true;
-          geo.computeVertexNormals();
-
-        } else if (typeName === 'small') {
-          bR = w * 0.5;
-          geo = new THREE.SphereGeometry(w * 0.5, 8, 5);
-          const pos = geo.attributes.position;
-          for (let i = 0; i < pos.count; i++) {
-            pos.setX(i, pos.getX(i) + (Math.random() - 0.5) * w * 0.2);
-            pos.setY(i, pos.getY(i) * (h / w) * 0.5); // 납작하게
-            pos.setZ(i, pos.getZ(i) * (d / w) + (Math.random() - 0.5) * d * 0.15);
-          }
-          pos.needsUpdate = true;
-          geo.computeVertexNormals();
-
-        } else { // growler
-          bR = w * 0.5;
-          geo = new THREE.SphereGeometry(w * 0.5, 6, 4);
-          const pos = geo.attributes.position;
-          for (let i = 0; i < pos.count; i++) {
-            pos.setX(i, pos.getX(i) * (0.6 + Math.random() * 0.8));
-            pos.setY(i, pos.getY(i) * (h / w) * (0.4 + Math.random() * 0.6));
-            pos.setZ(i, pos.getZ(i) * (d / w) * (0.6 + Math.random() * 0.8));
-          }
-          pos.needsUpdate = true;
-          geo.computeVertexNormals();
-        }
-
-        addIceVertexColors(geo, h);
-        return { geo, bR, d };
+      function placeOnWater(mesh, x, z) {
+        mesh.position.set(x, 0, z);
+        const box = new THREE.Box3().setFromObject(mesh);
+        mesh.position.y = -box.min.y;
       }
 
-      function createIcebergMat(typeName) {
-        return new THREE.MeshLambertMaterial({
-          vertexColors: true,
-          transparent: true,
-          opacity: typeName === 'growler' ? 0.78 : 0.88,
-          emissive: new THREE.Color(0x050f1a),
-          emissiveIntensity: 1,
-          side: THREE.DoubleSide,
-        });
-      }
-
-      function createSubMat() {
-        return new THREE.MeshLambertMaterial({
-          color: 0x0d3050,
-          transparent: true,
-          opacity: 0.22,
-          side: THREE.DoubleSide,
-        });
+      function addRing(x, z, r) {
+        const geo = new THREE.RingGeometry(r * 0.9, r * 1.05, 16);
+        const ring = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+          color: 0xaaccdd, transparent: true, opacity: 0.2, side: THREE.DoubleSide,
+        }));
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(x, 0.3, z);
+        tScene.add(ring);
       }
 
       function spawnIceberg(ox, oz, type) {
-        const w = rng(type.w[0], type.w[1]);
-        const h = rng(type.h[0], type.h[1]);
-        const { geo: abvGeo, bR, d } = createIcebergGeo(w, h, type.n);
+        const w  = rng(type.w[0], type.w[1]);
+        const h  = rng(type.h[0], type.h[1]);
+        const d  = rng(type.d[0], type.d[1]);
+        const bR = Math.max(Math.max(w, d) * 0.45, 3);
+
+        // 수면 위
+        const geo  = makeIceGeo(type.name, w, h, d);
+        setIceColors(geo, h);
+        const mesh = new THREE.Mesh(geo, _iceMat.clone());
+        mesh.castShadow = true;
+        mesh.rotation.y = Math.random() * Math.PI * 2;
+        if (type.name !== 'tabular') {
+          mesh.rotation.z = (Math.random() - 0.5) * 0.15;
+          mesh.rotation.x = (Math.random() - 0.5) * 0.10;
+        }
+        placeOnWater(mesh, ox, oz);
+
+        // 수중
+        const subH   = h * type.subRatio;
+        const subGeo = makeIceGeo(type.name, w * 0.85, subH, d * 0.85);
+        const subMesh = new THREE.Mesh(subGeo, _subMat.clone());
+        subMesh.rotation.y = mesh.rotation.y;
+        subMesh.position.set(ox, -subH * 0.1, oz);
 
         const grp = new THREE.Group();
-        grp.position.set(ox, 0, oz);
-
-        const abvMesh = new THREE.Mesh(abvGeo, createIcebergMat(type.n));
-        abvMesh.position.y = h / 2;
-        abvMesh.rotation.y = Math.random() * Math.PI * 2;
-        if (type.n === 'tabular') {
-          abvMesh.rotation.x = (Math.random() - 0.5) * 0.06;
-          abvMesh.rotation.z = (Math.random() - 0.5) * 0.04;
-        } else if (type.n === 'large') {
-          abvMesh.rotation.x = (Math.random() - 0.5) * 0.15;
-          abvMesh.rotation.z = (Math.random() - 0.5) * 0.12;
-        } else {
-          abvMesh.rotation.x = (Math.random() - 0.5) * 0.25;
-          abvMesh.rotation.z = (Math.random() - 0.5) * 0.20;
-        }
-        abvMesh.castShadow = true;
-        grp.add(abvMesh);
-
-        // 대형: 엣지 하이라이트 + 눈/서리 레이어 + 절벽 면
-        if (type.n === 'tabular' || type.n === 'large') {
-          const edges = new THREE.LineSegments(
-            new THREE.EdgesGeometry(abvGeo),
-            new THREE.LineBasicMaterial({ color: 0xd0eeff, transparent: true, opacity: 0.35 }),
-          );
-          edges.position.y = h / 2;
-          edges.rotation.copy(abvMesh.rotation);
-          grp.add(edges);
-
-          // 눈/서리 레이어
-          const sw = (type.n === 'tabular' ? w : bR * 2) * 0.88;
-          const snowGeo = new THREE.BoxGeometry(sw, h * 0.04, sw * rng(0.7, 1.05), 2, 1, 2);
-          const sp = snowGeo.attributes.position;
-          for (let i = 0; i < sp.count; i++) {
-            sp.setX(i, sp.getX(i) + (Math.random() - 0.5) * sw * 0.06);
-            sp.setZ(i, sp.getZ(i) + (Math.random() - 0.5) * sw * 0.06);
-          }
-          sp.needsUpdate = true;
-          const snow = new THREE.Mesh(snowGeo, new THREE.MeshPhongMaterial({
-            color: 0xffffff, transparent: true, opacity: 0.78, shininess: 25,
-          }));
-          snow.position.y = h + h * 0.02;
-          grp.add(snow);
-
-          // 탁상형 빙산: 절벽 면 (짙은 청색 수직 벽)
-          if (type.n === 'tabular') {
-            const cliffAngle = Math.random() * Math.PI * 2;
-            const cliffSize = (Math.abs(Math.cos(cliffAngle * 2)) > 0.5 ? w : d) * 0.88;
-            const cliffGeo = new THREE.PlaneGeometry(cliffSize, h * 0.94, 3, 4);
-            const cp = cliffGeo.attributes.position;
-            for (let i = 0; i < cp.count; i++) {
-              cp.setX(i, cp.getX(i) + (Math.random() - 0.5) * cliffSize * 0.04);
-              cp.setY(i, cp.getY(i) + (Math.random() - 0.5) * h * 0.05);
-            }
-            cp.needsUpdate = true;
-            cliffGeo.computeVertexNormals();
-            const cliff = new THREE.Mesh(cliffGeo, new THREE.MeshLambertMaterial({
-              color: 0x1a3558, transparent: true, opacity: 0.88, side: THREE.DoubleSide,
-            }));
-            const faceR = Math.max(w, d) * 0.48;
-            cliff.position.set(Math.sin(cliffAngle) * faceR, h / 2, Math.cos(cliffAngle) * faceR);
-            cliff.rotation.y = cliffAngle;
-            grp.add(cliff);
-          }
-        }
-
-        // 수중 부분
-        const subH = h * (type.n === 'tabular' ? rng(3, 5) : rng(7, 9));
-        const { geo: subGeo } = createIcebergGeo(w * 0.82, subH, type.n);
-        const subMesh = new THREE.Mesh(subGeo, createSubMat());
-        subMesh.position.y = -subH / 2;
-        subMesh.rotation.y = abvMesh.rotation.y;
+        grp.add(mesh);
         grp.add(subMesh);
-
-        // 수면 경계 물거품 링 (그로울러 제외)
-        if (type.n !== 'growler') {
-          const ringR = Math.max(bR * 0.85, 8);
-          const ringGeo = new THREE.RingGeometry(ringR, ringR * 1.14, 20);
-          const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
-            color: 0xddeeff, transparent: true, opacity: 0.22, side: THREE.DoubleSide,
-          }));
-          ring.rotation.x = -Math.PI / 2;
-          ring.position.y = 0.3;
-          grp.add(ring);
-        }
-
         tScene.add(grp);
-        tIcebergs.push({ grp, ox, oz, cx: ox, cz: oz, r: Math.max(bR * 0.9, 15) });
+
+        tIcebergs.push({ grp, ox, oz, cx: ox, cz: oz, r: bR });
       }
 
       function buildShip() {
@@ -2962,7 +3064,7 @@
         }
         if (tScene.fog) {
           const nightC = new THREE.Color(0x050d18);
-          const dayC = new THREE.Color(0x8ab0c8);
+          const dayC = new THREE.Color(0x7a9fb5);
           tScene.fog.color.lerp(nightFactor > 0.5 ? nightC : dayC, 0.02);
         }
         const pn = document.getElementById('polar-night-ind');
@@ -3473,6 +3575,8 @@
           document
             .getElementById('cesium-wrap')
             .classList.toggle('hidden', useThree);
+          // deck.gl: 위성/광역 시점에서만 표시
+          setDeckVisible(CESIUM_MODES.has(mode));
           updateHint();
           resetView();
           updateBridgeOverlay();
@@ -4099,7 +4203,7 @@
       // 13. 시작
       // ═══════════════════════════════════════════════════════════════
       loadIceData(); // 현재 월의 실제 빙하 농도 데이터 비동기 로드
-      initCesium();
+      initCesium().then(() => initDeck());
       initThree();
       currentMode = 'SATELLITE';
       document.querySelector('[data-mode="SATELLITE"]').classList.add('active');
