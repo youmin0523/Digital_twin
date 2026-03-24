@@ -14,7 +14,7 @@ const path = require('path');
 const CONFIG = {
     COPERNICUS_THREDDS_URL: process.env.COPERNICUS_URL || 'https://my.cmems-du.eu/thredds/ncss/grid/...',
     NSIDC_API_URL: process.env.NSIDC_URL || 'https://nsidc.org/api/mapservices/NSIDC/wms',
-    OUTPUT_FILE: path.join(__dirname, '../client/public/data/dynamicIceData.json'),
+    CACHE_DIR: path.join(__dirname, '../client/public/data/cache'),
     GRID_RESOLUTION_DEGREE: 1.0 // 1도 단위 격자 압축
 };
 
@@ -49,11 +49,30 @@ function parseNetCDFMock() {
     return cells;
 }
 
-// [메인 파이프라인] 매일 자정 등에 크론(Cron)으로 실행될 메인 파서
-async function runBatchPipeline() {
+// [메인 파이프라인] 매일 자정 등에 크론(Cron)으로 실행될 메인 파서 (캐싱 연동)
+async function runBatchPipeline(targetDateStr = null) {
     try {
         console.log('=== [Arctic Digital Twin] Proxy Data Batch Started ===');
         const startTime = Date.now();
+
+        // 0. 날짜 기반 캐시 식별자 생성
+        const targetDate = targetDateStr || new Date().toISOString().split('T')[0];
+        const cacheFile = path.join(CONFIG.CACHE_DIR, `iceData_${targetDate}.json`);
+
+        // 캐시 폴더 확인 및 생성
+        if (!fs.existsSync(CONFIG.CACHE_DIR)) {
+            fs.mkdirSync(CONFIG.CACHE_DIR, { recursive: true });
+        }
+
+        // 캐시 히트(Cache Hit) 판별: 파일이 이미 존재하면 파싱 생략
+        if (fs.existsSync(cacheFile)) {
+            console.log(`[Cache Hit] 해당 날짜(${targetDate})의 파싱된 데이터가 캐시에 이미 존재합니다. API 호출을 생략합니다.`);
+            console.log(`[Proxy] Cached Output Path: ${cacheFile}`);
+            console.log('=== Proxy Data Batch Finished ===');
+            return;
+        }
+
+        console.log(`[Cache Miss] 해당 날짜(${targetDate}) 데이터가 없습니다. 외부 API를 호출하여 파싱을 시작합니다...`);
         
         // 1. 외부 API 연동 및 파싱 (NetCDF -> Memory Array)
         const parsedGrid = parseNetCDFMock();
@@ -63,6 +82,7 @@ async function runBatchPipeline() {
         const optimizedPayload = {
             metadata: {
                 timestamp: new Date().toISOString(),
+                target_date: targetDate,
                 source: ["Copernicus Marine Service", "NSIDC Sea Ice Index"],
                 resolution_deg: CONFIG.GRID_RESOLUTION_DEGREE,
                 total_cells: parsedGrid.length
@@ -70,18 +90,12 @@ async function runBatchPipeline() {
             cells: parsedGrid
         };
         
-        // 3. 브라우저가 읽을 수 있게 직렬화 및 적재
-        // 경로 생성을 위해, client/public 하위나 정적 디렉토리에 JSON 저장
-        const targetDir = path.dirname(CONFIG.OUTPUT_FILE);
-        if (!fs.existsSync(targetDir)) {
-            fs.mkdirSync(targetDir, { recursive: true });
-        }
-        
-        fs.writeFileSync(CONFIG.OUTPUT_FILE, JSON.stringify(optimizedPayload));
+        // 3. 브라우저가 읽을 수 있게 직렬화 및 적재 (캐시 파일 저장)
+        fs.writeFileSync(cacheFile, JSON.stringify(optimizedPayload));
         
         const elapsed = (Date.now() - startTime) / 1000;
-        console.log(`[Proxy] JSON 생성 성공. 소요시간: ${elapsed.toFixed(2)}초`);
-        console.log(`[Proxy] Output Path: ${CONFIG.OUTPUT_FILE}`);
+        console.log(`[Proxy] JSON 생성 및 캐시 저장 성공. 소요시간: ${elapsed.toFixed(2)}초`);
+        console.log(`[Proxy] Output Path: ${cacheFile}`);
         console.log('=== Proxy Data Batch Finished ===');
         
     } catch (e) {

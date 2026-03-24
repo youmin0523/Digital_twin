@@ -922,20 +922,148 @@
       <button id="btn-apply">⚡ 적용하기</button>
     </div>
 
-    <!-- 하단 컨트롤 -->
-    <div class="hud" id="hud-bottom">
-      <button class="ctrl-btn" id="btn-start">▶ 출항</button>
-      <button class="ctrl-btn" id="btn-reset">↺ 리셋</button>
-      <span class="hud-label">배속</span>
-      <input
-        type="range"
-        id="speed-slider"
-        min="50"
-        max="5000"
-        step="50"
-        value="1000"
-      />
-      <span class="hud-value" id="speed-label">×1000</span>
+    <!-- 5종 실시간 API 시각화 레이어 컨트롤 -->
+    <div
+      class="hud"
+      id="hud-api-layers"
+      style="top: 12px; left: 232px; min-width: 220px; border-color: #059669"
+    >
+      <div class="hud-title" style="color: #34d399">
+        🌍 실시간 API 레이어 (WMS)
+      </div>
+      <div
+        class="hud-row"
+        style="justify-content: flex-start; gap: 8px; margin: 6px 0"
+      >
+        <input
+          type="checkbox"
+          id="layer-nsidc-conc"
+          class="api-cb"
+          style="accent-color: #34d399"
+        />
+        <label for="layer-nsidc-conc" class="hud-label" style="cursor: pointer"
+          >NSIDC 해빙 농도</label
+        >
+      </div>
+      <div
+        class="hud-row"
+        style="justify-content: flex-start; gap: 8px; margin: 6px 0"
+      >
+        <input
+          type="checkbox"
+          id="layer-cop-thick"
+          class="api-cb"
+          style="accent-color: #34d399"
+        />
+        <label for="layer-cop-thick" class="hud-label" style="cursor: pointer"
+          >Copernicus 해빙 두께</label
+        >
+      </div>
+      <div
+        class="hud-row"
+        style="justify-content: flex-start; gap: 8px; margin: 6px 0"
+      >
+        <input
+          type="checkbox"
+          id="layer-nsidc-edge"
+          class="api-cb"
+          style="accent-color: #34d399"
+        />
+        <label for="layer-nsidc-edge" class="hud-label" style="cursor: pointer"
+          >NSIDC 경계선 (Today)</label
+        >
+      </div>
+      <div
+        class="hud-row"
+        style="justify-content: flex-start; gap: 8px; margin: 6px 0"
+      >
+        <input
+          type="checkbox"
+          id="layer-esa-sar"
+          class="api-cb"
+          style="accent-color: #34d399"
+        />
+        <label for="layer-esa-sar" class="hud-label" style="cursor: pointer"
+          >ESA Sentinel-1 위성</label
+        >
+      </div>
+      <div
+        class="hud-row"
+        style="justify-content: flex-start; gap: 8px; margin: 6px 0"
+      >
+        <input
+          type="checkbox"
+          id="layer-gebco-bathy"
+          class="api-cb"
+          style="accent-color: #34d399"
+        />
+        <label for="layer-gebco-bathy" class="hud-label" style="cursor: pointer"
+          >GEBCO 해저 수심도</label
+        >
+      </div>
+    </div>
+
+    <!-- 하단 컨트롤 (운항 및 타임라인) -->
+    <div
+      class="hud"
+      id="hud-bottom"
+      style="flex-direction: column; padding: 10px 18px 8px; min-width: 400px"
+    >
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          width: 100%;
+          justify-content: center;
+        "
+      >
+        <button class="ctrl-btn" id="btn-start">▶ 출항</button>
+        <button class="ctrl-btn" id="btn-reset">↺ 리셋</button>
+        <span class="hud-label" style="margin-left: 10px">배속</span>
+        <input
+          type="range"
+          id="speed-slider"
+          min="50"
+          max="5000"
+          step="50"
+          value="1000"
+          style="flex: 1"
+        />
+        <span class="hud-value" id="speed-label" style="min-width: 45px"
+          >×1000</span
+        >
+      </div>
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          width: 100%;
+          margin-top: 8px;
+          border-top: 1px solid rgba(147, 197, 253, 0.2);
+          padding-top: 8px;
+        "
+      >
+        <span class="hud-label" style="color: #fca5a5; font-size: 11px"
+          >예측 타임라인</span
+        >
+        <input
+          type="range"
+          id="timeline-slider"
+          min="0"
+          max="14"
+          step="1"
+          value="0"
+          style="flex: 1; accent-color: #fca5a5"
+        />
+        <span
+          class="hud-value"
+          id="timeline-label"
+          style="color: #fecaca; font-size: 11px; min-width: 45px"
+          >Day 0</span
+        >
+      </div>
     </div>
     <div id="banner">부산 → 북극항로 → 로테르담 | 14일 운항</div>
     <div id="toast"></div>
@@ -949,91 +1077,94 @@
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MTJlMTZiNS02MzQ1LTRmZGMtOWM0Ni1kZWJkMzQxZTJhMTEiLCJpZCI6NDA2NTU5LCJpYXQiOjE3NzM5OTY1Mjl9.lpSbE0Dchaf-IEx0J8MkS6FoisyRwd4nfSZ0GyFciLI';
 
       const ROUTES = {
-        NSR: [ // 북동항로 (내륙 관통 철저 배제 - 100km 간격 초정밀 연안 핀)
-          { lon: 129.04, lat: 35.10, label: '부산항' },
-          { lon: 130.80, lat: 35.80, label: '대한해협 우회' },
-          { lon: 132.50, lat: 37.50, label: '동해 중앙' },
-          { lon: 138.00, lat: 43.00, label: '홋카이도 서해안' },
-          { lon: 140.50, lat: 44.50, label: '소야 해협 접근' },
-          { lon: 141.20, lat: 45.40, label: '소야 해협' },
+        NSR: [
+          // 북동항로 (내륙 관통 철저 배제 - 100km 간격 초정밀 연안 핀)
+          { lon: 129.04, lat: 35.1, label: '부산항' },
+          { lon: 130.8, lat: 35.8, label: '대한해협 우회' },
+          { lon: 132.5, lat: 37.5, label: '동해 중앙' },
+          { lon: 138.0, lat: 43.0, label: '홋카이도 서해안' },
+          { lon: 140.5, lat: 44.5, label: '소야 해협 접근' },
+          { lon: 141.2, lat: 45.4, label: '소야 해협' },
           { lon: 141.93, lat: 45.65, label: '소야 해협 통과' },
-          { lon: 143.50, lat: 46.20, label: '오호츠크해' },
-          { lon: 145.50, lat: 47.00, label: '오호츠크해 중부' },
-          { lon: 148.00, lat: 48.00, label: '부솔 해협 접근' },
-          { lon: 151.30, lat: 46.50, label: '부솔 해협 (쿠릴 패주)' },
-          { lon: 153.00, lat: 46.00, label: '북태평양' },
-          { lon: 157.00, lat: 49.00, label: '캄차카 반도 우회' },
-          { lon: 161.00, lat: 53.00, label: '캄차카 동해안' },
-          { lon: 164.00, lat: 57.00, label: '베링해 진입' },
-          { lon: 170.00, lat: 60.00, label: '베링해 중부' },
-          { lon: 175.00, lat: 63.00, label: '아나디르 만' },
-          { lon: 180.00, lat: 64.50, label: '날짜변경선' },
-          { lon: -175.0, lat: 65.00, label: '베링해협 접근' },
-          { lon: -168.8, lat: 66.00, label: '베링해협 통과' },
-          { lon: -168.0, lat: 67.50, label: '척치해 진입' },
-          { lon: -175.0, lat: 70.00, label: '척치해 외곽' },
-          { lon: 180.00, lat: 72.50, label: '브랑겔 섬 북방 안심 우회' },
-          { lon: 165.00, lat: 73.00, label: '동시베리아해' },
-          { lon: 150.00, lat: 77.00, label: '뉴시베리아 제도 우회' },
-          { lon: 140.00, lat: 77.00, label: '랍테프해' },
-          { lon: 130.00, lat: 77.50, label: '랍테프해 서부' },
-          { lon: 115.00, lat: 77.50, label: '타이미르 반도 우회' },
-          { lon: 110.00, lat: 77.80, label: '빌키츠키 접근' },
-          { lon: 104.00, lat: 77.92, label: '빌키츠키 통과' },
-          { lon: 98.00, lat: 77.50, label: '카라해 진입' },
-          { lon: 80.00, lat: 77.00, label: '카라해 중앙' },
-          { lon: 69.00, lat: 77.50, label: '노바야젬랴 섬 우회' },
-          { lon: 60.00, lat: 76.00, label: '바렌츠해 동부' },
-          { lon: 45.00, lat: 73.00, label: '바렌츠해 중앙' },
-          { lon: 30.00, lat: 72.50, label: '노스케이프 우회' },
-          { lon: 18.00, lat: 69.50, label: '노르웨이해' },
-          { lon: 5.00, lat: 62.00, label: '북해' },
-          { lon: 4.50, lat: 51.90, label: '로테르담' }
+          { lon: 143.5, lat: 46.2, label: '오호츠크해' },
+          { lon: 145.5, lat: 47.0, label: '오호츠크해 중부' },
+          { lon: 148.0, lat: 48.0, label: '부솔 해협 접근' },
+          { lon: 151.3, lat: 46.5, label: '부솔 해협 (쿠릴 패주)' },
+          { lon: 153.0, lat: 46.0, label: '북태평양' },
+          { lon: 157.0, lat: 49.0, label: '캄차카 반도 우회' },
+          { lon: 161.0, lat: 53.0, label: '캄차카 동해안' },
+          { lon: 164.0, lat: 57.0, label: '베링해 진입' },
+          { lon: 170.0, lat: 60.0, label: '베링해 중부' },
+          { lon: 175.0, lat: 63.0, label: '아나디르 만' },
+          { lon: 180.0, lat: 64.5, label: '날짜변경선' },
+          { lon: -175.0, lat: 65.0, label: '베링해협 접근' },
+          { lon: -168.8, lat: 66.0, label: '베링해협 통과' },
+          { lon: -168.0, lat: 67.5, label: '척치해 진입' },
+          { lon: -175.0, lat: 70.0, label: '척치해 외곽' },
+          { lon: 180.0, lat: 72.5, label: '브랑겔 섬 북방 안심 우회' },
+          { lon: 165.0, lat: 73.0, label: '동시베리아해' },
+          { lon: 150.0, lat: 77.0, label: '뉴시베리아 제도 우회' },
+          { lon: 140.0, lat: 77.0, label: '랍테프해' },
+          { lon: 130.0, lat: 77.5, label: '랍테프해 서부' },
+          { lon: 115.0, lat: 77.5, label: '타이미르 반도 우회' },
+          { lon: 110.0, lat: 77.8, label: '빌키츠키 접근' },
+          { lon: 104.0, lat: 77.92, label: '빌키츠키 통과' },
+          { lon: 98.0, lat: 77.5, label: '카라해 진입' },
+          { lon: 80.0, lat: 77.0, label: '카라해 중앙' },
+          { lon: 69.0, lat: 77.5, label: '노바야젬랴 섬 우회' },
+          { lon: 60.0, lat: 76.0, label: '바렌츠해 동부' },
+          { lon: 45.0, lat: 73.0, label: '바렌츠해 중앙' },
+          { lon: 30.0, lat: 72.5, label: '노스케이프 우회' },
+          { lon: 18.0, lat: 69.5, label: '노르웨이해' },
+          { lon: 5.0, lat: 62.0, label: '북해' },
+          { lon: 4.5, lat: 51.9, label: '로테르담' },
         ],
-        NWP: [ // 북서항로 (맥클루어 심층 - 육상 충돌 원천 차단)
-          { lon: 129.04, lat: 35.10, label: '부산항' },
-          { lon: 130.80, lat: 35.80, label: '대한해협 우회' },
-          { lon: 138.00, lat: 43.00, label: '홋카이도 외곽' },
+        NWP: [
+          // 북서항로 (맥클루어 심층 - 육상 충돌 원천 차단)
+          { lon: 129.04, lat: 35.1, label: '부산항' },
+          { lon: 130.8, lat: 35.8, label: '대한해협 우회' },
+          { lon: 138.0, lat: 43.0, label: '홋카이도 외곽' },
           { lon: 141.93, lat: 45.65, label: '소야 해협' },
-          { lon: 144.50, lat: 47.00, label: '오호츠크해' },
-          { lon: 151.30, lat: 46.50, label: '부솔 해협' },
-          { lon: 157.00, lat: 49.00, label: '캄차카 반도 우회' },
-          { lon: 164.00, lat: 57.00, label: '베링해 진입' },
-          { lon: 180.00, lat: 64.50, label: '날짜변경선' },
-          { lon: -168.8, lat: 66.00, label: '베링해협 통과' },
-          { lon: -165.0, lat: 69.00, label: '척치-보퍼트' },
-          { lon: -156.0, lat: 71.80, label: '포인트배로 우회' },
-          { lon: -140.0, lat: 72.00, label: '보퍼트해 연안 우회' },
-          { lon: -130.0, lat: 73.50, label: '보퍼트해 북상' },
-          { lon: -122.0, lat: 74.50, label: '매클루어 입구 우회' },
-          { lon: -115.0, lat: 74.50, label: '매클루어 관통' },
-          { lon: -105.0, lat: 74.50, label: '바이카운트멜빌 해협' },
-          { lon: -90.00, lat: 74.20, label: '랭커스터 해협' },
-          { lon: -75.00, lat: 73.00, label: '배핀 만 진입' },
-          { lon: -65.00, lat: 70.00, label: '배핀 만 내해' },
-          { lon: -60.00, lat: 65.00, label: '데이비스 해협' },
-          { lon: -50.00, lat: 60.00, label: '래브라도 해' },
-          { lon: -30.00, lat: 55.00, label: '대서양 중앙' },
-          { lon: -10.00, lat: 50.00, label: '영국 해협 서측' },
-          { lon: 0.00, lat: 51.00, label: '도버 해협' },
-          { lon: 4.50, lat: 51.90, label: '로테르담' }
+          { lon: 144.5, lat: 47.0, label: '오호츠크해' },
+          { lon: 151.3, lat: 46.5, label: '부솔 해협' },
+          { lon: 157.0, lat: 49.0, label: '캄차카 반도 우회' },
+          { lon: 164.0, lat: 57.0, label: '베링해 진입' },
+          { lon: 180.0, lat: 64.5, label: '날짜변경선' },
+          { lon: -168.8, lat: 66.0, label: '베링해협 통과' },
+          { lon: -165.0, lat: 69.0, label: '척치-보퍼트' },
+          { lon: -156.0, lat: 71.8, label: '포인트배로 우회' },
+          { lon: -140.0, lat: 72.0, label: '보퍼트해 연안 우회' },
+          { lon: -130.0, lat: 73.5, label: '보퍼트해 북상' },
+          { lon: -122.0, lat: 74.5, label: '매클루어 입구 우회' },
+          { lon: -115.0, lat: 74.5, label: '매클루어 관통' },
+          { lon: -105.0, lat: 74.5, label: '바이카운트멜빌 해협' },
+          { lon: -90.0, lat: 74.2, label: '랭커스터 해협' },
+          { lon: -75.0, lat: 73.0, label: '배핀 만 진입' },
+          { lon: -65.0, lat: 70.0, label: '배핀 만 내해' },
+          { lon: -60.0, lat: 65.0, label: '데이비스 해협' },
+          { lon: -50.0, lat: 60.0, label: '래브라도 해' },
+          { lon: -30.0, lat: 55.0, label: '대서양 중앙' },
+          { lon: -10.0, lat: 50.0, label: '영국 해협 서측' },
+          { lon: 0.0, lat: 51.0, label: '도버 해협' },
+          { lon: 4.5, lat: 51.9, label: '로테르담' },
         ],
-        TSR: [ // 북극횡단항로
-          { lon: 129.04, lat: 35.10, label: '부산항' },
-          { lon: 130.80, lat: 35.80, label: '대한해협 우회' },
+        TSR: [
+          // 북극횡단항로
+          { lon: 129.04, lat: 35.1, label: '부산항' },
+          { lon: 130.8, lat: 35.8, label: '대한해협 우회' },
           { lon: 141.93, lat: 45.65, label: '소야 해협 통과' },
-          { lon: 151.30, lat: 46.50, label: '부솔 해협' },
-          { lon: 164.00, lat: 57.00, label: '베링해 진입' },
-          { lon: 180.00, lat: 64.50, label: '날짜변경선' },
-          { lon: -168.8, lat: 66.00, label: '베링해협 통과' },
-          { lon: -168.0, lat: 70.00, label: '척치해 북방' },
-          { lon: 180.00, lat: 80.00, label: '북극해 심해' },
-          { lon: 0.00, lat: 89.90, label: '북극점 돌파' },
-          { lon: 10.00, lat: 80.00, label: '스발바르 북방' },
-          { lon: 10.00, lat: 70.00, label: '노르웨이해' },
-          { lon: 5.00, lat: 62.00, label: '북해' },
-          { lon: 4.50, lat: 51.90, label: '로테르담' }
-        ]
+          { lon: 151.3, lat: 46.5, label: '부솔 해협' },
+          { lon: 164.0, lat: 57.0, label: '베링해 진입' },
+          { lon: 180.0, lat: 64.5, label: '날짜변경선' },
+          { lon: -168.8, lat: 66.0, label: '베링해협 통과' },
+          { lon: -168.0, lat: 70.0, label: '척치해 북방' },
+          { lon: 180.0, lat: 80.0, label: '북극해 심해' },
+          { lon: 0.0, lat: 89.9, label: '북극점 돌파' },
+          { lon: 10.0, lat: 80.0, label: '스발바르 북방' },
+          { lon: 10.0, lat: 70.0, label: '노르웨이해' },
+          { lon: 5.0, lat: 62.0, label: '북해' },
+          { lon: 4.5, lat: 51.9, label: '로테르담' },
+        ],
       };
 
       let currentRouteKey = 'NSR';
@@ -1097,13 +1228,13 @@
               let safeMid = null;
 
               // 반경 30도(약 3300km)까지 필사적으로 스캔하여 무조건 얼음이 없는 곳을 찾아냄
-                for (let d = 2; d <= 60; d += 2) {
-                  // 안전을 위해 번갈아가며 남/북, 혹은 최적해 방향 검색
-                  for (let sign of [1, -1]) {
-                    let detourLon =
-                      mid.lon + Math.cos(hdg + Math.PI / 2) * d * sign; // 수직 법선 방향으로 밀어내기
-                    let detourLat =
-                      mid.lat + Math.sin(hdg + Math.PI / 2) * d * sign;
+              for (let d = 2; d <= 60; d += 2) {
+                // 안전을 위해 번갈아가며 남/북, 혹은 최적해 방향 검색
+                for (let sign of [1, -1]) {
+                  let detourLon =
+                    mid.lon + Math.cos(hdg + Math.PI / 2) * d * sign; // 수직 법선 방향으로 밀어내기
+                  let detourLat =
+                    mid.lat + Math.sin(hdg + Math.PI / 2) * d * sign;
                   detourLat = Math.max(40, Math.min(89.5, detourLat)); // 너무 남/북으로 튀지 않게 보정
 
                   // 찾아낸 우회지의 농도 재검사
@@ -1238,7 +1369,7 @@
         const s1 = Math.sin((1 - t) * om) / Math.sin(om),
           s2 = Math.sin(t * om) / Math.sin(om);
         const x = s1 * x1 + s2 * x2,
-          y = s1 * y1 + s2 * z2,
+          y = s1 * y1 + s2 * y2,
           z = s1 * z1 + s2 * z2;
         return {
           lon: Math.atan2(y, x) / R,
@@ -1262,7 +1393,8 @@
       function routeHeading(p) {
         const a = routePos(p),
           b = routePos(Math.min(1, p + 0.0005));
-        return Math.atan2(b.lon - a.lon, b.lat - a.lat);
+        const cosLat = Math.cos((a.lat * Math.PI) / 180);
+        return Math.atan2((b.lon - a.lon) * cosLat, b.lat - a.lat);
       }
 
       // 위경도-미터 변환 상수 (적도 기준)
@@ -1280,8 +1412,10 @@
           METERS_PER_DEGREE_LON_AT_EQUATOR * Math.cos(latRad);
 
         // Three.js 엔진의 좌표를 위경도에 직접 투영하여 시각적 스케일 증폭
-        const currentLat = manualBaseLat - (shipPos.z * 1.5) / METERS_PER_DEGREE_LAT;
-        const currentLon = manualBaseLon + (shipPos.x * 1.5) / metersPerDegreeLon;
+        const currentLat =
+          manualBaseLat - (shipPos.z * 1.5) / METERS_PER_DEGREE_LAT;
+        const currentLon =
+          manualBaseLon + (shipPos.x * 1.5) / metersPerDegreeLon;
         if (!isManual) return routePos(simProgress);
         return {
           lon: currentLon,
@@ -1822,25 +1956,66 @@
           });
 
           // //* [외부 API WMS 실시간 연동 (시각화 계층)]
+          window.apiLayers = {};
+
           // 1. GEBCO 수심 데이터 (베이스맵 적용)
-          cViewer.imageryLayers.addImageryProvider(
+          window.apiLayers.gebco = cViewer.imageryLayers.addImageryProvider(
             new Cesium.WebMapServiceImageryProvider({
               url: 'https://www.gebco.net/data_and_products/gebco_web_services/web_map_service/mapserv',
               layers: 'GEBCO_LATEST',
               parameters: { transparent: 'true', format: 'image/png' },
             }),
           );
+          window.apiLayers.gebco.show = false; // 기본 OFF (UI 체크박스로 On)
 
-          // 2. NSIDC (해빙 농도/경계선), Copernicus(해빙 예측), Sentinel(SAR 영상) 등은 실제 API Key 발급 환경 기준으로 주입
-          // (해빙 데이터는 Proxy 백엔드를 통한 GeoJSON 기반의 arcticPathfinder 알고리즘과 투트랙으로 회피 기동에 맵핑될 예정)
-          /*
-    cViewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
-      url: 'https://nsidc.org/api/mapservices/NSIDC/wms', layers: 'nsidc_sea_ice_concentration', parameters: { transparent: 'true', format: 'image/png' }
-    }));
-    cViewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
-      url: 'https://my.cmems-du.eu/thredds/wms/cmems_mod_arc_phy_anfc_nextstrike_P1D-m', layers: 'sithick', parameters: { transparent: 'true', format: 'image/png' }
-    }));
-    */
+          // 2. NSIDC (해빙 농도) — NASA GIBS AMSRU2 해빙 농도 25km
+          window.apiLayers.nsidcConc = cViewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapServiceImageryProvider({
+              url: '/nsidc-proxy/',
+              layers: 'AMSRU2_Sea_Ice_Concentration_25km',
+              parameters: { transparent: 'true', format: 'image/png' },
+            }),
+          );
+          window.apiLayers.nsidcConc.show = false;
+          window.apiLayers.nsidcConc.alpha = 0.65; // 히트맵 반투명율
+
+          // 3. Copernicus (해빙 두께 예측) — Copernicus Marine Service WMTS (sithick)
+          window.apiLayers.copThick = cViewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapTileServiceImageryProvider({
+              url: '/cop-proxy/',
+              layer: 'ARCTIC_ANALYSISFORECAST_PHY_002_001/cmems_mod_arc_phy_anfc_6km_detided_P1D-m_202311/sithick',
+              style: 'cmap:ice',
+              format: 'image/png',
+              tileMatrixSetID: 'EPSG:4326',
+              tileWidth: 256,
+              tileHeight: 256,
+              tilingScheme: new Cesium.GeographicTilingScheme(),
+            }),
+          );
+          window.apiLayers.copThick.show = false;
+          window.apiLayers.copThick.alpha = 0.65;
+
+          // 4. NSIDC (해빙 경계선 Today) — NASA GIBS AMSRU2 밝기온도 (해빙 경계 가시화)
+          window.apiLayers.nsidcEdge = cViewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapServiceImageryProvider({
+              url: '/nsidc-proxy/',
+              layers: 'AMSRU2_Sea_Ice_Brightness_Temp_6km_89H',
+              parameters: { transparent: 'true', format: 'image/png' },
+            }),
+          );
+          window.apiLayers.nsidcEdge.show = false;
+
+          // 5. ESA Sentinel-1 (가상 SAR 영상망) [인증 연동 완료]
+          window.apiLayers.esaSar = cViewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapServiceImageryProvider({
+              url: 'https://sh.dataspace.copernicus.eu/ogc/wms/710b2915-4bc6-4fd8-b204-7ee69682da3f',
+              layers: 'SENTINEL-1-GRD-EW',
+              tileWidth: 512,
+              tileHeight: 512,
+              parameters: { transparent: 'true', format: 'image/png' },
+            }),
+          );
+          window.apiLayers.esaSar.show = false;
 
           applyRouteSelection(); // 초기 3대 항로 라인 및 마커 로드
 
@@ -2592,9 +2767,7 @@
         }
 
         // 수동 운전 시 multiplier를 속도에 직접 작용하여 쾌속 체감
-        const speedMultiplier = multiplier / 2; // 1000x가 500배속으로 바로 입력됨
-        const baseAccel = 0.05; // 기본 가속력
-        const baseTurnRate = 0.005; // 기본 선회율
+        const speedMultiplier = multiplier / 2; // 1000x가 500배속으로 적용
 
         if (keys['KeyW'] || keys['ArrowUp']) shipThrottle = 1;
         else if (keys['KeyS'] || keys['ArrowDown']) shipThrottle = -0.3;
@@ -2606,16 +2779,18 @@
             : keys['KeyD'] || keys['ArrowRight']
               ? 1.2
               : 0;
-        shipTurnRate +=
-          (turnTarget - shipTurnRate) * turnLerp * speedMultiplier; // 선회력에 multiplier 적용
+
+        // Lerp 계수에 직접 배수를 곱하면 1을 초과하여 발산(NaN)하므로 제거
+        shipTurnRate += (turnTarget - shipTurnRate) * turnLerp;
 
         const maxSpd = shift ? maxSpeedBase * 2.5 : maxSpeedBase;
-        shipSpeed +=
-          (shipThrottle * maxSpd - shipSpeed) * speedLerp * speedMultiplier; // 속도에 multiplier 직접 적용
+        shipSpeed += (shipThrottle * maxSpd - shipSpeed) * speedLerp;
 
-        shipHeading += shipTurnRate * dt;
-        shipPos.x += Math.sin(shipHeading) * shipSpeed * dt;
-        shipPos.z -= Math.cos(shipHeading) * shipSpeed * dt;
+        // 적분(이동량)에만 배수(speedMultiplier)를 적용하여 안정적으로 시각적 폭발 가속 달성
+        shipHeading += shipTurnRate * dt * speedMultiplier;
+        shipPos.x += Math.sin(shipHeading) * shipSpeed * dt * speedMultiplier;
+        shipPos.z -= Math.cos(shipHeading) * shipSpeed * dt * speedMultiplier;
+
         shipGroup3.position.copy(shipPos);
         shipGroup3.rotation.y = shipHeading;
         camRollTarget = -shipTurnRate * 0.06;
@@ -3123,6 +3298,16 @@
           }
         }
 
+        // 타임라인 슬라이더 동기화
+        if (!window.isScrubbingTimeline) {
+          const slider = document.getElementById('timeline-slider');
+          if (slider) {
+            slider.value = (simProgress * 14).toFixed(3);
+            const d = Math.floor(simProgress * 14);
+            document.getElementById('timeline-label').innerText = 'Day ' + d;
+          }
+        }
+
         const pos = routePos(simProgress);
         updateHUD(pos);
         if (CESIUM_MODES.has(currentMode)) updateCesiumCamera(pos);
@@ -3218,6 +3403,64 @@
 
       // 항로 변경 셀렉트 동작 이벤트
       const specRouteCombo = document.getElementById('spec-route');
+
+      // 5 API Layer Switching Event Listeners
+      const apiToggles = [
+        { id: 'layer-nsidc-conc', key: 'nsidcConc' },
+        { id: 'layer-cop-thick', key: 'copThick' },
+        { id: 'layer-nsidc-edge', key: 'nsidcEdge' },
+        { id: 'layer-esa-sar', key: 'esaSar' },
+        { id: 'layer-gebco-bathy', key: 'gebco' },
+      ];
+      apiToggles.forEach((t) => {
+        const el = document.getElementById(t.id);
+        if (el) {
+          el.addEventListener('change', (e) => {
+            if (window.apiLayers && window.apiLayers[t.key]) {
+              window.apiLayers[t.key].show = e.target.checked;
+            }
+          });
+        }
+      });
+
+      // Timeline Slider Event Listeners
+      window.isScrubbingTimeline = false;
+      const tSlider = document.getElementById('timeline-slider');
+      if (tSlider) {
+        tSlider.addEventListener('input', (e) => {
+          if (isManual) return; // 수동 모드 중일때는 간섭 방지
+          window.isScrubbingTimeline = true;
+          const day = parseFloat(e.target.value);
+          document.getElementById('timeline-label').innerText =
+            'Day ' + Math.floor(day);
+
+          simProgress = day / 14.0;
+          simElapsed = simProgress * TOTAL_SECONDS;
+
+          // 스크러빙 중 화면 즉시 업데이트
+          const pos = routePos(simProgress);
+          updateHUD(pos);
+          if (CESIUM_MODES.has(currentMode) && cViewer) {
+            updateCesiumCamera(pos);
+          }
+          if (window.syncIceDataForTimeline) window.syncIceDataForTimeline(day);
+        });
+
+        tSlider.addEventListener('change', () => {
+          window.isScrubbingTimeline = false;
+          // 스크러빙 마우스에서 뗄 때 최종 UI 갱신 등
+          applyRouteSelection();
+        });
+      }
+
+      // 타임라인 연환 실시간 API Fetch 스터브 함수
+      window.syncIceDataForTimeline = function (day) {
+        // 추후 Node.js 백엔드 프록시와 연결하여,
+        // day 단위 예측(Prediction) 시계열 데이터를 GeoJSON 등으로 요청하여 갱신할 예정
+        console.log(
+          `[Timeline] Day ${day.toFixed(1)} Prediction Data Requested...`,
+        );
+      };
       if (specRouteCombo) {
         specRouteCombo.addEventListener('change', () => {
           applyRouteSelection();
