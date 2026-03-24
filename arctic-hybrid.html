@@ -1001,6 +1001,34 @@
           >GEBCO 해저 수심도</label
         >
       </div>
+      <div
+        class="hud-row"
+        style="justify-content: flex-start; gap: 8px; margin: 6px 0"
+      >
+        <input
+          type="checkbox"
+          id="layer-s2-true"
+          class="api-cb"
+          style="accent-color: #34d399"
+        />
+        <label for="layer-s2-true" class="hud-label" style="cursor: pointer"
+          >Sentinel-2 자연색</label
+        >
+      </div>
+      <div
+        class="hud-row"
+        style="justify-content: flex-start; gap: 8px; margin: 6px 0"
+      >
+        <input
+          type="checkbox"
+          id="layer-s2-ndsi"
+          class="api-cb"
+          style="accent-color: #34d399"
+        />
+        <label for="layer-s2-ndsi" class="hud-label" style="cursor: pointer"
+          >Sentinel-2 NDSI (해빙 탐지)</label
+        >
+      </div>
     </div>
 
     <!-- 하단 컨트롤 (운항 및 타임라인) -->
@@ -2016,6 +2044,32 @@
             }),
           );
           window.apiLayers.esaSar.show = false;
+
+          // 6. Sentinel-2 True Color (자연색 광학 위성영상) [Sentinel Hub]
+          window.apiLayers.s2TrueColor = cViewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapServiceImageryProvider({
+              url: 'https://sh.dataspace.copernicus.eu/ogc/wms/710b2915-4bc6-4fd8-b204-7ee69682da3f',
+              layers: 'TRUE-COLOR',
+              tileWidth: 512,
+              tileHeight: 512,
+              parameters: { transparent: 'true', format: 'image/png' },
+            }),
+          );
+          window.apiLayers.s2TrueColor.show = false;
+          window.apiLayers.s2TrueColor.alpha = 0.85;
+
+          // 7. Sentinel-2 NDSI (해빙 탐지 지수) [Sentinel Hub]
+          window.apiLayers.s2Ndsi = cViewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapServiceImageryProvider({
+              url: 'https://sh.dataspace.copernicus.eu/ogc/wms/710b2915-4bc6-4fd8-b204-7ee69682da3f',
+              layers: 'NDSI',
+              tileWidth: 512,
+              tileHeight: 512,
+              parameters: { transparent: 'true', format: 'image/png' },
+            }),
+          );
+          window.apiLayers.s2Ndsi.show = false;
+          window.apiLayers.s2Ndsi.alpha = 0.75;
 
           applyRouteSelection(); // 초기 3대 항로 라인 및 마커 로드
 
@@ -3411,6 +3465,8 @@
         { id: 'layer-nsidc-edge', key: 'nsidcEdge' },
         { id: 'layer-esa-sar', key: 'esaSar' },
         { id: 'layer-gebco-bathy', key: 'gebco' },
+        { id: 'layer-s2-true', key: 's2TrueColor' },
+        { id: 'layer-s2-ndsi', key: 's2Ndsi' },
       ];
       apiToggles.forEach((t) => {
         const el = document.getElementById(t.id);
