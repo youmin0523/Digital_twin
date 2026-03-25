@@ -1482,7 +1482,7 @@
       <button class="ctrl-btn" id="btn-reset">↺ 리셋</button>
       <span class="hud-label" style="margin-left: 10px">배속</span>
       <input type="range" id="speed-slider" min="50" max="5000" step="50" value="1000" style="flex: 1" />
-      <span class="hud-value" id="speed-label" style="min-width: 45px">×1000</span>
+      <span class="hud-value" id="speed-label" style="min-width: 45px">×50</span>
     </div>
     <div
       style="display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 8px; border-top: 1px solid rgba(147, 197, 253, 0.2); padding-top: 8px;">
@@ -3595,18 +3595,15 @@
       const skyMat = new THREE.ShaderMaterial({
         side: THREE.BackSide,
         depthWrite: false,
-        transparent: true,
         uniforms: {
           skyTop: { value: new THREE.Color(0x3a6080) },
           skyMid: { value: new THREE.Color(0x6a9ab8) },
           skyHorizon: { value: new THREE.Color(0x8ab0c8) },
         },
         vertexShader: `varying float vH;void main(){vH=position.y;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
-        // //* [Modified Code] 거대한 폴리곤에서 발생하는 smoothstep 블렌딩 아티팩트(글리치)를 'if(vH<0.0) discard;' 하드 클리핑으로 변경하여 완벽한 수평선 절단을 구현함
         fragmentShader: `varying float vH;uniform vec3 skyTop,skyMid,skyHorizon;void main(){if(vH<0.0) discard; float t1=clamp(vH/400000.0,0.0,1.0);float t2=clamp(vH/80000.0,0.0,1.0);vec3 c=mix(skyHorizon,skyMid,t2);gl_FragColor=vec4(mix(c,skyTop,t1*t1),1.0);}`
       });
-      const skyMesh = new THREE.Mesh(skyGeo, skyMat);
-      tScene.add(skyMesh);
+      tScene.add(new THREE.Mesh(skyGeo, skyMat));
     }
 
     function buildLighting() {
@@ -3637,9 +3634,8 @@
           color: 0x0a2a3f,
           specular: 0x4a8aaa,
           shininess: 80,
-          transparent: true,
-          // //* [Modified Code] 하단의 실시간 위성/기상 API(Cesium)가 선명하게 투영되도록 waveMesh의 투명도를 크게 높여 3D 파도와 데이터가 시각적으로 합성되도록 개선
-          opacity: 0.40,
+          transparent: false,
+          opacity: 1.0,
         }),
       );
       waveMesh.receiveShadow = true;
@@ -3664,12 +3660,13 @@
       waveGeo.computeVertexNormals();
     }
 
+    // h 범위 축소: 실제 빙산 h/w ≈ 1:5~1:15. 기존 large.h=[80,250]이 송곳 실루엣의 근원
     const ICE_TYPES = [
-      { name: 'tabular', prob: .05, w: [400, 1000], d: [300, 800], h: [20, 45], subRatio: 4 },
-      { name: 'large', prob: .10, w: [300, 1200], d: [250, 1000], h: [80, 250], subRatio: 8 },
-      { name: 'medium', prob: .30, w: [60, 300], d: [50, 250], h: [25, 80], subRatio: 7 },
-      { name: 'small', prob: .35, w: [15, 60], d: [12, 50], h: [8, 25], subRatio: 6 },
-      { name: 'growler', prob: .20, w: [3, 15], d: [2, 12], h: [1, 5], subRatio: 5 },
+      { name: 'tabular', prob: .08, w: [400,  900], d: [350,  800], h: [120, 250], subRatio: 5 },
+      { name: 'large',   prob: .12, w: [200,  500], d: [180,  450], h: [400, 800], subRatio: 6 },
+      { name: 'medium',  prob: .30, w: [ 80,  200], d: [ 70,  180], h: [180, 400], subRatio: 7 },
+      { name: 'small',   prob: .35, w: [ 25,   80], d: [ 22,   70], h: [ 60, 160], subRatio: 5 },
+      { name: 'growler', prob: .15, w: [  6,   25], d: [  5,   22], h: [ 15,  50], subRatio: 4 },
     ];
     const MAX_LOCAL_ICEBERGS = 180;
 
@@ -3682,46 +3679,98 @@
       return ICE_TYPES[ICE_TYPES.length - 1];
     }
     function buildIcebergs() {
-      const closeRanges = [50, 80, 120, 200, 280, 350, 450, 500];
-      for (const dist of closeRanges) {
-        const angle = Math.PI / 3 + Math.random() * ((Math.PI * 4) / 3);
-        spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, ICE_TYPES[3]);
+      // 재호출 시 유령 잔존 방지: scene + 배열 동시 정리
+      for (const ice of tIcebergs) {
+        if (ice.grp.parent) ice.grp.parent.remove(ice.grp);
       }
-      for (let i = 0; i < 60; i++) {
+      tIcebergs.length = 0;
+      // 근거리: small/medium만 — 큰 빙산이 근거리에 있으면 카메라가 뚫고 지나가 어색함
+      const closeRanges = [60, 100, 155, 220, 310, 420];
+      for (const dist of closeRanges) {
+        const angle     = Math.PI / 3 + Math.random() * ((Math.PI * 4) / 3);
+        const closeType = dist < 180 ? ICE_TYPES[3] : ICE_TYPES[2];
+        spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, closeType);
+      }
+      // 중거리: 전 타입 혼합
+      for (let i = 0; i < 55; i++) {
         const angle = Math.random() * Math.PI * 2, dist = rng(500, 5000);
         spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, pickType());
       }
-      for (let i = 0; i < 110; i++) {
-        const angle = Math.random() * Math.PI * 2, dist = rng(5000, 90000);
-        spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, pickType());
+      // 원거리: tabular/large 45% 우선 — 넓고 낮은 수평 실루엣으로 원거리 송곳 방지
+      for (let i = 0; i < 90; i++) {
+        const angle   = Math.random() * Math.PI * 2, dist = rng(5000, 90000);
+        const farType = Math.random() < 0.45
+          ? (Math.random() < 0.40 ? ICE_TYPES[0] : ICE_TYPES[1])
+          : pickType();
+        spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, farType);
       }
     }
 
     // Map 농도와 1인칭 Three.js 카메라 주변 빙산 개수를 동기화하는 함수
     function syncThreeIcebergs(conc) {
-      // 빙하 농도(0~1)에 따라 주변 얼음 개수 활성화 조절
       const activeCount = Math.floor(conc * MAX_LOCAL_ICEBERGS);
+
+      // cachedIceData가 있으면 concentration >= 0.3 셀만 추출 (재배치 후보)
+      const metersPerDeg = 111320;
+      const iceCells = (cachedIceData && cachedIceData.cells)
+        ? cachedIceData.cells.filter(c => c.concentration >= 0.3)
+        : null;
+
+      // 현재 배 위치 (위경도)
+      const shipGeo = routePos ? routePos(simProgress) : null;
+      const shipLat = shipGeo ? shipGeo.lat : shipState.lat;
+      const shipLon = shipGeo ? shipGeo.lon : shipState.lon;
+      const cosLat  = Math.cos(shipLat * Math.PI / 180);
+
       for (let i = 0; i < tIcebergs.length; i++) {
-        // 0~activeCount 까지만 보이게 표시
         const ice = tIcebergs[i];
         ice.grp.visible = i < activeCount;
 
-        // 플레이어가 전진하며 새로운 얼음을 볼 수 있도록
-        // 배 뒤쪽으로 한참 멀어진 빙산을 앞쪽으로 재배치(Infinite Loop)
         if (ice.grp.visible && shipPos) {
           const dx = ice.cx - shipPos.x;
           const dz = ice.cz - shipPos.z;
           const dotFwd =
             dx * Math.sin(routeHeading(simProgress)) +
             -dz * Math.cos(routeHeading(simProgress));
-          // 선박 기점 3000m 뒤로 떨어지면 4000m 앞으로 스폰
-          if (dotFwd < -3000 || Math.sqrt(dx * dx + dz * dz) > 10000) {
-            let angle = (Math.random() - 0.5) * Math.PI * 0.8;
-            let h = routeHeading(simProgress) + angle;
-            let spawnDist = rng(3000, 8000);
-            ice.cx = shipPos.x + Math.sin(h) * spawnDist;
-            ice.cz = shipPos.z - Math.cos(h) * spawnDist;
-            ice.grp.position.set(ice.cx, 0, ice.cz);
+
+          if (dotFwd < -8000 || Math.sqrt(dx * dx + dz * dz) > 25000) {
+            if (iceCells && iceCells.length > 0) {
+              // 실제 해빙 농도 셀 기반 재배치
+              // concentration을 가중치로 써서 농도 높은 셀이 더 자주 선택되게
+              let placed = false;
+              for (let attempt = 0; attempt < 12; attempt++) {
+                const cell = iceCells[Math.floor(Math.random() * iceCells.length)];
+                // 셀 위경도 → Three.js XZ
+                const cx = (cell.lon - shipLon) * metersPerDeg * cosLat;
+                const cz = -(cell.lat - shipLat) * metersPerDeg;
+                // 배에서 너무 가까운 셀 스킵
+                const distToShip = Math.sqrt(cx * cx + cz * cz);
+                if (distToShip < 500) continue;
+                // ±2000m 랜덤 오프셋 (격자형 방지)
+                ice.cx = shipPos.x + cx + (Math.random() - 0.5) * 4000;
+                ice.cz = shipPos.z + cz + (Math.random() - 0.5) * 4000;
+                ice.grp.position.set(ice.cx, 0, ice.cz);
+                placed = true;
+                break;
+              }
+              if (!placed) {
+                // 12번 시도 후 실패 시 폴백: 전방 랜덤 배치
+                const angle = (Math.random() - 0.5) * Math.PI * 0.8;
+                const h = routeHeading(simProgress) + angle;
+                const spawnDist = rng(8000, 20000);
+                ice.cx = shipPos.x + Math.sin(h) * spawnDist;
+                ice.cz = shipPos.z - Math.cos(h) * spawnDist;
+                ice.grp.position.set(ice.cx, 0, ice.cz);
+              }
+            } else {
+              // cachedIceData 없음 — 기존 랜덤 방식 유지
+              const angle = (Math.random() - 0.5) * Math.PI * 0.8;
+              const h = routeHeading(simProgress) + angle;
+              const spawnDist = rng(8000, 20000);
+              ice.cx = shipPos.x + Math.sin(h) * spawnDist;
+              ice.cz = shipPos.z - Math.cos(h) * spawnDist;
+              ice.grp.position.set(ice.cx, 0, ice.cz);
+            }
           }
         }
       }
@@ -3729,73 +3778,43 @@
 
     // ─── 빙산 형태 생성 ─────────────────────────────────────────────────────
     function makeIceGeo(type, w, h, d) {
-      if (type === 'tabular') {
-        const g = new THREE.CylinderGeometry(w * 0.48, w * 0.52, h, 16, 3);
-        const p = g.attributes.position;
-        for (let i = 0; i < p.count; i++) {
-          const y = p.getY(i);
-          const a = Math.atan2(p.getZ(i), p.getX(i));
-          const n = 1 + Math.sin(a * 4) * 0.07 + (Math.random() - 0.5) * 0.05;
-          p.setX(i, p.getX(i) * n);
-          p.setZ(i, p.getZ(i) * n * (d / w));
-          if (y > h * 0.3) {
-            p.setX(i, p.getX(i) * 0.92);
-            p.setZ(i, p.getZ(i) * 0.92);
-          }
-        }
-        p.needsUpdate = true;
-        g.computeVertexNormals();
-        return g;
-      }
-      if (type === 'large') {
-        const g = new THREE.ConeGeometry(w * 0.5, h, 9, 5);
-        const p = g.attributes.position;
-        for (let i = 0; i < p.count; i++) {
-          const a = Math.atan2(p.getZ(i), p.getX(i));
-          const n = 1 + Math.sin(a * 3) * 0.12 + Math.sin(a * 7) * 0.06 + (Math.random() - 0.5) * 0.08;
-          p.setX(i, p.getX(i) * n);
-          p.setZ(i, p.getZ(i) * n * (d / w));
-          p.setY(i, p.getY(i) + (Math.random() - 0.5) * h * 0.03);
-        }
-        p.needsUpdate = true;
-        g.computeVertexNormals();
-        return g;
-      }
-      // medium / small / growler
-      const segs = type === 'growler' ? 6 : 8;
-      const g = new THREE.SphereGeometry(1, segs, segs - 1);
+      const segs = type === 'growler' ? 6 : 9;
+      const layers = type === 'tabular' ? 2 : 5;
+      const g = new THREE.ConeGeometry(w * 0.52, h, segs, layers);
       const p = g.attributes.position;
+
+      const xzAmp = Math.min(w * 0.22, 25);
+      const yAmp  = Math.min(h * 0.18, 25);
+
       for (let i = 0; i < p.count; i++) {
         const y = p.getY(i);
-        const n = 0.7 + Math.random() * 0.6;
-        p.setX(i, p.getX(i) * w * 0.5 * n);
-        p.setY(i, y > 0
-          ? y * h * (0.85 + Math.random() * 0.3)
-          : y * h * (type === 'growler' ? 0.15 : 0.4));
-        p.setZ(i, p.getZ(i) * d * 0.5 * n);
+        const t = Math.max(0, Math.min(1, (y / h) + 0.5));
+        const bulge = Math.sin(t * Math.PI) * 0.8 + 0.2;
+        const xzNoise = 1 + (Math.random() - 0.5) * (xzAmp / w) * bulge;
+        p.setX(i, p.getX(i) * xzNoise * (d / w));
+        p.setZ(i, p.getZ(i) * xzNoise);
+        const yNoise = 1 + (Math.random() - 0.5) * (yAmp / h) * bulge;
+        p.setY(i, y * yNoise);
       }
       p.needsUpdate = true;
       g.computeVertexNormals();
       return g;
     }
 
-    function setIceColors(geo, h) {
-      const pos = geo.attributes.position;
-      const col = new Float32Array(pos.count * 3);
-      for (let i = 0; i < pos.count; i++) {
-        const t = Math.max(0, Math.min(1, (pos.getY(i) + h * 0.1) / (h * 1.1)));
-        col[i * 3] = 0.12 + t * 0.78;
-        col[i * 3 + 1] = 0.25 + t * 0.68;
-        col[i * 3 + 2] = 0.42 + t * 0.56;
-      }
-      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    }
-
-    const _iceMat = new THREE.MeshLambertMaterial({
-      vertexColors: true, side: THREE.FrontSide,
+    // MeshBasicMaterial: 조명/그림자 완전 제거 — 흰색 고정
+    const _iceMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    // 수중부도 동일하게 BasicMaterial (반투명 파란색)
+    const _subMat = new THREE.MeshBasicMaterial({
+      color: 0x224466, transparent: true, opacity: 0.25, depthWrite: false,
     });
-    const _subMat = new THREE.MeshLambertMaterial({
-      color: 0x0d2535, transparent: true, opacity: 0.18, depthWrite: false,
+    // 수면 접점 공유 재질 (spawnIceberg에서 사용)
+    const _discMat = new THREE.MeshBasicMaterial({
+      color: 0x07141e, transparent: true, opacity: 0.22,
+      depthWrite: false, side: THREE.DoubleSide,
+    });
+    const _ringMat = new THREE.MeshBasicMaterial({
+      color: 0xbad4e4, transparent: true, opacity: 0.28,
+      depthWrite: false, side: THREE.DoubleSide,
     });
 
     function placeOnWater(mesh, x, z) {
@@ -3804,46 +3823,50 @@
       mesh.position.y = -box.min.y;
     }
 
-    function addRing(x, z, r) {
-      const geo = new THREE.RingGeometry(r * 0.9, r * 1.05, 16);
-      const ring = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-        color: 0xaaccdd, transparent: true, opacity: 0.2, side: THREE.DoubleSide,
-      }));
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.set(x, 0.3, z);
-      tScene.add(ring);
-    }
+    // addRing은 spawnIceberg 내부로 통합 (기존에 정의만 되고 미호출이었음)
+    function addRing(x, z, r) { /* 통합됨 */ }
 
     function spawnIceberg(ox, oz, type) {
-      const w = rng(type.w[0], type.w[1]);
-      const h = rng(type.h[0], type.h[1]);
-      const d = rng(type.d[0], type.d[1]);
+      const w  = rng(type.w[0], type.w[1]);
+      const h  = rng(type.h[0], type.h[1]);
+      const d  = rng(type.d[0], type.d[1]);
       const bR = Math.max(Math.max(w, d) * 0.45, 3);
 
-      // 수면 위
-      const geo = makeIceGeo(type.name, w, h, d);
-      setIceColors(geo, h);
-      const mesh = new THREE.Mesh(geo, _iceMat.clone());
-      mesh.castShadow = true;
+      // ── 수면 위 메시 (MeshBasicMaterial — 조명/그림자 없음)
+      const geo  = makeIceGeo(type.name, w, h, d);
+      const mesh = new THREE.Mesh(geo, _iceMat);
       mesh.rotation.y = Math.random() * Math.PI * 2;
       if (type.name !== 'tabular') {
-        mesh.rotation.z = (Math.random() - 0.5) * 0.15;
-        mesh.rotation.x = (Math.random() - 0.5) * 0.10;
+        // 기존 ±0.15/±0.10 → ±0.07/±0.05: 과도한 기울기가 측면 노출 늘려 송곳 느낌 악화
+        mesh.rotation.z = (Math.random() - 0.5) * 0.07;
+        mesh.rotation.x = (Math.random() - 0.5) * 0.05;
       }
       placeOnWater(mesh, ox, oz);
 
-      // 수중
-      const subH = h * type.subRatio;
-      const subGeo = makeIceGeo(type.name, w * 0.85, subH, d * 0.85);
-      const subMesh = new THREE.Mesh(subGeo, _subMat.clone());
-      subMesh.rotation.y = mesh.rotation.y;
-      subMesh.position.set(ox, -subH * 0.1, oz);
-
       const grp = new THREE.Group();
       grp.add(mesh);
-      grp.add(subMesh);
-      tScene.add(grp);
 
+      // ── 수면 접점 레이어: "물에 떠 있다"는 느낌
+      // grp에 추가해야 syncThreeIcebergs 재배치 시 같이 이동
+      // growler/tiny small(w≤40)은 생략해 드로우콜 절약
+      if (w > 40) {
+        const rr = Math.max(w, d) * 0.50;
+        // 어두운 disc: 빙산 밑동의 수면 그림자
+        const disc = new THREE.Mesh(new THREE.CircleGeometry(rr * 0.90, 16), _discMat);
+        disc.rotation.x = -Math.PI / 2;
+        disc.position.set(ox, 0.1, oz);
+        grp.add(disc);
+        // foam ring: 빙산-수면 접점 거품
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(rr * 0.93, rr * 1.09, type.name === 'tabular' ? 20 : 14),
+          _ringMat
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(ox, 0.3, oz);
+        grp.add(ring);
+      }
+
+      tScene.add(grp);
       tIcebergs.push({ grp, ox, oz, cx: ox, cz: oz, r: bR });
     }
 
@@ -4082,7 +4105,8 @@
       const sx = shipGroup3.position.x, sz = shipGroup3.position.z;
       let minD2 = Infinity;
       for (const ice of tIcebergs) {
-        if (!ice.grp.visible) continue;
+        // grp.parent 확인: scene에서 분리된 객체 무시 (유령 충돌 방지)
+        if (!ice.grp.visible || !ice.grp.parent) continue;
         const dx = sx - ice.cx, dz = sz - ice.cz;
         const d2 = dx * dx + dz * dz;
         if (d2 < minD2) minD2 = d2;
@@ -4267,7 +4291,8 @@
       const SHIP_R = 20;
       let minD2 = Infinity;
       for (const ice of tIcebergs) {
-        if (!ice.grp.visible) continue;
+        // grp.parent 확인: scene에서 분리된 객체 무시 (유령 충돌 방지)
+        if (!ice.grp.visible || !ice.grp.parent) continue;
         const dx = shipPos.x - ice.cx,
           dz = shipPos.z - ice.cz;
         const d2 = dx * dx + dz * dz;
@@ -4553,6 +4578,9 @@
       const sx = shipPos.x,
         sz = shipPos.z; // 자동/수동 모두 shipPos 기준
       for (const ice of tIcebergs) {
+        // 유령 충돌 방지: invisible 빙산은 cx/cz 업데이트 건너뜀
+        // (이전에는 invisible 상태에서도 cx/cz가 바뀌어 나중에 visible될 때 엉뚱한 위치에서 즉시 충돌)
+        if (!ice.grp.visible) continue;
         const dx = ice.cx - sx,
           dz = ice.cz - sz,
           dist = Math.sqrt(dx * dx + dz * dz);
