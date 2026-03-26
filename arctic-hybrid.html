@@ -994,6 +994,29 @@
     <div class="hud-row">
       <span class="hud-label">해역 상태</span><span class="hud-value" id="hud-sealabel">—</span>
     </div>
+    <div style="border-top: 1px solid rgba(30, 64, 175, 0.4); margin: 6px 0"></div>
+    <div class="hud-row">
+      <span class="hud-label">빙하 데이터</span>
+      <select id="ice-month-select" style="background:rgba(0,0,0,0.5);color:#fff;border:1px solid rgba(100,180,255,0.4);border-radius:4px;padding:1px 4px;font-size:11px;cursor:pointer;">
+        <optgroup label="Live">
+          <option value="live">LIVE (최신)</option>
+        </optgroup>
+        <optgroup label="2023 Archive">
+          <option value="2023-01">2023-01</option><option value="2023-02">2023-02</option>
+          <option value="2023-03">2023-03 (최대)</option><option value="2023-04">2023-04</option>
+          <option value="2023-05">2023-05</option><option value="2023-06">2023-06</option>
+          <option value="2023-07">2023-07</option><option value="2023-08">2023-08</option>
+          <option value="2023-09">2023-09 (최소)</option><option value="2023-10">2023-10</option>
+          <option value="2023-11">2023-11</option><option value="2023-12">2023-12</option>
+        </optgroup>
+      </select>
+    </div>
+    <div class="hud-row">
+      <span class="hud-label">데이터</span><span class="hud-value" id="hud-datasource" style="color:#eab308;">절차적 폴백</span>
+    </div>
+    <div class="hud-row" id="hud-berg-alert" style="display:none;">
+      <span class="hud-value" style="color:#ff6b6b;font-size:10px;white-space:normal;line-height:1.3;" id="hud-berg-text"></span>
+    </div>
   </div>
 
   <!-- 카메라 패널 -->
@@ -1766,7 +1789,7 @@
 
     // ─── deck.gl 정적 데이터 생성 ────────────────────────────────────
     // 해빙 히트맵 포인트 (북극 해역 격자)
-    const ICE_DATA = (() => {
+    let ICE_DATA = (() => {
       const pts = [];
       const rng = (a, b) => a + Math.random() * (b - a);
       // NSR / 북극해 해빙 밀집 구역 중심부 격자
@@ -1788,7 +1811,7 @@
     })();
 
     // 빙산 산포 포인트
-    const BERG_DATA = (() => {
+    let BERG_DATA = (() => {
       const bergs = [];
       const rng = (a, b) => a + Math.random() * (b - a);
       const regions = [
@@ -2733,37 +2756,258 @@
     let userInteracting = false,
       interactTimer = null;
 
-    // ─── 실제 빙하 농도 데이터 ───────────────────────────────────────────────────────
+    // ─── 해빙 데이터 (3단계 폴백: Copernicus LIVE → 로컬 월별 → 절차적) ─────
     let cachedIceData = null;
-    let cachedIceMonth = -1;
+    let cachedIceKey = '';          // 현재 로드된 데이터의 키 ('live' | '2023-03' 등)
+    let iceDataSource = 'fallback'; // 'live' | 'archive' | 'fallback'
 
-    async function loadIceData() {
-      const month = new Date().getMonth(); // 0–11
-      if (cachedIceMonth === month && cachedIceData) return;
-      const pad = String(month + 1).padStart(2, '0'); // month03 형태 매칭 (0부터 시작하므로 +1)
+    // ── 실측 빙산 데이터 ──
+    let realBergData = null;        // {bergs:[{id,lon,lat,length_m,width_m,type},...]}
+    let bergDataSource = 'procedural'; // 'real' | 'estimated' | 'procedural'
+
+    async function loadRealBergData() {
       try {
-        // 백엔드/프록시 서버가 같은 폴더 구조 내 json을 떨궈준다고 가정한 위치 호환성 수정
-        const res = await fetch(`realIceData_month03.json`);
+        const res = await fetch('scripts/realIceData_2023/realBergData_latest.json');
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        cachedIceData = await res.json();
-        cachedIceMonth = month;
-        console.log(
-          '[arctic] 실제 빙하 데이터 로드 완료, 월:',
-          month + 1,
-          '셀 수:',
-          cachedIceData.cells.length,
-        );
-        // 데이터 로드 성공 즉시 선박 우회 렌더 갱신
-        if (cViewer) applyRouteSelection();
+        realBergData = await res.json();
+        bergDataSource = 'real';
+        console.log(`[BERG] real data: ${realBergData.bergs.length} icebergs from ${realBergData.source}`);
       } catch (e) {
-        console.warn(
-          '[arctic] JSON 데이터 통신 실패 — 로컬 Fallback 우회 알고리즘으로 자동 전환됨:',
-          e,
-        );
-        // 데이터가 없더라도 우회 기동이 확실히 작동하게끔 갱신 트리거
-        if (cViewer) applyRouteSelection();
+        console.warn('[BERG] no real berg data, using estimation:', e.message);
+        realBergData = null;
       }
     }
+
+    // ── Cesium 빙산 entity 관리 ──
+    let cesiumBergEntities = [];    // 현재 Cesium 빙산 entity 배열
+    let cesiumBergDrift = [];       // 빙산별 해류 이동 상태 [{lon, lat, dLon, dLat}]
+
+    function buildCesiumBergs() {
+      if (!cViewer) return;
+      // 기존 빙산 entity 제거
+      for (const ent of cesiumBergEntities) {
+        cViewer.entities.remove(ent);
+      }
+      cesiumBergEntities = [];
+      cesiumBergDrift = [];
+
+      for (let i = 0; i < BERG_DATA.length; i++) {
+        const b = BERG_DATA[i];
+        // 실측 크기 사용 (length_m/width_m), 없으면 size에서 매핑
+        const bLen = b.length_m || Math.max(100, Math.min(500, b.size / 24));
+        const bWid = b.width_m || bLen * 0.4;
+        const h = bLen / 7;  // 수면 위 높이 (빙산의 ~1/7이 수면 위)
+
+        // 해류 이동
+        const latRad = b.lat * Math.PI / 180;
+        const speed = 0.0003 * Math.cos(latRad);
+        const angle = Math.atan2(b.lat - 80, b.lon) + Math.PI / 2;
+        cesiumBergDrift.push({
+          lon: b.lon, lat: b.lat,
+          dLon: speed * Math.cos(angle),
+          dLat: speed * Math.sin(angle) * 0.5,
+        });
+
+        const driftIdx = i;
+        const props = { type: 'berg', bergId: b.id || null, length_m: bLen, width_m: bWid };
+        const ent = cViewer.entities.add({
+          id: 'berg-' + i,
+          position: new Cesium.CallbackProperty(() => {
+            const d = cesiumBergDrift[driftIdx];
+            return d ? Cesium.Cartesian3.fromDegrees(d.lon, d.lat, h / 2) : Cesium.Cartesian3.ZERO;
+          }, false),
+          // 멀리서도 보이는 노란 점
+          point: {
+            pixelSize: 8,
+            color: Cesium.Color.YELLOW,
+            outlineColor: Cesium.Color.ORANGERED,
+            outlineWidth: 2,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            scaleByDistance: new Cesium.NearFarScalar(1e4, 2, 5e6, 0.5),
+          },
+          // 줌 인 시 3D 박스
+          box: {
+            dimensions: new Cesium.Cartesian3(bLen, bWid, h),
+            material: Cesium.Color.YELLOW.withAlpha(0.85),
+            outline: true,
+            outlineColor: Cesium.Color.ORANGERED.withAlpha(0.6),
+          },
+          label: b.id ? {
+            text: b.id,
+            font: 'bold 11px monospace',
+            fillColor: Cesium.Color.YELLOW,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 2,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(0, -18),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            scaleByDistance: new Cesium.NearFarScalar(1e4, 1, 3e6, 0.3),
+          } : undefined,
+          show: true,
+          properties: props,
+        });
+        cesiumBergEntities.push(ent);
+      }
+    }
+
+    // 매 프레임 빙산 해류 이동 업데이트
+    function updateCesiumBergDrift() {
+      for (const d of cesiumBergDrift) {
+        d.lon += d.dLon;
+        d.lat += d.dLat;
+        // 경도 wrap-around
+        if (d.lon > 180) d.lon -= 360;
+        if (d.lon < -180) d.lon += 360;
+        // 위도 범위 제한
+        d.lat = Math.max(60, Math.min(89, d.lat));
+      }
+    }
+
+    // ── 모든 카메라 모드의 빙하 시각 갱신 통합 함수 ──
+    function refreshAllIceVisuals() {
+      if (!cachedIceData || !cachedIceData.cells) return;
+      const rng = (a, b) => a + Math.random() * (b - a);
+
+      // 1) deck.gl용 ICE_DATA 갱신 (SATELLITE/WIDE)
+      ICE_DATA = cachedIceData.cells.map(c => ({
+        lon: c.lon, lat: c.lat, weight: c.concentration,
+      }));
+
+      // 2) BERG_DATA 갱신 (실측 크기 + 해빙 농도 위치)
+      BERG_DATA = [];
+      const highConc = cachedIceData.cells.filter(c => c.concentration >= 0.3);
+      if (realBergData && realBergData.bergs && realBergData.bergs.length > 0 && highConc.length > 0) {
+        // 실측 빙산 크기·ID를 해빙 농도 높은 북극 셀 위치에 배치
+        bergDataSource = 'real';
+        // 북극 해역(lat>=60) 빙산은 원래 좌표 사용
+        const arcticBergs = realBergData.bergs.filter(b => b.lat >= 60);
+        for (const b of arcticBergs) {
+          BERG_DATA.push({
+            id: b.id, lon: b.lon, lat: b.lat,
+            size: Math.max(2000, b.length_m || 5000),
+            length_m: b.length_m || 5000, width_m: b.width_m || 2000,
+            type: b.type || 'large',
+          });
+        }
+        // 남극/저위도 빙산 → 실측 크기를 유지하되 북극 고농도 셀 위치에 배치
+        const nonArctic = realBergData.bergs.filter(b => b.lat < 60);
+        const maxPlace = Math.min(nonArctic.length, 130 - arcticBergs.length, highConc.length);
+        const cellStep = Math.max(1, Math.floor(highConc.length / maxPlace));
+        for (let i = 0; i < maxPlace; i++) {
+          const b = nonArctic[i];
+          const cell = highConc[i * cellStep];
+          BERG_DATA.push({
+            id: b.id, lon: cell.lon + rng(-0.5, 0.5), lat: cell.lat + rng(-0.3, 0.3),
+            size: Math.max(2000, b.length_m || 5000),
+            length_m: b.length_m || 5000, width_m: b.width_m || 2000,
+            type: b.type || 'large',
+          });
+        }
+      } else if (highConc.length > 0) {
+        // 폴백: 해빙 농도 기반 추정 배치
+        bergDataSource = 'estimated';
+        const bergStep = Math.max(1, Math.floor(highConc.length / 130));
+        for (let i = 0; i < highConc.length; i += bergStep) {
+          const c = highConc[i];
+          const sz = rng(2000, 12000) * c.concentration;
+          BERG_DATA.push({
+            id: null, lon: c.lon + rng(-0.5, 0.5), lat: c.lat + rng(-0.3, 0.3),
+            size: sz, length_m: sz, width_m: sz * 0.4,
+            type: sz > 8000 ? 'tabular' : sz > 4000 ? 'large' : 'medium',
+          });
+        }
+      } else {
+        bergDataSource = 'procedural';
+      }
+
+      // 3) Three.js 빙산 재생성 (BRIDGE/FOLLOW)
+      if (typeof buildIcebergs === 'function') buildIcebergs();
+      // 4) Cesium 빙산 entity 재생성 (SATELLITE/WIDE)
+      buildCesiumBergs();
+      // 5) HUD 데이터 소스 표시
+      const dsEl = document.getElementById('hud-datasource');
+      if (dsEl) {
+        const d = cachedIceData.date || '';
+        const bergLabel = bergDataSource === 'real' ? ' | Berg:NIC' : '';
+        if (iceDataSource === 'live') {
+          dsEl.textContent = `LIVE ${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}${bergLabel}`;
+          dsEl.style.color = '#22c55e';
+        } else if (iceDataSource === 'archive') {
+          dsEl.textContent = `${d.slice(0,4)}-${d.slice(4,6)}${bergLabel}`;
+          dsEl.style.color = '#eab308';
+        } else {
+          dsEl.textContent = '절차적 폴백';
+          dsEl.style.color = '#ef4444';
+        }
+      }
+      // 6) 항로 재평가
+      if (cViewer) applyRouteSelection();
+      console.log(`[ICE] ${iceDataSource} | ICE=${ICE_DATA.length} BERG=${BERG_DATA.length}(${bergDataSource}) cesium=${cesiumBergEntities.length}`);
+    }
+
+    // ── 데이터 로드 (3단계 폴백) ──
+    async function loadIceData(key) {
+      // key: 'live' | '2023-03' | undefined(=자동)
+      if (!key) key = 'live';
+      if (key === cachedIceKey && cachedIceData) return;
+
+      if (key === 'live') {
+        // 1순위: Copernicus 최신
+        try {
+          const res = await fetch('scripts/realIceData_2023/realIceData_latest.json');
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          cachedIceData = await res.json();
+          cachedIceKey = 'live';
+          iceDataSource = 'live';
+          refreshAllIceVisuals();
+          return;
+        } catch (e) {
+          console.warn('[ICE] live data not found, trying current month archive...', e.message);
+        }
+        // 1순위 실패 → 2순위 현재월 아카이브로 폴백
+        const pad = String(new Date().getMonth() + 1).padStart(2, '0');
+        try {
+          const res = await fetch(`scripts/realIceData_2023/realIceData_month${pad}.json`);
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          cachedIceData = await res.json();
+          cachedIceKey = 'live'; // 키는 live 유지 (자동 선택이므로)
+          iceDataSource = 'archive';
+          refreshAllIceVisuals();
+          return;
+        } catch (e2) {
+          console.warn('[ICE] archive fallback failed too:', e2.message);
+        }
+        // 3순위: 절차적 폴백
+        iceDataSource = 'fallback';
+        cachedIceKey = 'live';
+        const dsEl = document.getElementById('hud-datasource');
+        if (dsEl) { dsEl.textContent = '절차적 폴백'; dsEl.style.color = '#ef4444'; }
+        return;
+      }
+
+      // key = '2023-03' 등 아카이브
+      const month = key.split('-')[1]; // '03'
+      try {
+        const res = await fetch(`scripts/realIceData_2023/realIceData_month${month}.json`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        cachedIceData = await res.json();
+        cachedIceKey = key;
+        iceDataSource = 'archive';
+        refreshAllIceVisuals();
+      } catch (e) {
+        console.warn(`[ICE] archive ${key} not found:`, e.message);
+        iceDataSource = 'fallback';
+        cachedIceKey = key;
+        const dsEl = document.getElementById('hud-datasource');
+        if (dsEl) { dsEl.textContent = '절차적 폴백'; dsEl.style.color = '#ef4444'; }
+      }
+    }
+
+    // ── 드롭다운 이벤트 ──
+    document.getElementById('ice-month-select').addEventListener('change', (e) => {
+      cachedIceKey = ''; // 캐시 무효화
+      loadIceData(e.target.value);
+    });
 
     // 현재 위치(lon, lat)의 해빙 농도 조회 (0–1), 데이터 없으면 안전한 모의 데이터 폴백
     function sampleIceConcentration(lon, lat) {
@@ -2875,6 +3119,29 @@
         WAYPOINTS[seg].label +
         ' → ' +
         WAYPOINTS[Math.min(seg + 1, WAYPOINTS.length - 1)].label;
+
+      // ── 근접 빙산 경고 ──
+      const bergAlertEl = document.getElementById('hud-berg-alert');
+      const bergTextEl = document.getElementById('hud-berg-text');
+      if (bergAlertEl && bergTextEl && BERG_DATA.length > 0) {
+        let nearest = null, nearDist = Infinity;
+        const cosLat = Math.cos(lat * Math.PI / 180);
+        for (const b of BERG_DATA) {
+          const dx = (b.lon - pos.lon) * cosLat * 111.32;
+          const dy = (b.lat - lat) * 111.32;
+          const d = Math.sqrt(dx * dx + dy * dy); // km
+          if (d < nearDist) { nearDist = d; nearest = b; }
+        }
+        if (nearest && nearDist < 50) {
+          const label = nearest.id || '추정 빙산';
+          const lenKm = ((nearest.length_m || nearest.size || 0) / 1000).toFixed(1);
+          const widKm = ((nearest.width_m || 0) / 1000).toFixed(1);
+          bergTextEl.textContent = `⚠ ${label} (${lenKm}x${widKm}km) — ${nearDist.toFixed(0)}km`;
+          bergAlertEl.style.display = '';
+        } else {
+          bergAlertEl.style.display = 'none';
+        }
+      }
 
       if (isManual) {
         document.getElementById('man-thr').textContent =
@@ -3203,27 +3470,28 @@
       const route = WAYPOINTS.map(wp => [wp.lon, wp.lat]);
 
       return [
-        // 1. 해빙 밀도 히트맵
-        new deck.HeatmapLayer({
-          id: 'ice-heatmap',
-          data: ICE_DATA,
+        // 1. 해빙 밀도 (ScatterplotLayer — 데이터 교체 시 즉시 반영됨)
+        new deck.ScatterplotLayer({
+          id: 'ice-scatter',
+          data: [...ICE_DATA],
           getPosition: d => [d.lon, d.lat],
-          getWeight: d => d.weight,
-          radiusPixels: 60,
-          intensity: 1.2,
-          threshold: 0.05,
-          colorRange: [
-            [0, 80, 180, 0],
-            [0, 120, 220, 80],
-            [100, 180, 255, 140],
-            [200, 230, 255, 200],
-            [255, 255, 255, 220],
-          ],
+          getRadius: 28000,
+          radiusUnits: 'meters',
+          radiusMinPixels: 2,
+          getFillColor: d => {
+            const w = d.weight;
+            if (w > 0.8)  return [255, 255, 255, 210];
+            if (w > 0.6)  return [200, 230, 255, 190];
+            if (w > 0.4)  return [100, 180, 255, 150];
+            if (w > 0.2)  return [0, 120, 220, 110];
+            return [0, 80, 180, 60];
+          },
+          updateTriggers: { getPosition: cachedIceKey, getFillColor: cachedIceKey },
         }),
         // 2. 빙산 산포
         new deck.ScatterplotLayer({
           id: 'bergs',
-          data: BERG_DATA,
+          data: [...BERG_DATA],
           getPosition: d => [d.lon, d.lat],
           getRadius: d => d.size,
           getFillColor: [200, 240, 255, 180],
@@ -3232,6 +3500,7 @@
           lineWidthMinPixels: 1,
           radiusUnits: 'meters',
           radiusMinPixels: 2,
+          updateTriggers: { getPosition: cachedIceKey, getRadius: cachedIceKey },
         }),
         // 3. 항로 경로 (주황)
         new deck.PathLayer({
@@ -3290,6 +3559,7 @@
         },
         layers: buildDeckLayers(),
       });
+      // (빙산 entity는 point + scaleByDistance로 항상 표시)
     }
 
     function initDeck() {
@@ -3387,6 +3657,7 @@
     // ═══════════════════════════════════════════════════════════════
     // 5. Three.js
     // ═══════════════════════════════════════════════════════════════
+    window._oceanColorMode = 'none'; // 'none' | 'ice' | 'depth'
     let tRenderer, tScene, tCamera, waveGeo, waveMesh, farOcean, shipGroup3;
     let tIcebergs = [],
       tTime = 0;
@@ -3631,11 +3902,12 @@
       waveMesh = new THREE.Mesh(
         waveGeo,
         new THREE.MeshPhongMaterial({
-          color: 0x0a2a3f,
+          color: 0xffffff,
           specular: 0x4a8aaa,
           shininess: 80,
           transparent: false,
           opacity: 1.0,
+          vertexColors: true,
         }),
       );
       waveMesh.receiveShadow = true;
@@ -3658,6 +3930,97 @@
       }
       pos.needsUpdate = true;
       waveGeo.computeVertexNormals();
+    }
+
+    // ── 절차적 수심 추정 (WMS 없이 위경도 기반 근사) ──
+    function estimateBathymetry(lon, lat) {
+      const latN = Math.max(0, Math.min(1, (lat - 60) / 30));
+      let depth;
+      if (latN < 0.3)        depth = 60 + (latN / 0.3) * 250;
+      else if (latN < 0.5)   depth = 310 + ((latN - 0.3) / 0.2) * 2200;
+      else                   depth = 2500 + ((latN - 0.5) / 0.5) * 1500;
+      const ridgeLon = -40 + (lat - 78) * 5;
+      const dRidge = Math.abs(lon - ridgeLon);
+      if (dRidge < 15 && lat > 78) depth = Math.min(depth, 1200 + dRidge * 100);
+      depth += Math.sin(lon * 0.8 + lat * 0.3) * 200
+             + Math.cos(lon * 0.3 - lat * 0.6) * 150
+             + Math.sin((lon + lat) * 0.5) * 100;
+      return Math.max(10, Math.min(6500, depth));
+    }
+
+    // ── GEBCO 범례 색상 매핑 (depth meters → RGB 0~1) ──
+    function depthToRGB(d) {
+      let r, g, b;
+      if (d < 50)        { const t = d / 50;            r = 255; g = 51 + t * 119; b = 0; }
+      else if (d < 200)  { const t = (d - 50) / 150;    r = 255 - t * 51; g = 170 + t * 85; b = 0; }
+      else if (d < 1000) { const t = (d - 200) / 800;   r = 204 - t * 204; g = 255 - t * 51; b = t * 102; }
+      else if (d < 2000) { const t = (d - 1000) / 1000; r = 0; g = 204 - t * 51; b = 102 + t * 153; }
+      else if (d < 4000) { const t = (d - 2000) / 2000; r = 0; g = 153 - t * 153; b = 255; }
+      else               { const t = Math.min(1, (d - 4000) / 2000); r = t * 102; g = 0; b = 255 - t * 51; }
+      return [r / 255, g / 255, b / 255];
+    }
+
+    // ── NSIDC 범례 색상 매핑 (concentration 0~1 → RGB 0~1) ──
+    function iceToRGB(conc) {
+      let r, g, b;
+      if (conc < 0.25)      { const t = conc / 0.25;          r = 10 - t * 10; g = 25 + t * 60; b = 47 + t * 208; }
+      else if (conc < 0.50) { const t = (conc - 0.25) / 0.25; r = 0; g = 85 + t * 85; b = 255; }
+      else if (conc < 0.75) { const t = (conc - 0.50) / 0.25; r = t * 224; g = 170 + t * 77; b = 255 - t * 5; }
+      else                  { const t = (conc - 0.75) / 0.25; r = 224 + t * 31; g = 247 + t * 8; b = 250 + t * 5; }
+      return [r / 255, g / 255, b / 255];
+    }
+
+    // ── 바다 mesh 오버레이 메인 함수 ──
+    function updateOceanOverlay() {
+      if (!waveMesh || !waveGeo) return;
+      if (typeof _overlayFrame === 'undefined') window._overlayFrame = 119;
+      const forceNow = window._overlayForceUpdate;
+      if (!forceNow && (++_overlayFrame % 120 !== 0)) return;
+      window._overlayForceUpdate = false;
+
+      const mode = window._oceanColorMode || 'none';
+      const geo = waveGeo;
+      const positions = geo.attributes.position;
+      const count = positions.count;
+
+      if (!geo.attributes.color) {
+        const arr = new Float32Array(count * 3);
+        for (let k = 0; k < count; k++) {
+          arr[k * 3] = 10 / 255; arr[k * 3 + 1] = 42 / 255; arr[k * 3 + 2] = 63 / 255;
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+      }
+      const colors = geo.attributes.color;
+
+      if (mode === 'none') {
+        for (let i = 0; i < count; i++) colors.setXYZ(i, 10 / 255, 42 / 255, 63 / 255);
+        colors.needsUpdate = true;
+        return;
+      }
+
+      let shipLon, shipLat;
+      try {
+        const pos = isManual ? getShipPosLonLat() : routePos(simProgress);
+        shipLon = pos.lon; shipLat = pos.lat;
+      } catch (e) { return; }
+      const metersPerDeg = 111320;
+      const cosLat = Math.cos(shipLat * Math.PI / 180);
+
+      for (let i = 0; i < count; i++) {
+        const localX = positions.getX(i);
+        const localZ = positions.getZ(i);
+        const vLon = shipLon + localX * 1.5 / (metersPerDeg * cosLat);
+        const vLat = shipLat - localZ * 1.5 / metersPerDeg;
+
+        let rgb;
+        if (mode === 'ice') {
+          rgb = iceToRGB(sampleIceConcentration(vLon, vLat) || 0);
+        } else {
+          rgb = depthToRGB(estimateBathymetry(vLon, vLat));
+        }
+        colors.setXYZ(i, rgb[0], rgb[1], rgb[2]);
+      }
+      colors.needsUpdate = true;
     }
 
     // h 범위 축소: 실제 빙산 h/w ≈ 1:5~1:15. 기존 large.h=[80,250]이 송곳 실루엣의 근원
@@ -5315,7 +5678,10 @@
 
       updateHUD(pos);
       if (THREE_MODES.has(currentMode)) drawMinimap(pos.lat, pos.lon);
-      if (CESIUM_MODES.has(currentMode)) updateCesiumCamera(pos);
+      if (CESIUM_MODES.has(currentMode)) {
+        updateCesiumCamera(pos);
+        updateCesiumBergDrift();
+      }
 
       // 항로 적합성 자동 갱신 — 120초 시뮬 시간마다 1회 재평가
       if (isSimulating) {
@@ -5329,6 +5695,7 @@
         updateAutoShipPosition(currentDt); // 자동 항로 Three.js 위치 동기화 (핵심 수정)
         checkAutoCollisions(); // 자동 모드 빙산 충돌 보정
         animateOcean(tTime, shipPos); // 항상 shipPos 기준 (자동/수동 통일)
+        updateOceanOverlay();
         updateShipPhysics(currentDt);
         updateFoam(currentDt); // 포말 파티클 업데이트
         updateShipMotion(currentDt, pos.lat);
@@ -5469,17 +5836,32 @@
           if (legend) legend.style.display = e.target.checked ? 'block' : 'none';
           window._gebcoProbeActive = e.target.checked;
           if (!e.target.checked) {
-            // 범례 내 readout/커서 초기화
             const readout = document.getElementById('gebco-probe-readout');
             const cursor = document.getElementById('gebco-depth-cursor');
             if (readout) readout.style.display = 'none';
             if (cursor) cursor.style.display = 'none';
           }
+          // Three.js 바다 오버레이 모드 전환
+          if (e.target.checked) {
+            window._oceanColorMode = 'depth';
+          } else {
+            const nsidcCb = document.getElementById('layer-nsidc-conc');
+            window._oceanColorMode = (nsidcCb && nsidcCb.checked) ? 'ice' : 'none';
+          }
+          window._overlayForceUpdate = true;
         }
         // //* [Modified Code] NSIDC 해빙 농도 및 Copernicus 해빙 두께 레이어 범례 토글 이벤트 연동
         if (t.key === 'nsidcConc') {
           const legend = document.getElementById('nsidc-legend');
           if (legend) legend.style.display = e.target.checked ? 'block' : 'none';
+          // Three.js 바다 오버레이 모드 전환
+          if (e.target.checked) {
+            window._oceanColorMode = 'ice';
+          } else {
+            const gebcoCb = document.getElementById('layer-gebco-bathy');
+            window._oceanColorMode = (gebcoCb && gebcoCb.checked) ? 'depth' : 'none';
+          }
+          window._overlayForceUpdate = true;
         }
         if (t.key === 'copThick') {
           const legend = document.getElementById('cop-legend');
@@ -5562,8 +5944,12 @@
     // ═══════════════════════════════════════════════════════════════
     // 13. 시작
     // ═══════════════════════════════════════════════════════════════
-    loadIceData(); // 현재 월의 실제 빙하 농도 데이터 비동기 로드
-    initCesium().then(() => initDeck());
+    // Cesium 초기화 완료 후 데이터 로드 (cViewer가 있어야 빙산 entity 생성 가능)
+    const dataReady = loadRealBergData();
+    initCesium().then(() => {
+      initDeck();
+      dataReady.then(() => loadIceData());
+    });
     initThree();
     currentMode = 'SATELLITE';
     document.querySelector('[data-mode="SATELLITE"]').classList.add('active');
