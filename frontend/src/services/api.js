@@ -10,7 +10,7 @@ const API_BASE = '/api';
  * @returns {Promise<Object>} Ice concentration data
  */
 export async function fetchIceConcentration(month = 'latest') {
-  const res = await fetch(`${API_BASE}/ice-concentration?month=${encodeURIComponent(month)}`);
+  const res = await fetch(`${API_BASE}/ice/concentration?month=${encodeURIComponent(month)}`);
   if (!res.ok) throw new Error(`fetchIceConcentration failed: ${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -21,7 +21,7 @@ export async function fetchIceConcentration(month = 'latest') {
  * @returns {Promise<Object>} Ice thickness data
  */
 export async function fetchIceThickness(month = 'latest') {
-  const res = await fetch(`${API_BASE}/ice-thickness?month=${encodeURIComponent(month)}`);
+  const res = await fetch(`${API_BASE}/ice/thickness?month=${encodeURIComponent(month)}`);
   if (!res.ok) throw new Error(`fetchIceThickness failed: ${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -31,7 +31,7 @@ export async function fetchIceThickness(month = 'latest') {
  * @returns {Promise<Object>} Iceberg data
  */
 export async function fetchIcebergs() {
-  const res = await fetch(`${API_BASE}/icebergs`);
+  const res = await fetch(`${API_BASE}/icebergs/latest`);
   if (!res.ok) throw new Error(`fetchIcebergs failed: ${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -44,7 +44,7 @@ export async function fetchIcebergs() {
  * @returns {Promise<Object>} Evaluation result { status, reason, rioScore }
  */
 export async function evaluateRoute(route, vessel, month) {
-  const res = await fetch(`${API_BASE}/evaluate-route`, {
+  const res = await fetch(`${API_BASE}/route/evaluate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ route, vessel, month }),

@@ -10,8 +10,8 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #000;
-  font-family: 'Courier New', monospace;
+  background: #020617; /* 더 깊은 네이비 톤으로 변경 */
+  font-family: 'Inter', 'Pretendard', sans-serif; /* 현대적인 폰트 적용 */
 }
 
 #cesium-wrap,
@@ -61,39 +61,57 @@ body,
 .hud {
   position: absolute;
   z-index: 200;
-  background: rgba(8, 16, 42, 0.88);
-  border: 1px solid #1e40af;
-  border-radius: 6px;
-  padding: 10px 14px;
-  color: #e0f0ff;
-  font-size: 12px;
-  backdrop-filter: blur(6px);
+  background: rgba(15, 23, 42, 0.75); /* Slate 900 기반 반투명 */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 16px;
+  color: #f8fafc;
+  font-size: 13px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .hud-title {
-  color: #60a5fa;
-  font-size: 10px;
-  letter-spacing: 1.5px;
+  color: #34d399; /* Emerald 400으로 통일감 부여 */
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
   text-transform: uppercase;
-  margin-bottom: 7px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hud-title::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 12px;
+  background: #34d399;
+  border-radius: 1px;
 }
 
 .hud-row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 20px;
-  margin: 3px 0;
+  margin: 6px 0;
 }
 
 .hud-label {
-  color: #93c5fd;
+  color: #94a3b8; /* Slate 400 */
+  font-size: 12px;
   white-space: nowrap;
 }
 
 .hud-value {
-  color: #e0f0ff;
-  font-weight: bold;
+  color: #f1f5f9; /* Slate 100 */
+  font-weight: 500;
   text-align: right;
+  font-variant-numeric: tabular-nums; /* 숫자 폭 일정하게 유지 */
 }
 
 .safe {
@@ -115,9 +133,32 @@ body,
 }
 
 #hud-right {
+  /* position: absolute; */
+  /* top: 12px; */
+  /* right: 12px; */
+  min-width: 220px;
+}
+
+/* 우측 HUD 패널들을 수직으로 정렬하는 컨테이너 */
+.hud-right-container {
+  position: absolute;
   top: 12px;
   right: 12px;
-  min-width: 220px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 12px; /* 패널 간 간격 */
+  max-height: calc(100vh - 100px); /* 화면 하단 여백 확보 */
+  overflow-y: auto; /* 내용이 많을 경우 스크롤 */
+  pointer-events: none; /* 컨테이너 자체는 클릭 무시 */
+}
+
+.hud-right-container > .hud {
+  position: relative; /* absolute 해제 */
+  top: auto;
+  right: auto;
+  bottom: auto;
+  pointer-events: auto; /* 패널 내부 요소는 클릭 가능 */
 }
 
 #hud-camera {
@@ -367,8 +408,8 @@ input[type='range'] {
 
 /* 선박 제원 패널 */
 #hud-specs {
-  top: 240px;
-  right: 12px;
+  /* top: 240px; */
+  /* right: 12px; */
   min-width: 248px;
   z-index: 200;
 }
@@ -475,11 +516,11 @@ input[type='range'] {
 
 /* ── NSR 항로 적합성 평가 패널 ── */
 #hud-routing {
-  position: fixed;
-  bottom: 30px;
-  right: 12px;
-  min-width: 260px;
-  max-width: 280px;
+  /* position: fixed; */
+  /* bottom: 30px; */
+  /* right: 12px; */
+  min-width: 300px;
+  max-width: 320px;
   max-height: 40vh;
   overflow-y: auto;
   z-index: 200;

@@ -161,6 +161,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
     cameraPivot3: null,
     // icebergs
     tIcebergs: [],
+    realBergs: [],
     // foam
     foamGeo: null,
     foamPoints: null,
@@ -195,6 +196,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
     // shared materials (created once)
     iceMat: null,
     subMat: null,
+    realBergMat: null,
     discMat: null,
     ringMat: null,
     // disposables tracking
@@ -362,6 +364,41 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
       spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, farType);
     }
   }, [spawnIceberg]);
+
+  // -- Real iceberg data (yellow) --
+  const updateRealBergs = useCallback((bergs, shipLat, shipLon) => {
+    const { scene, realBergs, realBergMat } = ctx.current;
+    if (!scene || !realBergMat) return;
+
+    // Remove previous real berg meshes
+    for (const grp of realBergs) {
+      if (grp.parent) grp.parent.remove(grp);
+    }
+    realBergs.length = 0;
+
+    if (!bergs || bergs.length === 0) return;
+
+    const latRad = (shipLat * Math.PI) / 180;
+    const mPerDegLon = METERS_PER_DEGREE_LON_AT_EQUATOR * Math.cos(latRad);
+    const VISIBLE_RANGE = 50000; // 50km
+
+    for (const berg of bergs) {
+      const x = (berg.lon - shipLon) * mPerDegLon / 1.5;
+      const z = -(berg.lat - shipLat) * METERS_PER_DEGREE_LAT / 1.5;
+      const dist = Math.sqrt(x * x + z * z);
+      if (dist > VISIBLE_RANGE) continue;
+
+      const size = Math.max(berg.size || 5000, 500);
+      const h = size * 0.15;
+      const geo = new THREE.ConeGeometry(size * 0.3 / 1.5, h, 8);
+      const mesh = new THREE.Mesh(geo, realBergMat);
+      const grp = new THREE.Group();
+      grp.add(mesh);
+      grp.position.set(x, h / 2, z);
+      scene.add(grp);
+      realBergs.push(grp);
+    }
+  }, []);
 
   // -- Ship --
   const buildShip = useCallback(() => {
@@ -863,6 +900,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
       computeFovTarget,
       buildIcebergs,
       buildLandMasses,
+      updateRealBergs,
       render,
     }),
     [
@@ -877,6 +915,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
       computeFovTarget,
       buildIcebergs,
       buildLandMasses,
+      updateRealBergs,
       render,
     ],
   );
@@ -933,6 +972,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
 
     // Shared iceberg materials (created once)
     ctx.current.iceMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    ctx.current.realBergMat = new THREE.MeshBasicMaterial({ color: 0xFFCC00 });
     ctx.current.subMat = new THREE.MeshBasicMaterial({
       color: 0x224466,
       transparent: true,
@@ -992,6 +1032,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
       // Dispose shared materials
       if (ctx.current.iceMat) ctx.current.iceMat.dispose();
       if (ctx.current.subMat) ctx.current.subMat.dispose();
+      if (ctx.current.realBergMat) ctx.current.realBergMat.dispose();
       if (ctx.current.discMat) ctx.current.discMat.dispose();
       if (ctx.current.ringMat) ctx.current.ringMat.dispose();
 

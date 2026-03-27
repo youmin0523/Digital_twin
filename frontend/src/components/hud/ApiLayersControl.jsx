@@ -21,27 +21,40 @@ export default function ApiLayersControl({
   const gebcoChecked = !!states.gebcoBathy;
 
   return (
-    <div className="hud" id="hud-api-layers" style={{ top: '12px', left: '232px', minWidth: '220px', borderColor: '#059669' }}>
+    <div className="hud" id="hud-api-layers" style={{ 
+      top: '12px', 
+      left: '232px', 
+      minWidth: '240px', 
+      border: '1px solid rgba(52, 211, 153, 0.3)',
+      background: 'rgba(15, 23, 42, 0.8)'
+    }}>
+      {/* // //! [Original Code] <div className="hud-title" style={{ color: '#34d399' }}> */}
+      {/* // //* [Modified Code] 에메랄드 컬러 포인트 유지 및 아이콘 최적화 */}
       <div className="hud-title" style={{ color: '#34d399' }}>
-        {'\uD83C\uDF0D'} \uC2E4\uC2DC\uAC04 API \uB808\uC774\uC5B4 (WMS)
+        🌍 실시간 WMS 데이터 레이어
       </div>
 
       {LAYERS.map(({ id, stateKey, label, title }) => (
         <React.Fragment key={id}>
           <div
             className="hud-row"
-            style={{ justifyContent: 'flex-start', gap: '8px', margin: '6px 0' }}
+            style={{ justifyContent: 'flex-start', gap: '12px', margin: '8px 0' }}
             title={title}
           >
             <input
               type="checkbox"
               id={id}
               className="api-cb"
-              style={{ accentColor: '#34d399' }}
+              style={{ accentColor: '#34d399', cursor: 'pointer', transform: 'scale(1.1)' }}
               checked={!!states[stateKey]}
-              onChange={() => onLayerToggle && onLayerToggle(stateKey)}
+              onChange={(e) => onLayerToggle && onLayerToggle(stateKey, e.target.checked)}
             />
-            <label htmlFor={id} className="hud-label" style={{ cursor: 'pointer' }}>
+            <label htmlFor={id} className="hud-label" style={{ 
+              cursor: 'pointer', 
+              color: states[stateKey] ? '#f1f5f9' : '#94a3b8',
+              fontSize: '12px',
+              transition: 'color 0.2s'
+            }}>
               {label}
             </label>
           </div>

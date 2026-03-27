@@ -84,48 +84,66 @@ export default function RoutingEvaluationPanel({
   const currentRouteLabel = (routeNames[currentRoute] || currentRoute || '\uD604\uC7AC \uBAA9\uD45C \uD56D\uB85C') + ':';
 
   return (
-    <div id="hud-routing">
-      <div className="hud-title">{'\uD83E\uDDED'} NSR \uD56D\uB85C \uC801\uD569\uC131 \uD3C9\uAC00</div>
+    <div className="hud" id="hud-routing" style={{ border: '1px solid rgba(96, 165, 250, 0.2)', minWidth: '300px' }}>
+      <div className="hud-title">📋 NSR 항로 적합성 및 POLARIS 평가</div>
 
-      <div id="routing-status-badge" className={statusInfo.cls}>
+      <div id="routing-status-badge" className={statusInfo.cls} style={{ 
+        padding: '10px', 
+        fontSize: '13px', 
+        borderRadius: '8px',
+        marginBottom: '10px',
+        boxShadow: 'inset 0 0 10px rgba(0,0,0,0.2)'
+      }}>
         {statusInfo.text}
       </div>
 
-      <div id="routing-rio-row">
-        POLARIS RIO: <span id="routing-rio-val">
+      <div id="routing-rio-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px', marginBottom: '8px' }}>
+        <span style={{ fontSize: '12px' }}>POLARIS RIO Score:</span>
+        <span id="routing-rio-val" style={{ 
+          fontSize: '14px', 
+          color: result.rioScore >= 0 ? '#34d399' : '#f87171' 
+        }}>
           {result.rioScore != null
             ? (result.rioScore >= 0 ? '+' : '') + result.rioScore.toFixed(2)
             : '--'}
         </span>
       </div>
 
-      <div id="routing-reason">
-        {result.reason || '\uC120\uBC15 \uC81C\uC6D0\uC744 \uC124\uC815\uD558\uACE0 \uD3C9\uAC00\uB97C \uC2E4\uD589\uD558\uC138\uC694.'}
+      <div id="routing-reason" style={{ 
+        background: 'rgba(0,0,0,0.2)', 
+        padding: '10px', 
+        borderRadius: '6px', 
+        fontSize: '11px', 
+        color: '#94a3b8',
+        border: '1px solid rgba(255,255,255,0.05)',
+        marginBottom: '12px'
+      }}>
+        {result.reason || '선박 제원을 설정하고 평가를 실행하세요.'}
       </div>
 
       {/* --- Distance comparison panel --- */}
-      <div className="routing-section-title" style={{ marginTop: '8px' }}>
-        \uD56D\uB85C \uAC70\uB9AC \uBE44\uAD50
+      <div className="routing-section-title" style={{ color: '#60a5fa', fontWeight: 'bold' }}>
+        🚢 항로 거리 비교분석
       </div>
       <div style={{
         fontSize: '12px',
-        marginBottom: '12px',
-        background: 'rgba(0,0,0,0.3)',
-        padding: '8px',
-        borderRadius: '4px',
-        border: '1px solid rgba(147,197,253,0.2)',
+        marginBottom: '14px',
+        background: 'rgba(15, 23, 42, 0.6)',
+        padding: '10px',
+        borderRadius: '8px',
+        border: '1px solid rgba(147,197,253,0.1)',
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-          <span style={{ color: '#93c5fd' }} id="lbl-dist-current">{currentRouteLabel}</span>
-          <span id="dist-current" style={{ color: '#ffffff', fontWeight: 'bold' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+          <span style={{ color: '#94a3b8' }} id="lbl-dist-current">{currentRouteLabel}</span>
+          <span id="dist-current" style={{ color: '#f8fafc', fontWeight: '600' }}>
             {distances.current != null
               ? `${Math.round(distances.current).toLocaleString()} km`
               : '-- km'}
           </span>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-          <span style={{ color: '#93c5fd' }}>{'\uC218\uC5D0\uC988 \uC6B4\uD558 \uC6B0\uD68C:'}</span>
-          <span id="dist-suez" style={{ color: '#ffffff', fontWeight: 'bold' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+          <span style={{ color: '#94a3b8' }}>수에즈 운하 우회:</span>
+          <span id="dist-suez" style={{ color: '#f8fafc', fontWeight: '600' }}>
             {distances.suez != null
               ? `${Math.round(distances.suez).toLocaleString()} km`
               : '-- km'}
@@ -134,87 +152,88 @@ export default function RoutingEvaluationPanel({
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
-          borderTop: '1px solid rgba(147,197,253,0.3)',
-          paddingTop: '6px',
-          marginTop: '4px',
+          borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+          paddingTop: '8px',
+          marginTop: '6px',
         }}>
-          <span style={{ color: '#34d399' }}>{'\uAC70\uB9AC \uB2E8\uCD95 \uD6A8\uACFC:'}</span>
-          <span id="dist-saved" style={{ color: savedColor, fontWeight: 'bold' }}>
+          <span style={{ color: '#34d399', fontWeight: 'bold' }}>거리 단축 효과:</span>
+          <span id="dist-saved" style={{ color: savedColor, fontWeight: 'bold', fontSize: '13px' }}>
             {savedText}
           </span>
         </div>
       </div>
 
       {/* --- Polar Code safety inputs --- */}
-      <div className="routing-section-title">Polar Code \uC548\uC804 \uAE30\uC900</div>
+      <div className="routing-section-title" style={{ color: '#a78bfa' }}>Polar Code 안전 설계 기준</div>
 
-      <div className="routing-input-group">
-        <label>\uD758\uC218 Draft</label>
-        <input
-          id="r-draft"
-          type="number"
-          value={draft}
-          step="0.1"
-          min="1"
-          max="25"
-          onChange={(e) => setDraft(parseFloat(e.target.value) || 0)}
-        />
-        <span style={{ color: '#4a6a8a', fontSize: '10px' }}>m</span>
+      <div className="routing-input-group" style={{ marginBottom: '6px' }}>
+        <label style={{ fontSize: '11px' }}>흘수 (Draft)</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <input
+            id="r-draft"
+            type="number"
+            value={draft}
+            style={{ width: '60px', borderRadius: '4px', textAlign: 'center' }}
+            onChange={(e) => setDraft(parseFloat(e.target.value) || 0)}
+          />
+          <span style={{ color: '#4a6a8a', fontSize: '11px' }}>m</span>
+        </div>
       </div>
-      <div className="routing-input-group">
-        <label>{'\uC0DD\uC874 \uC7A5\uBE44 Rescue'}</label>
-        <input
-          id="r-rescue-days"
-          type="number"
-          value={rescueDays}
-          min="0"
-          max="60"
-          onChange={(e) => setRescueDays(parseInt(e.target.value) || 0)}
-        />
-        <span style={{ color: '#4a6a8a', fontSize: '10px' }}>{'\uC77C'}</span>
+      <div className="routing-input-group" style={{ marginBottom: '6px' }}>
+        <label style={{ fontSize: '11px' }}>생존 장비 (Rescue)</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <input
+            id="r-rescue-days"
+            type="number"
+            value={rescueDays}
+            style={{ width: '60px', borderRadius: '4px', textAlign: 'center' }}
+            onChange={(e) => setRescueDays(parseInt(e.target.value) || 0)}
+          />
+          <span style={{ color: '#4a6a8a', fontSize: '11px' }}>일</span>
+        </div>
       </div>
-      <div className="routing-input-group">
-        <label>{'\uC124\uACC4 \uC628\uB3C4 \uC5EC\uC720'}</label>
-        <input
-          id="r-temp-margin"
-          type="number"
-          value={tempMargin}
-          step="1"
-          min="-20"
-          max="50"
-          onChange={(e) => setTempMargin(parseFloat(e.target.value) || 0)}
-        />
-        <span style={{ color: '#4a6a8a', fontSize: '10px' }}>{'\u00B0C'}</span>
+      <div className="routing-input-group" style={{ marginBottom: '12px' }}>
+        <label style={{ fontSize: '11px' }}>설계 온도 여유</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <input
+            id="r-temp-margin"
+            type="number"
+            value={tempMargin}
+            style={{ width: '60px', borderRadius: '4px', textAlign: 'center' }}
+            onChange={(e) => setTempMargin(parseFloat(e.target.value) || 0)}
+          />
+          <span style={{ color: '#4a6a8a', fontSize: '11px' }}>°C</span>
+        </div>
       </div>
 
       {/* --- Administrative checkboxes --- */}
-      <div className="routing-section-title">{'\uD589\uC815\u00B7\uC124\uBE44 \uCCB4\uD06C'}</div>
-      <div className="routing-checks">
-        <label>
-          <input type="checkbox" id="r-pwom" checked={checks.pwom} onChange={() => handleCheck('pwom')} />
-          {' PWOM \uBE44\uCE58'}
+      <div className="routing-section-title" style={{ color: '#94a3b8' }}>행정·설비 안전 체크리스트</div>
+      <div className="routing-checks" style={{ gap: '8px' }}>
+        <label style={{ cursor: 'pointer', gap: '8px' }}>
+          <input type="checkbox" id="r-pwom" checked={checks.pwom} style={{ accentColor: '#34d399' }} onChange={() => handleCheck('pwom')} />
+          PWOM 비치
         </label>
-        <label>
-          <input type="checkbox" id="r-nsra" checked={checks.nsra} onChange={() => handleCheck('nsra')} />
-          {' NSRA \uD5C8\uAC00'}
+        <label style={{ cursor: 'pointer', gap: '8px' }}>
+          <input type="checkbox" id="r-nsra" checked={checks.nsra} style={{ accentColor: '#34d399' }} onChange={() => handleCheck('nsra')} />
+          NSRA 허가
         </label>
-        <label>
-          <input type="checkbox" id="r-winter" checked={checks.winter} onChange={() => handleCheck('winter')} />
-          {' \uBC29\uD55C \uC124\uBE44'}
+        <label style={{ cursor: 'pointer', gap: '8px' }}>
+          <input type="checkbox" id="r-winter" checked={checks.winter} style={{ accentColor: '#34d399' }} onChange={() => handleCheck('winter')} />
+          방한 설비
         </label>
-        <label>
-          <input type="checkbox" id="r-zero-dis" checked={checks.zeroDis} onChange={() => handleCheck('zeroDis')} />
-          {' \uBB34\uBC30\uCD9C \uD0F1\uD06C'}
+        <label style={{ cursor: 'pointer', gap: '8px' }}>
+          <input type="checkbox" id="r-zero-dis" checked={checks.zeroDis} style={{ accentColor: '#34d399' }} onChange={() => handleCheck('zeroDis')} />
+          무배출 탱크
         </label>
-        <label>
-          <input type="checkbox" id="r-comms" checked={checks.comms} onChange={() => handleCheck('comms')} />
-          {' \uADF9\uC9C0 \uD1B5\uC2E0'}
+        <label style={{ cursor: 'pointer', gap: '8px' }}>
+          <input type="checkbox" id="r-comms" checked={checks.comms} style={{ accentColor: '#34d399' }} onChange={() => handleCheck('comms')} />
+          극지 통신
         </label>
-        <label>
-          <input type="checkbox" id="r-navigator" checked={checks.navigator} onChange={() => handleCheck('navigator')} />
-          {' \uADF9\uC9C0 \uD56D\uD574\uC0AC'}
+        <label style={{ cursor: 'pointer', gap: '8px' }}>
+          <input type="checkbox" id="r-navigator" checked={checks.navigator} style={{ accentColor: '#34d399' }} onChange={() => handleCheck('navigator')} />
+          극지 항해사
         </label>
-        <label>
+        <label style={{ cursor: 'pointer', gap: '8px', color: checks.sanctioned ? '#f87171' : '#94a3b8' }}>
           <input
             type="checkbox"
             id="r-sanctioned"
@@ -222,16 +241,25 @@ export default function RoutingEvaluationPanel({
             checked={checks.sanctioned}
             onChange={() => handleCheck('sanctioned')}
           />
-          {' \u26A0 \uC81C\uC7AC\uAD6D'}
+          ⚠️ 제재국가
         </label>
-        <label>
-          <input type="checkbox" id="r-cold-route" checked={checks.coldRoute} onChange={() => handleCheck('coldRoute')} />
-          {' \uAE30\uC628 -10\u00B0C\u2193'}
+        <label style={{ cursor: 'pointer', gap: '8px' }}>
+          <input type="checkbox" id="r-cold-route" checked={checks.coldRoute} style={{ accentColor: '#34d399' }} onChange={() => handleCheck('coldRoute')} />
+          기온 -10°C↓
         </label>
       </div>
 
-      <button id="btn-evaluate-routing" onClick={handleEvaluate}>
-        {'\uD83D\uDCCB'} \uD56D\uB85C \uC801\uD569\uC131 \uD3C9\uAC00 \uC2E4\uD589
+      <button id="btn-evaluate-routing" onClick={handleEvaluate} style={{ 
+        marginTop: '12px', 
+        padding: '10px', 
+        borderRadius: '8px', 
+        background: 'rgba(96, 165, 250, 0.2)',
+        borderColor: 'rgba(96, 165, 250, 0.4)',
+        color: '#60a5fa',
+        fontWeight: 'bold',
+        transition: 'all 0.2s'
+      }}>
+        ✅ 항로 적합성 평가 실행
       </button>
     </div>
   );

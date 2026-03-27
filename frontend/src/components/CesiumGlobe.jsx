@@ -263,7 +263,7 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
         s2Ndsi.alpha = 0.75;
 
         // Store layer references
-        Object.assign(layers, { gebco, nsidcConc, copThick, nsidcEdge, esaSar, s2TrueColor: s2TrueColor, s2Ndsi });
+        Object.assign(layers, { gebco, nsidcConc, copThick, nsidcEdge, esaSar, s2True: s2TrueColor, s2Ndsi });
         } catch (layerErr) {
           console.warn('WMS layer setup error (non-fatal):', layerErr);
         }
