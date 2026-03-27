@@ -1,0 +1,208 @@
+// ═══════════════════════════════════════════════════════════════
+// ICE_CLASS_DATA and RIV_TABLE (POLARIS Risk Index Values)
+// Extracted from arctic-hybrid.html lines 2110-2320
+// ═══════════════════════════════════════════════════════════════
+
+// 1. 상수 / 테이블
+export const ICE_CLASS_DATA = {
+  PC1: {
+    maxKn: 20,
+    damage: 0,
+    latDanger: 88,
+    latWarn: 85,
+    latCaution: 73,
+  },
+  PC2: {
+    maxKn: 18,
+    damage: 0.05,
+    latDanger: 86,
+    latWarn: 82,
+    latCaution: 71,
+  },
+  PC3: {
+    maxKn: 17,
+    damage: 0.1,
+    latDanger: 84,
+    latWarn: 80,
+    latCaution: 69,
+  },
+  PC4: {
+    maxKn: 16,
+    damage: 0.15,
+    latDanger: 83,
+    latWarn: 78,
+    latCaution: 68,
+  },
+  PC5: {
+    maxKn: 14,
+    damage: 0.25,
+    latDanger: 82,
+    latWarn: 76,
+    latCaution: 66,
+  },
+  PC6: {
+    maxKn: 13,
+    damage: 0.35,
+    latDanger: 80,
+    latWarn: 74,
+    latCaution: 65,
+  },
+  PC7: {
+    maxKn: 12,
+    damage: 0.5,
+    latDanger: 78,
+    latWarn: 72,
+    latCaution: 64,
+  },
+  NONE: {
+    maxKn: 10,
+    damage: 1.0,
+    latDanger: 75,
+    latWarn: 70,
+    latCaution: 62,
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// POLARIS Master Routing Algorithm
+// KR Polar Code Implementation Guide + IMO MSC.1/Circ.1519
+// ═══════════════════════════════════════════════════════════════
+
+// RIV(Risk Index Value) 룩업 테이블
+// 행: 내빙 등급 (NONE = 일반 선박, PC7 최저~PC1 최고)
+// 열: WMO 빙질 분류 (9종)
+// 양수 → 안전, 음수 → 위험 (절대값이 클수록 위험)
+export const RIV_TABLE = {
+  'NONE': {
+    'Open Water': 2,
+    'Grey Ice': 1,
+    'Grey-White Ice': -1,
+    'Thin First-Year (FY)': -2,
+    'Medium First-Year (FY)': -4,
+    'Thick First-Year (FY)': -6,
+    'Multi-Year (MY)': -8,
+    'Ridged/Hummocked': -10,
+    'Glacier Ice': -20,
+  },
+  'IC': {
+    'Open Water': 2,
+    'Grey Ice': 2,
+    'Grey-White Ice': 1,
+    'Thin First-Year (FY)': -1,
+    'Medium First-Year (FY)': -3,
+    'Thick First-Year (FY)': -5,
+    'Multi-Year (MY)': -6,
+    'Ridged/Hummocked': -8,
+    'Glacier Ice': -16,
+  },
+  'IB': {
+    'Open Water': 2,
+    'Grey Ice': 2,
+    'Grey-White Ice': 1,
+    'Thin First-Year (FY)': 1,
+    'Medium First-Year (FY)': -2,
+    'Thick First-Year (FY)': -4,
+    'Multi-Year (MY)': -5,
+    'Ridged/Hummocked': -7,
+    'Glacier Ice': -14,
+  },
+  'IA': {
+    'Open Water': 2,
+    'Grey Ice': 2,
+    'Grey-White Ice': 2,
+    'Thin First-Year (FY)': 1,
+    'Medium First-Year (FY)': 1,
+    'Thick First-Year (FY)': -2,
+    'Multi-Year (MY)': -4,
+    'Ridged/Hummocked': -5,
+    'Glacier Ice': -12,
+  },
+  'IA Super': {
+    'Open Water': 2,
+    'Grey Ice': 2,
+    'Grey-White Ice': 2,
+    'Thin First-Year (FY)': 2,
+    'Medium First-Year (FY)': 1,
+    'Thick First-Year (FY)': -1,
+    'Multi-Year (MY)': -3,
+    'Ridged/Hummocked': -4,
+    'Glacier Ice': -10,
+  },
+  'PC7': {
+    'Open Water': 2,
+    'Grey Ice': 2,
+    'Grey-White Ice': 2,
+    'Thin First-Year (FY)': 1,
+    'Medium First-Year (FY)': 1,
+    'Thick First-Year (FY)': -1,
+    'Multi-Year (MY)': -3,
+    'Ridged/Hummocked': -4,
+    'Glacier Ice': -9,
+  },
+  'PC6': {
+    'Open Water': 2,
+    'Grey Ice': 2,
+    'Grey-White Ice': 2,
+    'Thin First-Year (FY)': 2,
+    'Medium First-Year (FY)': 1,
+    'Thick First-Year (FY)': 1,
+    'Multi-Year (MY)': -2,
+    'Ridged/Hummocked': -3,
+    'Glacier Ice': -8,
+  },
+  'PC5': {
+    'Open Water': 2,
+    'Grey Ice': 2,
+    'Grey-White Ice': 2,
+    'Thin First-Year (FY)': 2,
+    'Medium First-Year (FY)': 1,
+    'Thick First-Year (FY)': 1,
+    'Multi-Year (MY)': -2,
+    'Ridged/Hummocked': -3,
+    'Glacier Ice': -20,
+  },
+  'PC4': {
+    'Open Water': 2,
+    'Grey Ice': 2,
+    'Grey-White Ice': 2,
+    'Thin First-Year (FY)': 2,
+    'Medium First-Year (FY)': 2,
+    'Thick First-Year (FY)': 1,
+    'Multi-Year (MY)': 1,
+    'Ridged/Hummocked': -1,
+    'Glacier Ice': -6,
+  },
+  'PC3': {
+    'Open Water': 2,
+    'Grey Ice': 2,
+    'Grey-White Ice': 2,
+    'Thin First-Year (FY)': 2,
+    'Medium First-Year (FY)': 2,
+    'Thick First-Year (FY)': 1,
+    'Multi-Year (MY)': 1,
+    'Ridged/Hummocked': 1,
+    'Glacier Ice': -3,
+  },
+  'PC2': {
+    'Open Water': 2,
+    'Grey Ice': 2,
+    'Grey-White Ice': 2,
+    'Thin First-Year (FY)': 2,
+    'Medium First-Year (FY)': 2,
+    'Thick First-Year (FY)': 2,
+    'Multi-Year (MY)': 2,
+    'Ridged/Hummocked': 1,
+    'Glacier Ice': -1,
+  },
+  'PC1': {
+    'Open Water': 2,
+    'Grey Ice': 2,
+    'Grey-White Ice': 2,
+    'Thin First-Year (FY)': 2,
+    'Medium First-Year (FY)': 2,
+    'Thick First-Year (FY)': 2,
+    'Multi-Year (MY)': 2,
+    'Ridged/Hummocked': 2,
+    'Glacier Ice': 1,
+  },
+};

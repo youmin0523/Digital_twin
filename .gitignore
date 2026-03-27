@@ -7,3 +7,18 @@ node_modules
 .taskmaster.md
 .venv
 s1_test.py
+
+# Python
+__pycache__
+*.pyc
+backend/pipeline/cache/*.nc
+
+# Data (large files)
+backend/data/realIceData_latest.json
+backend/data/archive/
+
+# Build output
+frontend/dist
+
+# Archive (old monolithic files)
+_archive/

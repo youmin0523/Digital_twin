@@ -1,0 +1,983 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  font-family: 'Courier New', monospace;
+}
+
+#cesium-wrap,
+#three-wrap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#cesium-wrap {
+  z-index: 1;
+}
+
+#three-wrap {
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#three-wrap.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#three-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#cesium-wrap.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#fade {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  z-index: 500;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+
+.hud {
+  position: absolute;
+  z-index: 200;
+  background: rgba(8, 16, 42, 0.88);
+  border: 1px solid #1e40af;
+  border-radius: 6px;
+  padding: 10px 14px;
+  color: #e0f0ff;
+  font-size: 12px;
+  backdrop-filter: blur(6px);
+}
+
+.hud-title {
+  color: #60a5fa;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 7px;
+}
+
+.hud-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 3px 0;
+}
+
+.hud-label {
+  color: #93c5fd;
+  white-space: nowrap;
+}
+
+.hud-value {
+  color: #e0f0ff;
+  font-weight: bold;
+  text-align: right;
+}
+
+.safe {
+  color: #4ade80;
+}
+
+.warn {
+  color: #fbbf24;
+}
+
+.danger {
+  color: #f87171;
+}
+
+#hud-left {
+  top: 12px;
+  left: 12px;
+  min-width: 210px;
+}
+
+#hud-right {
+  top: 12px;
+  right: 12px;
+  min-width: 220px;
+}
+
+#hud-camera {
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+#cam-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+#hud-zoom {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #93c5fd;
+  padding: 0 2px;
+}
+
+#hud-zoom.show {
+  display: flex;
+}
+
+#zoom-bar {
+  color: #60a5fa;
+  letter-spacing: 1px;
+  font-size: 12px;
+}
+
+#zoom-dist {
+  color: #e0f0ff;
+  font-weight: bold;
+  min-width: 80px;
+  text-align: center;
+}
+
+/* FOV 슬라이더 */
+#hud-fov {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #93c5fd;
+  padding: 0 2px;
+}
+
+#hud-fov.show {
+  display: flex;
+}
+
+#fov-slider {
+  accent-color: #a78bfa;
+  width: 100px;
+  vertical-align: middle;
+}
+
+#fov-label {
+  color: #e0f0ff;
+  font-weight: bold;
+  min-width: 32px;
+  text-align: right;
+}
+
+#fov-override {
+  font-size: 9px;
+  color: #fbbf24;
+  display: none;
+}
+
+#fov-override.show {
+  display: inline;
+}
+
+#hud-bottom {
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+}
+
+.cam-btn {
+  background: rgba(30, 64, 175, 0.25);
+  border: 1px solid #1e40af;
+  color: #93c5fd;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  transition: all 0.2s;
+}
+
+.cam-btn:hover {
+  background: rgba(30, 64, 175, 0.55);
+}
+
+.cam-btn.active {
+  background: #1e40af;
+  color: #e0f0ff;
+  border-color: #60a5fa;
+}
+
+#btn-manual {
+  background: rgba(124, 58, 237, 0.3);
+  border: 1px solid #7c3aed;
+  color: #c4b5fd;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  transition: all 0.2s;
+}
+
+#btn-manual:hover {
+  background: rgba(124, 58, 237, 0.6);
+}
+
+#btn-manual.active {
+  background: #7c3aed;
+  color: #fff;
+  border-color: #a78bfa;
+}
+
+.ctrl-btn {
+  background: rgba(30, 64, 175, 0.35);
+  border: 1px solid #1e40af;
+  color: #e0f0ff;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  transition: background 0.2s;
+}
+
+.ctrl-btn:hover {
+  background: #1e40af;
+}
+
+.ctrl-btn.stop {
+  background: rgba(239, 68, 68, 0.4);
+  border-color: #ef4444;
+}
+
+input[type='range'] {
+  accent-color: #60a5fa;
+  width: 120px;
+  vertical-align: middle;
+}
+
+#progress-track {
+  width: 100%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  margin-top: 8px;
+}
+
+#progress-bar {
+  height: 100%;
+  background: #60a5fa;
+  border-radius: 2px;
+  width: 0%;
+}
+
+#manual-indicator {
+  position: absolute;
+  top: 110px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 201;
+  background: rgba(124, 58, 237, 0.9);
+  border: 1px solid #a78bfa;
+  color: #fff;
+  font-size: 11px;
+  padding: 3px 18px;
+  border-radius: 20px;
+  display: none;
+  letter-spacing: 1px;
+}
+
+#manual-indicator.show {
+  display: block;
+}
+
+#hud-hint {
+  position: absolute;
+  top: 137px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  color: #60a5fa;
+  font-size: 10px;
+  background: rgba(8, 16, 42, 0.75);
+  padding: 3px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(30, 64, 175, 0.3);
+  white-space: nowrap;
+  display: none;
+}
+
+#hud-hint.show {
+  display: block;
+}
+
+#hud-manual {
+  position: absolute;
+  bottom: 66px;
+  right: 12px;
+  z-index: 200;
+  display: none;
+  min-width: 200px;
+}
+
+#hud-manual.show {
+  display: block;
+}
+
+#banner {
+  position: absolute;
+  bottom: 66px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #93c5fd;
+  font-size: 10px;
+  z-index: 200;
+  pointer-events: none;
+  background: rgba(8, 16, 42, 0.7);
+  padding: 3px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(30, 64, 175, 0.3);
+  white-space: nowrap;
+}
+
+/* 선박 제원 패널 */
+#hud-specs {
+  top: 240px;
+  right: 12px;
+  min-width: 248px;
+  z-index: 200;
+}
+
+.spec-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.spec-label {
+  color: #93c5fd;
+  font-size: 11px;
+  min-width: 80px;
+  white-space: nowrap;
+}
+
+.spec-input {
+  background: #0a1628;
+  border: 1px solid #1e40af;
+  color: #e0f0ff;
+  border-radius: 3px;
+  padding: 3px 7px;
+  width: 76px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+}
+
+.spec-input:focus {
+  outline: none;
+  border-color: #60a5fa;
+}
+
+.spec-input.err {
+  border-color: #ef4444;
+  box-shadow: 0 0 4px rgba(239, 68, 68, 0.5);
+}
+
+.spec-unit {
+  color: #4a6a8a;
+  font-size: 11px;
+  min-width: 22px;
+}
+
+.spec-select {
+  background: #0a1628;
+  border: 1px solid #1e40af;
+  color: #e0f0ff;
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  width: 108px;
+}
+
+.spec-select:focus {
+  outline: none;
+  border-color: #60a5fa;
+}
+
+.preset-row {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 9px;
+}
+
+.preset-btn {
+  background: rgba(30, 64, 175, 0.2);
+  border: 1px solid #1e40af;
+  color: #93c5fd;
+  padding: 4px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.preset-btn:hover {
+  background: rgba(30, 64, 175, 0.55);
+}
+
+#btn-apply {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid #10b981;
+  color: #34d399;
+  padding: 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  width: 100%;
+  margin-top: 9px;
+  transition: background 0.15s;
+}
+
+#btn-apply:hover {
+  background: rgba(16, 185, 129, 0.45);
+}
+
+/* ── NSR 항로 적합성 평가 패널 ── */
+#hud-routing {
+  position: fixed;
+  bottom: 30px;
+  right: 12px;
+  min-width: 260px;
+  max-width: 280px;
+  max-height: 40vh;
+  overflow-y: auto;
+  z-index: 200;
+  background: rgba(4, 10, 28, 0.88);
+  border: 1px solid #1e40af;
+  border-radius: 6px;
+  padding: 10px 12px 12px;
+  font-family: 'Courier New', monospace;
+  backdrop-filter: blur(6px);
+}
+
+#routing-status-badge {
+  display: inline-block;
+  margin: 6px 0 4px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  background: rgba(30, 30, 60, 0.6);
+  border: 1px solid #334;
+  color: #aaa;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+#routing-status-badge.approved {
+  background: rgba(0, 180, 80, 0.18);
+  border-color: #00c85a;
+  color: #00ff88;
+}
+
+#routing-status-badge.restricted {
+  background: rgba(200, 120, 0, 0.18);
+  border-color: #cc8800;
+  color: #ffaa00;
+}
+
+#routing-status-badge.suez {
+  background: rgba(200, 70, 0, 0.18);
+  border-color: #cc4400;
+  color: #ff6600;
+}
+
+#routing-status-badge.cape {
+  background: rgba(200, 20, 20, 0.18);
+  border-color: #aa1111;
+  color: #ff2222;
+}
+
+#routing-rio-row {
+  font-size: 11px;
+  color: #93c5fd;
+  margin-bottom: 4px;
+}
+
+#routing-rio-val {
+  font-weight: bold;
+  color: #e0f0ff;
+}
+
+#routing-reason {
+  font-size: 10px;
+  color: #7a9ccc;
+  line-height: 1.5;
+  margin-bottom: 8px;
+  max-height: 80px;
+  overflow-y: auto;
+  border-top: 1px solid rgba(30, 64, 175, 0.3);
+  padding-top: 5px;
+}
+
+.routing-section-title {
+  font-size: 10px;
+  color: #4a6a8a;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin: 8px 0 4px;
+  border-bottom: 1px solid rgba(30, 64, 175, 0.3);
+  padding-bottom: 2px;
+}
+
+.routing-input-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0;
+}
+
+.routing-input-group label {
+  color: #93c5fd;
+  font-size: 10px;
+  min-width: 110px;
+}
+
+.routing-input-group input[type="number"] {
+  background: #0a1628;
+  border: 1px solid #1e40af;
+  color: #e0f0ff;
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  width: 58px;
+}
+
+.routing-checks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 8px;
+  margin: 5px 0 8px;
+}
+
+.routing-checks label {
+  color: #93c5fd;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.routing-checks input[type="checkbox"] {
+  accent-color: #3b82f6;
+  width: 12px;
+  height: 12px;
+}
+
+#btn-evaluate-routing {
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid #3b82f6;
+  color: #93c5fd;
+  padding: 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  width: 100%;
+  margin-top: 4px;
+  transition: background 0.15s;
+}
+
+#btn-evaluate-routing:hover {
+  background: rgba(59, 130, 246, 0.45);
+}
+
+/* 토스트 */
+#toast {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 22px;
+  border-radius: 20px;
+  font-size: 12px;
+  z-index: 400;
+  display: none;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  transition: opacity 0.3s;
+}
+
+#toast.show {
+  display: block;
+}
+
+/* 극야 표시 */
+#polar-night-ind {
+  position: absolute;
+  top: 163px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 201;
+  background: rgba(5, 13, 30, 0.92);
+  border: 1px solid #1e3a60;
+  color: #5080a8;
+  font-size: 11px;
+  padding: 3px 18px;
+  border-radius: 20px;
+  display: none;
+  letter-spacing: 1px;
+}
+
+#polar-night-ind.show {
+  display: block;
+}
+
+/* ─── 선교 창문 프레임 오버레이 ─── */
+#bridge-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 150;
+  pointer-events: none;
+  display: none;
+}
+
+#bridge-frame.show {
+  display: block;
+}
+
+#bf-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 12%;
+  background: linear-gradient(180deg, #06090e 70%, #0a0f18 100%);
+  border-bottom: 1px solid rgba(40, 70, 110, 0.5);
+}
+
+#bf-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 18%;
+  background: linear-gradient(0deg, #040608 60%, #080c14 100%);
+  border-top: 1px solid rgba(40, 70, 110, 0.5);
+}
+
+#bf-left {
+  position: absolute;
+  top: 12%;
+  bottom: 18%;
+  left: 0;
+  width: 4%;
+  background: linear-gradient(90deg,
+      #06090e 60%,
+      rgba(8, 14, 22, 0) 100%);
+}
+
+#bf-right {
+  position: absolute;
+  top: 12%;
+  bottom: 18%;
+  right: 0;
+  width: 4%;
+  background: linear-gradient(270deg,
+      #06090e 60%,
+      rgba(8, 14, 22, 0) 100%);
+}
+
+/* LED row (상단 바 내) */
+.bf-led-row {
+  position: absolute;
+  bottom: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.bf-led {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.bf-led.green {
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+}
+
+.bf-led.yellow {
+  background: #eab308;
+  box-shadow: 0 0 6px #eab308;
+}
+
+.bf-led.red {
+  background: #ef4444;
+  box-shadow: 0 0 6px #ef4444;
+}
+
+.bf-led-lbl {
+  font-size: 9px;
+  color: rgba(130, 180, 220, 0.65);
+  letter-spacing: 1px;
+  margin-left: -8px;
+}
+
+/* 계기 디테일 (하단 바 내) */
+.bf-instruments {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 28px;
+  font-size: 10px;
+  color: rgba(110, 170, 210, 0.7);
+  letter-spacing: 1.2px;
+  white-space: nowrap;
+}
+
+.bf-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+.bf-dot.green {
+  background: #22c55e;
+  box-shadow: 0 0 4px #22c55e;
+}
+
+.bf-dot.yellow {
+  background: #eab308;
+  box-shadow: 0 0 4px #eab308;
+}
+
+#bf-ice-dot {
+  transition:
+    background 0.5s,
+    box-shadow 0.5s;
+}
+
+/* 와이퍼 라인 (장식) */
+.bf-wiper {
+  position: absolute;
+  width: 1px;
+  transform-origin: top center;
+  pointer-events: none;
+}
+
+#bf-wiper1 {
+  top: 12%;
+  left: 31%;
+  height: 36%;
+  background: linear-gradient(to bottom,
+      rgba(150, 185, 215, 0.45),
+      transparent);
+  transform: rotate(13deg);
+}
+
+#bf-wiper2 {
+  top: 12%;
+  right: 33%;
+  height: 31%;
+  background: linear-gradient(to bottom,
+      rgba(150, 185, 215, 0.4),
+      transparent);
+  transform: rotate(-11deg);
+}
+
+/* ─── 쌍안경 마스크 ─── */
+#binoculars-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 155;
+  pointer-events: none;
+  display: none;
+  background: radial-gradient(circle at center,
+      transparent 0%,
+      transparent 34%,
+      rgba(0, 0, 0, 0.88) 39%,
+      black 44%);
+}
+
+#binoculars-mask.show {
+  display: block;
+}
+
+#bino-label {
+  position: absolute;
+  top: 47%;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(180, 210, 240, 0.55);
+  font-size: 10px;
+  letter-spacing: 2px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ─── GEBCO 수심 범례 & 클릭 프로브 팝업 ─── */
+#gebco-legend {
+  user-select: none;
+}
+
+#gebco-depth-popup {
+  position: absolute;
+  z-index: 300;
+  background: rgba(8, 15, 30, 0.92);
+  border: 1px solid #059669;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #34d399;
+  pointer-events: none;
+  display: none;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+#gebco-depth-popup.show {
+  display: block;
+}
+
+/* ─── Minimap ─── */
+#minimap-wrap {
+  position: absolute;
+  bottom: 70px;
+  left: 12px;
+  padding: 10px;
+  width: 220px;
+}
+
+#minimap {
+  border: 1px solid #1e3a8a;
+  border-radius: 4px;
+  display: block;
+}
+
+/* ─── Teleport Overlay ─── */
+#teleport-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: rgba(0, 5, 15, 0.92);
+  backdrop-filter: blur(4px);
+}
+
+#teleport-map {
+  border: 1px solid #1e40af;
+  border-radius: 8px;
+  cursor: crosshair;
+  display: block;
+  width: 100%;
+}
+
+#teleport-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+  justify-content: center;
+}
+
+#teleport-presets button {
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid #1e3a8a;
+  background: rgba(30, 58, 138, 0.2);
+  color: #93c5fd;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#teleport-presets button:hover {
+  background: rgba(30, 58, 138, 0.5);
+}
+
+#tp-selected {
+  text-align: center;
+  margin-top: 8px;
+  color: #4b7ab5;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+}
+
+/* ─── Recenter Button ─── */
+#btn-recenter-float {
+  position: fixed;
+  bottom: 85px;
+  right: 300px;
+  z-index: 250;
+}
+
+#btn-recenter-float button,
+.recenter-btn {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid #10b981;
+  color: #34d399;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+#btn-recenter-float button:hover,
+.recenter-btn:hover {
+  background: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+}
