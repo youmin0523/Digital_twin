@@ -23,7 +23,7 @@ function generateIceData() {
     for (let lo = 30; lo <= 180; lo += 3) {
       const conc = Math.max(
         0,
-        Math.min(1, 0.9 - (la - 85) ** 2 / 600 + rng(-0.12, 0.12))
+        Math.min(1, 0.9 - (la - 85) ** 2 / 600 + rng(-0.12, 0.12)),
       );
       if (conc > 0.05) pts.push({ lon: lo, lat: la, weight: conc });
     }
@@ -34,7 +34,7 @@ function generateIceData() {
     for (let lo = -180; lo <= -90; lo += 3) {
       const conc = Math.max(
         0,
-        Math.min(1, 0.85 - (la - 82) ** 2 / 500 + rng(-0.12, 0.12))
+        Math.min(1, 0.85 - (la - 82) ** 2 / 500 + rng(-0.12, 0.12)),
       );
       if (conc > 0.05) pts.push({ lon: lo, lat: la, weight: conc });
     }
@@ -67,9 +67,27 @@ function generateBergData() {
 
 // Danger zone polygon coordinates [lon, lat]
 const DANGER_ZONE_COORDS = [
-  [[90, 77], [110, 77], [110, 79], [90, 79], [90, 77]],
-  [[140, 74], [160, 74], [160, 76], [140, 76], [140, 74]],
-  [[-170, 68], [-155, 68], [-155, 71], [-170, 71], [-170, 68]],
+  [
+    [90, 77],
+    [110, 77],
+    [110, 79],
+    [90, 79],
+    [90, 77],
+  ],
+  [
+    [140, 74],
+    [160, 74],
+    [160, 76],
+    [140, 76],
+    [140, 74],
+  ],
+  [
+    [-170, 68],
+    [-155, 68],
+    [-155, 71],
+    [-170, 71],
+    [-170, 68],
+  ],
 ];
 
 // Convert danger zone coords to a GeoJSON FeatureCollection
@@ -91,7 +109,7 @@ function buildDangerZonesGeoJSON() {
 // Layer builders -- mirrors buildDeckLayers() from arctic-hybrid.html
 // ---------------------------------------------------------------------------
 
-function buildLayers(iceData, bergData, dangerGeoJSON) {
+function buildLayers(iceData, bergData, dangerGeoJSON, realBergData) {
   return [
     // 1. Ice concentration scatter (replaces HeatmapLayer with identical
     //    ScatterplotLayer used in the original source)
@@ -113,7 +131,7 @@ function buildLayers(iceData, bergData, dangerGeoJSON) {
       pickable: false,
     }),
 
-    // 2. Iceberg scatter (white/cyan dots with per-feature size)
+    // 2. Iceberg scatter (white/cyan dots with per-feature size) - procedural
     new ScatterplotLayer({
       id: 'bergs',
       data: bergData,
@@ -125,6 +143,20 @@ function buildLayers(iceData, bergData, dangerGeoJSON) {
       lineWidthMinPixels: 1,
       radiusUnits: 'meters',
       radiusMinPixels: 2,
+      pickable: false,
+    }),
+
+    // 2b. Real iceberg data - yellow to distinguish from procedural
+    new ScatterplotLayer({
+      id: 'real-bergs',
+      data: realBergData || [],
+      getPosition: (d) => [d.lon, d.lat],
+      getRadius: 8,
+      getFillColor: [255, 200, 0, 230],
+      getLineColor: [255, 140, 0, 255],
+      stroked: true,
+      lineWidthMinPixels: 1,
+      radiusUnits: 'pixels',
       pickable: false,
     }),
 
@@ -148,13 +180,17 @@ function buildLayers(iceData, bergData, dangerGeoJSON) {
 // Component
 // ---------------------------------------------------------------------------
 
-const DeckOverlay = forwardRef(function DeckOverlay({ visible, cesiumViewer }, ref) {
+const DeckOverlay = forwardRef(function DeckOverlay(
+  { visible, cesiumViewer },
+  ref,
+) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const deckRef = useRef(null);
   const iceDataRef = useRef(null);
   const bergDataRef = useRef(null);
   const dangerGeoRef = useRef(null);
+  const realBergDataRef = useRef(null);
   const postRenderListenerRef = useRef(null);
   const [isVisible, setIsVisible] = useState(visible);
 
@@ -196,7 +232,8 @@ const DeckOverlay = forwardRef(function DeckOverlay({ visible, cesiumViewer }, r
       layers: buildLayers(
         iceDataRef.current,
         bergDataRef.current,
-        dangerGeoRef.current
+        dangerGeoRef.current,
+        realBergDataRef.current,
       ),
     });
   }, [cesiumViewer]);
@@ -250,7 +287,7 @@ const DeckOverlay = forwardRef(function DeckOverlay({ visible, cesiumViewer }, r
       if (cesiumViewer && postRenderListenerRef.current) {
         try {
           cesiumViewer.scene.postRender.removeEventListener(
-            postRenderListenerRef.current
+            postRenderListenerRef.current,
           );
         } catch (_) {
           /* viewer may already be destroyed */
@@ -280,7 +317,8 @@ const DeckOverlay = forwardRef(function DeckOverlay({ visible, cesiumViewer }, r
         layers: buildLayers(
           iceDataRef.current,
           bergDataRef.current,
-          dangerGeoRef.current
+          dangerGeoRef.current,
+          realBergDataRef.current,
         ),
       });
     }
@@ -318,7 +356,8 @@ const DeckOverlay = forwardRef(function DeckOverlay({ visible, cesiumViewer }, r
             layers: buildLayers(
               iceDataRef.current,
               bergDataRef.current,
-              dangerGeoRef.current
+              dangerGeoRef.current,
+              realBergDataRef.current,
             ),
           });
         } else {
@@ -334,20 +373,24 @@ const DeckOverlay = forwardRef(function DeckOverlay({ visible, cesiumViewer }, r
       updateLayers(nextData = {}) {
         if (nextData.iceData) iceDataRef.current = nextData.iceData;
         if (nextData.bergData) bergDataRef.current = nextData.bergData;
-        if (nextData.dangerGeoJSON) dangerGeoRef.current = nextData.dangerGeoJSON;
+        if (nextData.dangerGeoJSON)
+          dangerGeoRef.current = nextData.dangerGeoJSON;
+        if (nextData.realBergData !== undefined)
+          realBergDataRef.current = nextData.realBergData;
 
         if (deckRef.current && isVisible) {
           deckRef.current.setProps({
             layers: buildLayers(
               iceDataRef.current,
               bergDataRef.current,
-              dangerGeoRef.current
+              dangerGeoRef.current,
+              realBergDataRef.current,
             ),
           });
         }
       },
     }),
-    [isVisible, syncDeckView]
+    [isVisible, syncDeckView],
   );
 
   return (

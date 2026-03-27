@@ -21,6 +21,7 @@ import BinocularsMask from './components/overlay/BinocularsMask';
 import { ROUTES } from './data/arcticRoutes';
 import { SHIP_PRESETS } from './data/vesselPresets';
 import useManualControl from './hooks/useManualControl';
+import { fetchIceConcentration } from './services/api';
 
 function AppInner() {
   const state = useAppState();
@@ -30,6 +31,7 @@ function AppInner() {
   const threeRef = useRef(null);
   const deckRef = useRef(null);
   const viewerRef = useRef(null);
+  const [cesiumViewerState, setCesiumViewerState] = useState(null);
 
   const animFrameRef = useRef(null);
 
@@ -54,7 +56,10 @@ function AppInner() {
 
       // ── 수동 조종 키보드 입력 처리 ──
       const k = keys.current;
-      if (k && (k['KeyW'] || k['KeyS'] || k['KeyA'] || k['KeyD'] || k['KeyX'])) {
+      if (
+        k &&
+        (k['KeyW'] || k['KeyS'] || k['KeyA'] || k['KeyD'] || k['KeyX'])
+      ) {
         // 스로틀 (W/S)
         if (k['KeyW']) manualThrottle = Math.min(manualThrottle + dt * 80, 100);
         if (k['KeyS']) manualThrottle = Math.max(manualThrottle - dt * 80, -30);
@@ -74,8 +79,10 @@ function AppInner() {
         const three = threeRef.current;
         if (three && three.shipPivot) {
           three.shipPivot.rotation.y = -manualHeading;
-          three.shipPivot.position.x += Math.sin(manualHeading) * manualSpeed * dt * moveScale;
-          three.shipPivot.position.z -= Math.cos(manualHeading) * manualSpeed * dt * moveScale;
+          three.shipPivot.position.x +=
+            Math.sin(manualHeading) * manualSpeed * dt * moveScale;
+          three.shipPivot.position.z -=
+            Math.cos(manualHeading) * manualSpeed * dt * moveScale;
 
           const { camera } = three;
           if (camera) {
@@ -92,7 +99,9 @@ function AppInner() {
           payload: {
             manualThrottle: Math.round(manualThrottle),
             manualSpeed: Math.round(manualSpeed * 10) / 10,
-            manualHeading: Math.round((manualHeading * 180 / Math.PI + 360) % 360),
+            manualHeading: Math.round(
+              ((manualHeading * 180) / Math.PI + 360) % 360,
+            ),
             manualYawRate: Math.round(yawRate * 100) / 100,
           },
         });
@@ -101,7 +110,9 @@ function AppInner() {
       // deck.gl Cesium 카메라 싱크
       const deck = deckRef.current;
       if (deck && deck.syncView && viewerRef.current) {
-        try { deck.syncView(); } catch (e) {}
+        try {
+          deck.syncView();
+        } catch (e) {}
       }
     }
 
@@ -126,9 +137,18 @@ function AppInner() {
   // 라우팅 평가 결과
   const [evaluationResult, setEvaluationResult] = useState(null);
 
+  // Cesium viewer 준비되면 LIVE 빙산 데이터 로딩 (DeckOverlay가 viewer를 받은 후)
+  useEffect(() => {
+    if (cesiumViewerState) {
+      handleMonthChange('live');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cesiumViewerState]);
+
   // Cesium 뷰어 준비 완료
   const handleViewerReady = useCallback((viewer) => {
     viewerRef.current = viewer;
+    setCesiumViewerState(viewer);
     console.log('[App] Cesium viewer ready');
   }, []);
 
@@ -142,48 +162,127 @@ function AppInner() {
   }, [dispatch]);
 
   // 카메라 모드
-  const handleModeChange = useCallback((mode) => {
-    dispatch({ type: 'SET_MODE', payload: mode });
-    dispatch({ type: 'SET_BRIDGE_VISIBLE', payload: mode === 'BRIDGE' });
-  }, [dispatch]);
+  const handleModeChange = useCallback(
+    (mode) => {
+      dispatch({ type: 'SET_MODE', payload: mode });
+      dispatch({ type: 'SET_BRIDGE_VISIBLE', payload: mode === 'BRIDGE' });
+    },
+    [dispatch],
+  );
 
   const handleManualToggle = useCallback(() => {
     dispatch({ type: 'SET_MANUAL_MODE', payload: !state.manualMode });
   }, [state.manualMode, dispatch]);
 
   // 배속/타임라인
-  const handleMultiplierChange = useCallback((value) => {
-    dispatch({ type: 'SET_MULTIPLIER', payload: Number(value) });
-  }, [dispatch]);
+  const handleMultiplierChange = useCallback(
+    (value) => {
+      dispatch({ type: 'SET_MULTIPLIER', payload: Number(value) });
+    },
+    [dispatch],
+  );
 
-  const handleTimelineChange = useCallback((value) => {
-    dispatch({ type: 'SET_TIMELINE', payload: Number(value) });
-  }, [dispatch]);
+  const handleTimelineChange = useCallback(
+    (value) => {
+      dispatch({ type: 'SET_TIMELINE', payload: Number(value) });
+    },
+    [dispatch],
+  );
 
   // 항로/선박 제원
-  const handleRouteChange = useCallback((routeKey) => {
-    dispatch({ type: 'SET_ROUTE', payload: routeKey });
-  }, [dispatch]);
+  const handleRouteChange = useCallback(
+    (routeKey) => {
+      dispatch({ type: 'SET_ROUTE', payload: routeKey });
+    },
+    [dispatch],
+  );
 
-  const handleSpecChange = useCallback((field, value) => {
-    dispatch({ type: 'SET_SHIP_SPECS', payload: { [field]: value } });
-  }, [dispatch]);
+  const handleSpecChange = useCallback(
+    (field, value) => {
+      dispatch({ type: 'SET_SHIP_SPECS', payload: { [field]: value } });
+    },
+    [dispatch],
+  );
 
-  const handlePresetLoad = useCallback((presetKey) => {
-    const preset = SHIP_PRESETS[presetKey];
-    if (preset) dispatch({ type: 'SET_SHIP_SPECS', payload: preset });
-  }, [dispatch]);
+  const handlePresetLoad = useCallback(
+    (presetKey) => {
+      const preset = SHIP_PRESETS[presetKey];
+      if (preset) dispatch({ type: 'SET_SHIP_SPECS', payload: preset });
+    },
+    [dispatch],
+  );
 
   // FOV
-  const handleFovChange = useCallback((value) => {
-    dispatch({ type: 'SET_FOV', payload: Number(value) });
-    dispatch({ type: 'SET_FOV_OVERRIDE', payload: true });
-  }, [dispatch]);
+  const handleFovChange = useCallback(
+    (value) => {
+      dispatch({ type: 'SET_FOV', payload: Number(value) });
+      dispatch({ type: 'SET_FOV_OVERRIDE', payload: true });
+    },
+    [dispatch],
+  );
 
   // 해빙 데이터 월 변경
-  const handleMonthChange = useCallback((month) => {
-    console.log('Ice month changed:', month);
-  }, []);
+  const handleMonthChange = useCallback(
+    async (month) => {
+      const apiMonth = month === 'live' ? 'latest' : month;
+      try {
+        const iceData = await fetchIceConcentration(apiMonth);
+
+        // DeckOverlay 포맷으로 변환
+        const icePoints = (iceData?.cells || []).map((c) => ({
+          lon: c.lon,
+          lat: c.lat,
+          weight: c.concentration,
+        }));
+
+        // 북극(lat>=60°) 고농도(>=80%) 셀 → 노란 빙하 위험 마커로 표시
+        // IIP 빙산(북대서양)은 북극 뷰에서 안 보이므로 해빙 농도 데이터 기반으로 생성
+        const MARKER_MAX = 300;
+        const highConcCells = icePoints.filter(
+          (c) => c.lat >= 60 && c.weight >= 0.8,
+        );
+        const step =
+          highConcCells.length > MARKER_MAX
+            ? Math.floor(highConcCells.length / MARKER_MAX)
+            : 1;
+        const realBergs = highConcCells
+          .filter((_, i) => i % step === 0)
+          .slice(0, MARKER_MAX)
+          .map((c) => ({
+            lon: c.lon,
+            lat: c.lat,
+            size: 18000 + c.weight * 22000,
+          }));
+
+        // SATELLITE / WIDE 모드: DeckOverlay 업데이트
+        deckRef.current?.updateLayers({
+          iceData: icePoints,
+          realBergData: realBergs,
+        });
+
+        // BRIDGE / FOLLOW 모드: ThreeOverlay에 실제 빙산 위치 반영
+        const { lat, lon } = state.shipState;
+        threeRef.current?.updateRealBergs(realBergs, lat, lon);
+
+        // HUD 데이터 소스 라벨 업데이트
+        const source =
+          month === 'live'
+            ? `실시간 (${iceData?.date || ''})`
+            : `아카이브 ${month}`;
+        dispatch({
+          type: 'SET_ICE_DATA',
+          payload: { data: iceData, key: month, source },
+        });
+      } catch (err) {
+        console.warn('[IceData] fetch 실패, 절차적 폴백 유지:', err.message);
+        dispatch({
+          type: 'SET_ICE_DATA',
+          payload: { data: null, key: month, source: '절차적 폴백' },
+        });
+      }
+    },
+    [state.shipState, dispatch],
+  );
 
   // API 레이어 토글
   const handleLayerToggle = useCallback((layerKey, checked) => {
@@ -226,30 +325,35 @@ function AppInner() {
   }, []);
 
   // 텔레포트
-  const handleTeleport = useCallback((lat, lon) => {
-    dispatch({ type: 'SET_SHIP_STATE', payload: { lat, lon } });
-    setTeleportOpen(false);
+  const handleTeleport = useCallback(
+    (lat, lon) => {
+      dispatch({ type: 'SET_SHIP_STATE', payload: { lat, lon } });
+      setTeleportOpen(false);
 
-    // Cesium 카메라 이동
-    const viewer = viewerRef.current;
-    if (viewer && !viewer.isDestroyed()) {
-      try {
-        viewer.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(lon, lat, 50000),
-          duration: 1.5,
-        });
-      } catch (e) { console.warn('flyTo error:', e); }
-    }
+      // Cesium 카메라 이동
+      const viewer = viewerRef.current;
+      if (viewer && !viewer.isDestroyed()) {
+        try {
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(lon, lat, 50000),
+            duration: 1.5,
+          });
+        } catch (e) {
+          console.warn('flyTo error:', e);
+        }
+      }
 
-    // Three.js 선박 위치 리셋 (Three.js 세계에서는 원점 기준)
-    const three = threeRef.current;
-    if (three && three.shipPivot) {
-      three.shipPivot.position.set(0, 0, 0);
-      three.shipPivot.rotation.y = 0;
-    }
+      // Three.js 선박 위치 리셋 (Three.js 세계에서는 원점 기준)
+      const three = threeRef.current;
+      if (three && three.shipPivot) {
+        three.shipPivot.position.set(0, 0, 0);
+        three.shipPivot.rotation.y = 0;
+      }
 
-    console.log(`[Teleport] → ${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`);
-  }, [dispatch]);
+      console.log(`[Teleport] → ${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`);
+    },
+    [dispatch],
+  );
 
   // 리센터
   const handleRecenter = useCallback(() => {
@@ -272,20 +376,26 @@ function AppInner() {
         ref={cesiumRef}
         currentRouteKey={state.currentRouteKey}
         onViewerReady={handleViewerReady}
-        visible={state.currentMode !== 'BRIDGE' && state.currentMode !== 'FOLLOW'}
+        visible={
+          state.currentMode !== 'BRIDGE' && state.currentMode !== 'FOLLOW'
+        }
       />
 
       <ThreeOverlay
         ref={threeRef}
-        visible={state.currentMode === 'BRIDGE' || state.currentMode === 'FOLLOW'}
+        visible={
+          state.currentMode === 'BRIDGE' || state.currentMode === 'FOLLOW'
+        }
         shipState={state.shipState}
         mode={state.currentMode}
       />
 
       <DeckOverlay
         ref={deckRef}
-        visible={state.currentMode === 'SATELLITE' || state.currentMode === 'WIDE'}
-        cesiumViewer={viewerRef.current}
+        visible={
+          state.currentMode === 'SATELLITE' || state.currentMode === 'WIDE'
+        }
+        cesiumViewer={cesiumViewerState}
       />
 
       <div id="fade"></div>
@@ -314,23 +424,42 @@ function AppInner() {
         phase={state.hud.phase}
       />
 
-      {/* HUD 패널: 오른쪽 해빙위험도 */}
-      <HudRight
-        danger={state.hud.danger}
-        dangerClass={state.hud.dangerClass}
-        iceClass={state.hud.iceClass}
-        sic={state.hud.sic}
-        temp={state.hud.temp}
-        rfi={state.hud.rfi}
-        hs={state.hud.hs}
-        roll={state.hud.roll}
-        pitch={state.hud.pitch}
-        seaLabel={state.hud.seaLabel}
-        dataSource={state.iceDataSource}
-        bergAlert={state.hud.bergAlert}
-        bergAlertVisible={state.hud.bergAlertVisible}
-        onMonthChange={handleMonthChange}
-      />
+      {/* 우측 HUD 수직 정렬 컨테이너 */}
+      <div className="hud-right-container">
+        {/* HUD 패널: 오른쪽 해빙위험도 */}
+        <HudRight
+          danger={state.hud.danger}
+          dangerClass={state.hud.dangerClass}
+          iceClass={state.hud.iceClass}
+          sic={state.hud.sic}
+          temp={state.hud.temp}
+          rfi={state.hud.rfi}
+          hs={state.hud.hs}
+          roll={state.hud.roll}
+          pitch={state.hud.pitch}
+          seaLabel={state.hud.seaLabel}
+          dataSource={state.iceDataSource}
+          bergAlert={state.hud.bergAlert}
+          bergAlertVisible={state.hud.bergAlertVisible}
+          onMonthChange={handleMonthChange}
+        />
+
+        {/* 선박 제원 설정 */}
+        <ShipSpecsPanel
+          specs={state.shipSpecs}
+          onSpecChange={handleSpecChange}
+          onPresetLoad={handlePresetLoad}
+          onRouteChange={handleRouteChange}
+          currentRoute={state.currentRouteKey}
+        />
+
+        {/* NSR 항로 평가 */}
+        <RoutingEvaluationPanel
+          onEvaluate={handleEvaluate}
+          evaluationResult={evaluationResult}
+          currentRoute={state.currentRouteKey}
+        />
+      </div>
 
       {/* 카메라 전환 */}
       <CameraPanel
@@ -351,22 +480,6 @@ function AppInner() {
         turnRate={state.manualYawRate}
         fov={state.fov}
         visible={state.manualMode}
-      />
-
-      {/* 선박 제원 설정 */}
-      <ShipSpecsPanel
-        specs={state.shipSpecs}
-        onSpecChange={handleSpecChange}
-        onPresetLoad={handlePresetLoad}
-        onRouteChange={handleRouteChange}
-        currentRoute={state.currentRouteKey}
-      />
-
-      {/* NSR 항로 평가 */}
-      <RoutingEvaluationPanel
-        onEvaluate={handleEvaluate}
-        evaluationResult={evaluationResult}
-        currentRoute={state.currentRouteKey}
       />
 
       {/* API 레이어 토글 */}
@@ -407,7 +520,8 @@ function AppInner() {
       <TeleportOverlay
         visible={teleportOpen}
         waypoints={waypoints}
-        currentRoute={state.currentRouteKey}
+        shipPos={state.shipState}
+        heading={state.shipState.heading}
         onTeleport={handleTeleport}
         onClose={() => setTeleportOpen(false)}
       />
@@ -416,7 +530,10 @@ function AppInner() {
       <RecenterButton onClick={handleRecenter} />
 
       {/* 상태 인디케이터 */}
-      <div id="manual-indicator" style={{ display: state.manualMode ? 'block' : 'none' }}>
+      <div
+        id="manual-indicator"
+        style={{ display: state.manualMode ? 'block' : 'none' }}
+      >
         ⚑ 수동 조종 모드
       </div>
       <div id="hud-hint"></div>

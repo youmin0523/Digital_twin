@@ -35,14 +35,35 @@ export default function ShipSpecsPanel({
   const s = specs || {};
 
   return (
-    <div className="hud" id="hud-specs">
-      <div className="hud-title">⚙ 선박 제원 설정</div>
-      <div className="preset-row">
+    <div
+      className="hud"
+      id="hud-specs"
+      style={{ border: '1px solid rgba(96, 165, 250, 0.2)' }}
+    >
+      <div className="hud-title">⚙️ 선박 제원 설정</div>
+      <div
+        className="preset-row"
+        style={{
+          background: 'rgba(0,0,0,0.2)',
+          padding: '4px',
+          borderRadius: '8px',
+          marginBottom: '16px',
+        }}
+      >
         {PRESETS.map(({ key, label }) => (
           <button
             key={key}
             className="preset-btn"
             data-preset={key}
+            style={{
+              flex: 1,
+              border: 'none',
+              background: 'transparent',
+              fontSize: '10px',
+              padding: '6px 0',
+              borderRadius: '6px',
+              transition: 'all 0.2s',
+            }}
             onClick={() => onPresetLoad && onPresetLoad(key)}
           >
             {label}
@@ -53,95 +74,146 @@ export default function ShipSpecsPanel({
       <div
         className="spec-row"
         style={{
-          marginBottom: '8px',
-          borderBottom: '1px solid rgba(30, 64, 175, 0.5)',
-          paddingBottom: '8px',
+          marginBottom: '12px',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+          paddingBottom: '12px',
         }}
       >
-        <span className="spec-label">목표 항로</span>
+        <span
+          className="spec-label"
+          style={{ color: '#34d399', fontWeight: 'bold' }}
+        >
+          목표 항로
+        </span>
         <select
           className="spec-select"
           id="spec-route"
-          style={{ width: '155px', fontWeight: 'bold' }}
+          style={{
+            width: '160px',
+            fontWeight: 'bold',
+            background: 'rgba(52, 211, 153, 0.1)',
+            borderColor: 'rgba(52, 211, 153, 0.3)',
+            color: '#34d399',
+          }}
           value={currentRoute || 'NSR'}
           onChange={(e) => onRouteChange && onRouteChange(e.target.value)}
         >
           {ROUTE_OPTIONS.map(({ value, label }) => (
-            <option key={value} value={value}>{label}</option>
+            <option key={value} value={value}>
+              {label}
+            </option>
           ))}
         </select>
       </div>
 
       <div className="spec-row">
-        <span className="spec-label">배수량</span>
+        <span className="spec-label">배수량 (Displacement)</span>
         <input
           className="spec-input"
           id="spec-disp"
           type="number"
+          style={{
+            background: 'rgba(15, 23, 42, 0.6)',
+            borderRadius: '6px',
+            border: '1px solid rgba(255,255,255,0.1)',
+          }}
           value={s.displacement || 20000}
-          min="1000"
-          max="500000"
-          step="1000"
-          onChange={(e) => onSpecChange && onSpecChange('displacement', Number(e.target.value))}
+          onChange={(e) =>
+            onSpecChange && onSpecChange('displacement', Number(e.target.value))
+          }
         />
-        <span className="spec-unit">톤</span>
+        <span className="spec-unit">ton</span>
       </div>
       <div className="spec-row">
-        <span className="spec-label">선박 길이</span>
+        <span className="spec-label">선박 길이 (LOA)</span>
         <input
           className="spec-input"
           id="spec-len"
           type="number"
+          style={{
+            background: 'rgba(15, 23, 42, 0.6)',
+            borderRadius: '6px',
+            border: '1px solid rgba(255,255,255,0.1)',
+          }}
           value={s.length || 160}
-          min="50"
-          max="500"
-          step="5"
-          onChange={(e) => onSpecChange && onSpecChange('length', Number(e.target.value))}
+          onChange={(e) =>
+            onSpecChange && onSpecChange('length', Number(e.target.value))
+          }
         />
         <span className="spec-unit">m</span>
       </div>
       <div className="spec-row">
-        <span className="spec-label">선박 폭</span>
+        <span className="spec-label">선박 폭 (Beam)</span>
         <input
           className="spec-input"
           id="spec-width"
           type="number"
+          style={{
+            background: 'rgba(15, 23, 42, 0.6)',
+            borderRadius: '6px',
+            border: '1px solid rgba(255,255,255,0.1)',
+          }}
           value={s.width || 30}
-          min="10"
-          max="100"
-          step="1"
-          onChange={(e) => onSpecChange && onSpecChange('width', Number(e.target.value))}
+          onChange={(e) =>
+            onSpecChange && onSpecChange('width', Number(e.target.value))
+          }
         />
         <span className="spec-unit">m</span>
       </div>
       <div className="spec-row">
-        <span className="spec-label">GM (복원력)</span>
+        <span className="spec-label">GM (Restoration)</span>
         <input
           className="spec-input"
           id="spec-gm"
           type="number"
+          style={{
+            background: 'rgba(15, 23, 42, 0.6)',
+            borderRadius: '6px',
+            border: '1px solid rgba(255,255,255,0.1)',
+          }}
           value={s.gm || 3.2}
-          min="1.0"
-          max="8.0"
-          step="0.1"
-          onChange={(e) => onSpecChange && onSpecChange('gm', Number(e.target.value))}
+          onChange={(e) =>
+            onSpecChange && onSpecChange('gm', Number(e.target.value))
+          }
         />
         <span className="spec-unit">m</span>
       </div>
       <div className="spec-row">
-        <span className="spec-label">Ice Class</span>
+        <span className="spec-label">Polar Ice Class</span>
         <select
           className="spec-select"
           id="spec-iceclass"
+          style={{
+            width: '130px',
+            background: 'rgba(15, 23, 42, 0.6)',
+            borderRadius: '6px',
+          }}
           value={s.iceClass || 'PC2'}
-          onChange={(e) => onSpecChange && onSpecChange('iceClass', e.target.value)}
+          onChange={(e) =>
+            onSpecChange && onSpecChange('iceClass', e.target.value)
+          }
         >
           {ICE_CLASSES.map(({ value, label }) => (
-            <option key={value} value={value}>{label}</option>
+            <option key={value} value={value}>
+              {label}
+            </option>
           ))}
         </select>
       </div>
-      <button id="btn-apply">⚡ 적용하기</button>
+      <button
+        id="btn-apply"
+        style={{
+          marginTop: '16px',
+          padding: '10px',
+          borderRadius: '8px',
+          fontWeight: 'bold',
+          background:
+            'linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(52, 211, 153, 0.5))',
+          boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)',
+        }}
+      >
+        ⚡ 제원 데이터 적용
+      </button>
     </div>
   );
 }
