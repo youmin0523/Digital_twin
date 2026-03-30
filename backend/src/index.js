@@ -6,7 +6,7 @@ const iceRouter = require('./routes/ice');
 const icebergRouter = require('./routes/iceberg');
 const routingRouter = require('./routes/routing');
 const proxyRouter = require('./routes/proxy');
-const { legacyNsidcProxy, legacyCopProxy } = require('./routes/proxy');
+const { legacyNsidcProxy, legacyCopProxy, legacySentinelProxy } = require('./routes/proxy');
 const pipelineRouter = require('./routes/pipeline');
 
 const app = express();
@@ -26,6 +26,7 @@ app.use('/proxy', proxyRouter);
 // 기존 arctic-hybrid.html 호환 프록시
 app.get('/nsidc-proxy/', legacyNsidcProxy);
 app.get('/cop-proxy/', legacyCopProxy);
+app.get('/sentinel-proxy/', legacySentinelProxy);
 
 // 정적 데이터 파일 서빙
 app.use('/data', express.static(path.join(__dirname, '..', 'data')));

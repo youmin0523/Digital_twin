@@ -31,6 +31,7 @@ export default function ShipSpecsPanel({
   onPresetLoad,
   onRouteChange,
   currentRoute,
+  onApply,
 }) {
   const s = specs || {};
 
@@ -179,6 +180,24 @@ export default function ShipSpecsPanel({
         <span className="spec-unit">m</span>
       </div>
       <div className="spec-row">
+        <span className="spec-label">흘수 (Draft)</span>
+        <input
+          className="spec-input"
+          id="spec-draft"
+          type="number"
+          style={{
+            background: 'rgba(15, 23, 42, 0.6)',
+            borderRadius: '6px',
+            border: '1px solid rgba(255,255,255,0.1)',
+          }}
+          value={s.draft || 8.5}
+          onChange={(e) =>
+            onSpecChange && onSpecChange('draft', Number(e.target.value))
+          }
+        />
+        <span className="spec-unit">m</span>
+      </div>
+      <div className="spec-row">
         <span className="spec-label">Polar Ice Class</span>
         <select
           className="spec-select"
@@ -211,6 +230,7 @@ export default function ShipSpecsPanel({
             'linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(52, 211, 153, 0.5))',
           boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)',
         }}
+        onClick={() => onApply && onApply()}
       >
         ⚡ 제원 데이터 적용
       </button>

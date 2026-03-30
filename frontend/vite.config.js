@@ -11,6 +11,7 @@ export default defineConfig({
       '/proxy': 'http://localhost:8000',
       '/nsidc-proxy': 'http://localhost:8000',
       '/cop-proxy': 'http://localhost:8000',
+      '/sentinel-proxy': 'http://localhost:8000',
       '/data': 'http://localhost:8000',
       '/scripts': 'http://localhost:8000',
     },

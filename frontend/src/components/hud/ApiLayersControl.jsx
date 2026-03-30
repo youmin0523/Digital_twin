@@ -15,23 +15,44 @@ export default function ApiLayersControl({
   onLayerToggle,
   gebcoOpacity,
   onGebcoOpacityChange,
+  satVisible,
+  onSatToggle,
 }) {
   const states = layerStates || {};
   const opacity = gebcoOpacity != null ? gebcoOpacity : 75;
   const gebcoChecked = !!states.gebcoBathy;
 
   return (
-    <div className="hud" id="hud-api-layers" style={{ 
-      top: '12px', 
-      left: '232px', 
-      minWidth: '240px', 
+    <div className="hud" id="hud-api-layers" style={{
+      minWidth: '240px',
       border: '1px solid rgba(52, 211, 153, 0.3)',
-      background: 'rgba(15, 23, 42, 0.8)'
+      background: 'rgba(15, 23, 42, 0.8)',
     }}>
-      {/* // //! [Original Code] <div className="hud-title" style={{ color: '#34d399' }}> */}
-      {/* // //* [Modified Code] 에메랄드 컬러 포인트 유지 및 아이콘 최적화 */}
       <div className="hud-title" style={{ color: '#34d399' }}>
         🌍 실시간 WMS 데이터 레이어
+      </div>
+
+      <div
+        className="hud-row"
+        style={{ justifyContent: 'flex-start', gap: '12px', margin: '8px 0', paddingBottom: '8px', borderBottom: '1px solid rgba(52,211,153,0.15)' }}
+        title="NASA MODIS Terra/Aqua + VIIRS 위성 실사영상 (계절 변화 반영)"
+      >
+        <input
+          type="checkbox"
+          id="layer-sat"
+          className="api-cb"
+          style={{ accentColor: '#f59e0b', cursor: 'pointer', transform: 'scale(1.1)' }}
+          checked={!!satVisible}
+          onChange={(e) => onSatToggle && onSatToggle(e.target.checked)}
+        />
+        <label htmlFor="layer-sat" className="hud-label" style={{
+          cursor: 'pointer',
+          color: satVisible ? '#f59e0b' : '#94a3b8',
+          fontSize: '12px',
+          transition: 'color 0.2s',
+        }}>
+          🛰️ 위성 실사영상 (MODIS/VIIRS)
+        </label>
       </div>
 
       {LAYERS.map(({ id, stateKey, label, title }) => (
@@ -49,8 +70,8 @@ export default function ApiLayersControl({
               checked={!!states[stateKey]}
               onChange={(e) => onLayerToggle && onLayerToggle(stateKey, e.target.checked)}
             />
-            <label htmlFor={id} className="hud-label" style={{ 
-              cursor: 'pointer', 
+            <label htmlFor={id} className="hud-label" style={{
+              cursor: 'pointer',
               color: states[stateKey] ? '#f1f5f9' : '#94a3b8',
               fontSize: '12px',
               transition: 'color 0.2s'
@@ -59,7 +80,6 @@ export default function ApiLayersControl({
             </label>
           </div>
 
-          {/* GEBCO opacity slider — shown right after the GEBCO checkbox */}
           {stateKey === 'gebcoBathy' && (
             <div
               id="gebco-opacity-row"

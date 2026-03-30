@@ -148,24 +148,59 @@ function NsidcLegend() {
         <span style={{ color: '#3b82f6', fontSize: '9px' }}>NASA AMSRU2 25km</span>
       </div>
 
-      {/* Color bar */}
+      {/* Color bar — GIBS 실제 출력 팔레트 */}
       <div style={{ position: 'relative', marginBottom: '6px' }}>
         <div style={{
           width: '100%',
           height: '18px',
           borderRadius: '4px',
-          background: 'linear-gradient(to right, #0a192f 0%, #0055ff 25%, #00aaff 50%, #e0f7fa 75%, #ffffff 100%)',
+          background: 'linear-gradient(to right, rgba(0,0,0,0) 0%, #6a0dad 10%, #0000ff 25%, #00cc00 42%, #ffff00 58%, #ff8800 72%, #ff0000 88%, #ff69b4 100%)',
           border: '1px solid rgba(59,130,246,0.3)',
         }} />
       </div>
 
       {/* Percentage labels */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-        <span style={{ fontSize: '9px', color: '#4a6a8a' }}>0%</span>
-        <span style={{ fontSize: '9px', color: '#60a5fa' }}>25%</span>
-        <span style={{ fontSize: '9px', color: '#93c5fd' }}>50%</span>
-        <span style={{ fontSize: '9px', color: '#e0f7fa' }}>75%</span>
-        <span style={{ fontSize: '9px', color: '#ffffff' }}>100%</span>
+        <span style={{ fontSize: '9px', color: '#666' }}>15%</span>
+        <span style={{ fontSize: '9px', color: '#6a0dad' }}>30%</span>
+        <span style={{ fontSize: '9px', color: '#00cc00' }}>50%</span>
+        <span style={{ fontSize: '9px', color: '#ff8800' }}>70%</span>
+        <span style={{ fontSize: '9px', color: '#ff0000' }}>90%</span>
+        <span style={{ fontSize: '9px', color: '#ff69b4' }}>100%</span>
+      </div>
+
+      {/* Zone labels */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        borderTop: '1px solid rgba(59,130,246,0.15)',
+        paddingTop: '7px',
+        gap: '2px',
+      }}>
+        <div style={{ textAlign: 'center', flex: 1 }}>
+          <div style={{ fontSize: '8px', color: '#6a0dad', marginBottom: '2px' }}>{'\u25CF'}</div>
+          <div style={{ fontSize: '8px', color: '#6a0dad', lineHeight: 1.2 }}>
+            {'\uC800\uB18D\uB3C4'}<br /><span style={{ color: '#555' }}>15~40%</span>
+          </div>
+        </div>
+        <div style={{ textAlign: 'center', flex: 1 }}>
+          <div style={{ fontSize: '8px', color: '#00cc00', marginBottom: '2px' }}>{'\u25CF'}</div>
+          <div style={{ fontSize: '8px', color: '#00cc00', lineHeight: 1.2 }}>
+            {'\uC911\uB18D\uB3C4'}<br /><span style={{ color: '#555' }}>40~60%</span>
+          </div>
+        </div>
+        <div style={{ textAlign: 'center', flex: 1 }}>
+          <div style={{ fontSize: '8px', color: '#ff8800', marginBottom: '2px' }}>{'\u25CF'}</div>
+          <div style={{ fontSize: '8px', color: '#ff8800', lineHeight: 1.2 }}>
+            {'\uACE0\uB18D\uB3C4'}<br /><span style={{ color: '#555' }}>60~80%</span>
+          </div>
+        </div>
+        <div style={{ textAlign: 'center', flex: 1 }}>
+          <div style={{ fontSize: '8px', color: '#ff0000', marginBottom: '2px' }}>{'\u25CF'}</div>
+          <div style={{ fontSize: '8px', color: '#ff0000', lineHeight: 1.2 }}>
+            {'\uADF9\uACE0\uB18D\uB3C4'}<br /><span style={{ color: '#555' }}>80~100%</span>
+          </div>
+        </div>
       </div>
     </div>
   );

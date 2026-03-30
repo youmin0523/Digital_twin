@@ -30,7 +30,7 @@ const ROUTE_COLORS = {
 // Component
 // ═══════════════════════════════════════════════════════════════
 const CesiumGlobe = forwardRef(function CesiumGlobe(
-  { currentRouteKey = 'NSR', onViewerReady, visible = true },
+  { currentRouteKey = 'NSR', onViewerReady },
   ref,
 ) {
   const containerRef = useRef(null);
@@ -177,19 +177,48 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
         gebco.show = false;
         gebco.alpha = 0.75;
 
-        // 2. NSIDC Sea Ice Concentration (NASA GIBS via proxy)
-        const nsidcConc = viewer.imageryLayers.addImageryProvider(
-          new Cesium.WebMapServiceImageryProvider({
+        // ── WMS 레이어 생성 헬퍼 (TIME 파라미터 포함) ────────
+        // NASA GIBS WMS TIME 포맷: "YYYY-MM-DD"
+        // Sentinel Hub WMS TIME 포맷: "YYYY-MM-DDT00:00:00Z/YYYY-MM-DDT23:59:59Z"
+        function makeNsidcProvider(layerName, timeStr) {
+          const params = { transparent: 'true', format: 'image/png' };
+          if (timeStr) params.TIME = timeStr;
+          return new Cesium.WebMapServiceImageryProvider({
             url: '/nsidc-proxy/',
-            layers: 'AMSRU2_Sea_Ice_Concentration_25km',
-            parameters: { transparent: 'true', format: 'image/png' },
+            layers: layerName,
+            parameters: params,
             tileWidth: 512,
             tileHeight: 512,
             enablePickFeatures: false,
-          }),
+          });
+        }
+
+        function makeSentinelProvider(layerName, timeStr) {
+          const params = { transparent: 'true', format: 'image/png' };
+          if (timeStr) {
+            params.TIME = timeStr;
+          } else {
+            // 기본: 최근 7일 범위 (Sentinel 데이터 가용성 확보)
+            const end = new Date();
+            const start = new Date(); start.setDate(start.getDate() - 7);
+            params.TIME = start.toISOString().slice(0, 10) + '/' + end.toISOString().slice(0, 10);
+          }
+          return new Cesium.WebMapServiceImageryProvider({
+            url: '/sentinel-proxy/',
+            layers: layerName,
+            parameters: params,
+            tileWidth: 512,
+            tileHeight: 512,
+            enablePickFeatures: false,
+          });
+        }
+
+        // 2. NSIDC Sea Ice Concentration (NASA GIBS via proxy)
+        const nsidcConc = viewer.imageryLayers.addImageryProvider(
+          makeNsidcProvider('AMSRU2_Sea_Ice_Concentration_25km', null),
         );
-        nsidcConc.show = false;
-        nsidcConc.alpha = 0.65;
+        nsidcConc.show = true;
+        nsidcConc.alpha = 1.0;
 
         // 3. Copernicus Ice Thickness (WMTS via proxy)
         const copThick = viewer.imageryLayers.addImageryProvider(
@@ -207,57 +236,31 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
         );
         copThick.show = false;
         copThick.alpha = 0.65;
+        copThick.colorToAlpha = Cesium.Color.BLACK;
+        copThick.colorToAlphaThreshold = 0.12;
 
         // 4. NSIDC Ice Edge (brightness temperature 89H via proxy)
         const nsidcEdge = viewer.imageryLayers.addImageryProvider(
-          new Cesium.WebMapServiceImageryProvider({
-            url: '/nsidc-proxy/',
-            layers: 'AMSRU2_Sea_Ice_Brightness_Temp_6km_89H',
-            parameters: { transparent: 'true', format: 'image/png' },
-            tileWidth: 512,
-            tileHeight: 512,
-            enablePickFeatures: false,
-          }),
+          makeNsidcProvider('AMSRU2_Sea_Ice_Brightness_Temp_6km_89H', null),
         );
         nsidcEdge.show = false;
 
         // 5. ESA Sentinel-1 SAR
         const esaSar = viewer.imageryLayers.addImageryProvider(
-          new Cesium.WebMapServiceImageryProvider({
-            url: 'https://sh.dataspace.copernicus.eu/ogc/wms/710b2915-4bc6-4fd8-b204-7ee69682da3f',
-            layers: 'SENTINEL-1-GRD-EW',
-            tileWidth: 512,
-            tileHeight: 512,
-            enablePickFeatures: false,
-            parameters: { transparent: 'true', format: 'image/png' },
-          }),
+          makeSentinelProvider('SENTINEL-1-GRD-EW', null),
         );
         esaSar.show = false;
 
         // 6. Sentinel-2 True Color
         const s2TrueColor = viewer.imageryLayers.addImageryProvider(
-          new Cesium.WebMapServiceImageryProvider({
-            url: 'https://sh.dataspace.copernicus.eu/ogc/wms/710b2915-4bc6-4fd8-b204-7ee69682da3f',
-            layers: 'TRUE-COLOR',
-            tileWidth: 512,
-            tileHeight: 512,
-            enablePickFeatures: false,
-            parameters: { transparent: 'true', format: 'image/png' },
-          }),
+          makeSentinelProvider('TRUE-COLOR', null),
         );
         s2TrueColor.show = false;
         s2TrueColor.alpha = 0.85;
 
         // 7. Sentinel-2 NDSI (ice detection index)
         const s2Ndsi = viewer.imageryLayers.addImageryProvider(
-          new Cesium.WebMapServiceImageryProvider({
-            url: 'https://sh.dataspace.copernicus.eu/ogc/wms/710b2915-4bc6-4fd8-b204-7ee69682da3f',
-            layers: 'NDSI',
-            tileWidth: 512,
-            tileHeight: 512,
-            enablePickFeatures: false,
-            parameters: { transparent: 'true', format: 'image/png' },
-          }),
+          makeSentinelProvider('NDSI', null),
         );
         s2Ndsi.show = false;
         s2Ndsi.alpha = 0.75;
@@ -268,6 +271,67 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
           console.warn('WMS layer setup error (non-fatal):', layerErr);
         }
         viewer._apiLayers = layers;
+
+        // ── 위성영상 + NSIDC TIME 업데이트 함수 ─────────────────
+        // GEBCO/Copernicus/Sentinel은 건드리지 않음 (TIME 불필요)
+        viewer._satLayers = [];
+
+        viewer._updateWmsTime = function(month) {
+          if (!viewer || viewer.isDestroyed()) return;
+          const al = viewer._apiLayers;
+          if (!al) return;
+
+          let gibsTime;
+          if (month && month !== 'latest' && month !== 'live') {
+            gibsTime = month + '-15';
+          } else {
+            const d = new Date(); d.setDate(d.getDate() - 2);
+            gibsTime = d.toISOString().slice(0, 10);
+          }
+
+          try {
+            // ── 1. 위성영상(MODIS/VIIRS)만 교체 (show 상태 보존) ──
+            const satWasVisible = viewer._satLayers.length > 0
+              ? viewer._satLayers[0].show
+              : false; // 초기 기본값: OFF
+            for (const lyr of viewer._satLayers) {
+              try { viewer.imageryLayers.remove(lyr, true); } catch(_){}
+            }
+            viewer._satLayers = [];
+
+            const satNames = [
+              'VIIRS_SNPP_CorrectedReflectance_TrueColor',
+              'MODIS_Aqua_CorrectedReflectance_TrueColor',
+              'MODIS_Terra_CorrectedReflectance_TrueColor',
+            ];
+            for (const name of satNames) {
+              const lyr = new Cesium.ImageryLayer(
+                new Cesium.WebMapServiceImageryProvider({
+                  url: '/nsidc-proxy/',
+                  layers: name,
+                  parameters: { transparent: 'true', format: 'image/png', TIME: gibsTime },
+                  tileWidth: 512, tileHeight: 512, enablePickFeatures: false,
+                }),
+              );
+              lyr.show = satWasVisible;
+              lyr.alpha = 1.0;
+              lyr.colorToAlpha = Cesium.Color.BLACK;
+              lyr.colorToAlphaThreshold = 0.08;
+              viewer.imageryLayers.add(lyr);
+              viewer._satLayers.push(lyr);
+            }
+
+            // ── 2. 모든 API 데이터 레이어를 위성영상 위로 올림 ──
+            const allApiKeys = ['gebco', 'copThick', 'nsidcEdge', 'esaSar', 's2True', 's2Ndsi', 'nsidcConc'];
+            for (const key of allApiKeys) {
+              if (al[key]) try { viewer.imageryLayers.raiseToTop(al[key]); } catch(_){}
+            }
+
+            console.log('[CesiumGlobe] SAT+NSIDC updated:', gibsTime);
+          } catch (e) {
+            console.warn('[CesiumGlobe] WMS update error:', e);
+          }
+        };
 
         // ── Initial route ───────────────────────────────────────
         drawRoute(viewer, currentRouteKey);
@@ -315,12 +379,12 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
     }
   }, [currentRouteKey, drawRoute]);
 
+
   // ─── Render ───────────────────────────────────────────────────
   return (
     <div
       id="cesium-wrap"
       ref={containerRef}
-      className={visible ? '' : 'hidden'}
     />
   );
 });
