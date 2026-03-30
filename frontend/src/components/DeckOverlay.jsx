@@ -109,32 +109,43 @@ function buildDangerZonesGeoJSON() {
 // Layer builders -- mirrors buildDeckLayers() from arctic-hybrid.html
 // ---------------------------------------------------------------------------
 
+// 데이터 변경 추적용 카운터 — deck.gl layer diffing이 데이터 교체를 감지하도록
+let _layerDataVersion = 0;
+
 function buildLayers(iceData, bergData, dangerGeoJSON, realBergData) {
+  const ver = _layerDataVersion;
   return [
     // 1. Ice concentration scatter (replaces HeatmapLayer with identical
     //    ScatterplotLayer used in the original source)
     new ScatterplotLayer({
       id: 'ice-scatter',
-      data: iceData,
+      data: iceData || [],
       getPosition: (d) => [d.lon, d.lat],
       getRadius: 28000,
       radiusUnits: 'meters',
       radiusMinPixels: 2,
       getFillColor: (d) => {
+        // NSIDC 위성 팔레트: 흰(고농도) → 하늘 → 파랑 → 남색(저농도)
         const w = d.weight;
-        if (w > 0.8) return [255, 255, 255, 210];
-        if (w > 0.6) return [200, 230, 255, 190];
-        if (w > 0.4) return [100, 180, 255, 150];
-        if (w > 0.2) return [0, 120, 220, 110];
-        return [0, 80, 180, 60];
+        if (w > 0.9) return [255, 255, 255, 220];
+        if (w > 0.8) return [220, 235, 255, 210];
+        if (w > 0.7) return [170, 210, 250, 200];
+        if (w > 0.5) return [100, 170, 230, 180];
+        if (w > 0.3) return [50, 120, 200, 160];
+        if (w > 0.15) return [20, 70, 160, 140];
+        return [10, 40, 120, 100];
       },
       pickable: false,
+      updateTriggers: {
+        getPosition: ver,
+        getFillColor: ver,
+      },
     }),
 
     // 2. Iceberg scatter (white/cyan dots with per-feature size) - procedural
     new ScatterplotLayer({
       id: 'bergs',
-      data: bergData,
+      data: bergData || [],
       getPosition: (d) => [d.lon, d.lat],
       getRadius: (d) => d.size,
       getFillColor: [200, 240, 255, 180],
@@ -158,6 +169,9 @@ function buildLayers(iceData, bergData, dangerGeoJSON, realBergData) {
       lineWidthMinPixels: 1,
       radiusUnits: 'pixels',
       pickable: false,
+      updateTriggers: {
+        getPosition: ver,
+      },
     }),
 
     // 3. Danger zones -- GeoJsonLayer (red fill + polygon outlines)
@@ -192,11 +206,13 @@ const DeckOverlay = forwardRef(function DeckOverlay(
   const dangerGeoRef = useRef(null);
   const realBergDataRef = useRef(null);
   const postRenderListenerRef = useRef(null);
+  const isVisibleRef = useRef(visible);
   const [isVisible, setIsVisible] = useState(visible);
 
   // Keep isVisible in sync with the visible prop
   useEffect(() => {
     setIsVisible(visible);
+    isVisibleRef.current = visible;
   }, [visible]);
 
   // ----- Generate static data once -----
@@ -207,6 +223,7 @@ const DeckOverlay = forwardRef(function DeckOverlay(
   }, []);
 
   // ----- Sync deck.gl viewState with Cesium camera -----
+  // 중요: viewState만 동기화. layers는 데이터 변경 시에만 재빌드 (updateLayers / setVisible)
   const syncDeckView = useCallback(() => {
     const deckInstance = deckRef.current;
     const viewer = cesiumViewer;
@@ -229,12 +246,6 @@ const DeckOverlay = forwardRef(function DeckOverlay(
         bearing: heading,
         pitch: Math.max(0, Math.min(85, 90 + pitchDeg)),
       },
-      layers: buildLayers(
-        iceDataRef.current,
-        bergDataRef.current,
-        dangerGeoRef.current,
-        realBergDataRef.current,
-      ),
     });
   }, [cesiumViewer]);
 
@@ -269,7 +280,12 @@ const DeckOverlay = forwardRef(function DeckOverlay(
         bearing: 0,
         pitch: 0,
       },
-      layers: [],
+      layers: buildLayers(
+        iceDataRef.current,
+        bergDataRef.current,
+        dangerGeoRef.current,
+        realBergDataRef.current,
+      ),
     });
 
     deckRef.current = deckInstance;
@@ -353,12 +369,6 @@ const DeckOverlay = forwardRef(function DeckOverlay(
               bearing: heading,
               pitch: Math.max(0, Math.min(85, 90 + pitch)),
             },
-            layers: buildLayers(
-              iceDataRef.current,
-              bergDataRef.current,
-              dangerGeoRef.current,
-              realBergDataRef.current,
-            ),
           });
         } else {
           // No explicit camera -- fall back to Cesium-based sync
@@ -378,7 +388,11 @@ const DeckOverlay = forwardRef(function DeckOverlay(
         if (nextData.realBergData !== undefined)
           realBergDataRef.current = nextData.realBergData;
 
-        if (deckRef.current && isVisible) {
+        // 데이터 변경 버전 증가 — deck.gl이 layer diffing에서 변경 감지하도록
+        _layerDataVersion++;
+
+        // isVisibleRef 사용 — stale closure 방지
+        if (deckRef.current && isVisibleRef.current) {
           deckRef.current.setProps({
             layers: buildLayers(
               iceDataRef.current,
@@ -390,7 +404,8 @@ const DeckOverlay = forwardRef(function DeckOverlay(
         }
       },
     }),
-    [isVisible, syncDeckView],
+    // 의존성에서 isVisible 제거 — isVisibleRef로 항상 최신 값 접근
+    [syncDeckView],
   );
 
   return (

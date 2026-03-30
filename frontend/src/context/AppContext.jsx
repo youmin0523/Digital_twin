@@ -31,6 +31,7 @@ const initialState = {
     length: 200,
     width: 32,
     gm: 1.8,
+    draft: 8.5,
     iceClass: 'PC2',
   },
 

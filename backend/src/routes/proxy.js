@@ -72,3 +72,9 @@ module.exports.legacyCopProxy = async (req, res) => {
   const targetUrl = 'https://wmts.marine.copernicus.eu/teroWmts?' + qs;
   await proxyTile(targetUrl, res);
 };
+
+module.exports.legacySentinelProxy = async (req, res) => {
+  const qs = require('url').parse(req.url).query || '';
+  const targetUrl = 'https://sh.dataspace.copernicus.eu/ogc/wms/710b2915-4bc6-4fd8-b204-7ee69682da3f?' + qs;
+  await proxyTile(targetUrl, res);
+};

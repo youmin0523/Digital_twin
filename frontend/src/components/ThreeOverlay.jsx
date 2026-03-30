@@ -80,22 +80,52 @@ function depthToRGB(d) {
   return [r / 255, g / 255, b / 255];
 }
 
+// NSIDC 팔레트 색상 스톱 — 연속 그라데이션 보간
+const ICE_STOPS = [
+  { at: 0.00, r:  13, g:  79, b: 139 },  // 바다
+  { at: 0.15, r:  13, g:  79, b: 139 },  // 바다
+  { at: 0.20, r: 106, g:  13, b: 173 },  // 보라
+  { at: 0.30, r:   0, g:   0, b: 255 },  // 파랑
+  { at: 0.45, r:   0, g: 204, b:   0 },  // 초록
+  { at: 0.60, r: 255, g: 255, b:   0 },  // 노랑
+  { at: 0.72, r: 255, g: 136, b:   0 },  // 주황
+  { at: 0.85, r: 255, g:   0, b:   0 },  // 빨강
+  { at: 1.00, r: 255, g: 105, b: 180 },  // 분홍
+];
+
 function iceToRGB(conc) {
-  let r, g, b;
-  if (conc < 0.25) {
-    const t = conc / 0.25;
-    r = 10 - t * 10; g = 25 + t * 60; b = 47 + t * 208;
-  } else if (conc < 0.50) {
-    const t = (conc - 0.25) / 0.25;
-    r = 0; g = 85 + t * 85; b = 255;
-  } else if (conc < 0.75) {
-    const t = (conc - 0.50) / 0.25;
-    r = t * 224; g = 170 + t * 77; b = 255 - t * 5;
-  } else {
-    const t = (conc - 0.75) / 0.25;
-    r = 224 + t * 31; g = 247 + t * 8; b = 250 + t * 5;
+  const c = Math.max(0, Math.min(1, conc));
+  for (let i = 0; i < ICE_STOPS.length - 1; i++) {
+    const a = ICE_STOPS[i], b = ICE_STOPS[i + 1];
+    if (c <= b.at) {
+      const t = (b.at - a.at) > 0 ? (c - a.at) / (b.at - a.at) : 0;
+      return [
+        (a.r + (b.r - a.r) * t) / 255,
+        (a.g + (b.g - a.g) * t) / 255,
+        (a.b + (b.b - a.b) * t) / 255,
+      ];
+    }
   }
+  const last = ICE_STOPS[ICE_STOPS.length - 1];
+  return [last.r / 255, last.g / 255, last.b / 255];
+}
+
+// 해빙 두께 색상 (Copernicus 팔레트: 남색→보라→연보라→흰)
+function thicknessToRGB(thickM) {
+  if (thickM < 0.1) return [13 / 255, 79 / 255, 139 / 255]; // 바다
+  const t = Math.min(1, thickM / 5);
+  const r = 30 + t * 225;
+  const g = 27 + t * 180;
+  const b = 75 + t * 180;
   return [r / 255, g / 255, b / 255];
+}
+
+// 해빙 경계선 색상 — 전체 주황 계열 그라데이션
+function edgeToRGB(conc) {
+  if (conc < 0.05) return [13 / 255, 79 / 255, 139 / 255]; // 바다
+  const t = Math.min(1, (conc - 0.05) / 0.95);
+  // 어두운 주황 → 밝은 주황 → 흰주황
+  return [0.8 + t * 0.2, 0.3 + t * 0.5, t * 0.3];
 }
 
 // ── Sea state / ship motion helpers ──────────────────────────────────────────
@@ -259,15 +289,16 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
   // -- Ocean --
   const buildOcean = useCallback(() => {
     const { scene } = ctx.current;
-    const waveGeo = trackDisposable(new THREE.PlaneGeometry(80000, 80000, 64, 64));
+    const waveGeo = trackDisposable(new THREE.PlaneGeometry(80000, 80000, 128, 128));
     waveGeo.rotateX(-Math.PI / 2);
     const mat = trackDisposable(
       new THREE.MeshPhongMaterial({
-        color: 0x0a2a4a,
+        color: 0x0d4f8b,
         specular: 0x4a8aaa,
         shininess: 80,
         transparent: false,
         opacity: 1.0,
+        vertexColors: true,
       }),
     );
     const waveMesh = new THREE.Mesh(waveGeo, mat);
@@ -595,53 +626,86 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
     waveGeo.computeVertexNormals();
   }, []);
 
-  // updateOceanOverlay: depth / ice color overlay on ocean mesh
+  // updateOceanOverlay: DataTexture 방식 — GPU 선형 필터로 부드러운 그라데이션
+  const ICE_TEX_SIZE = 256;
+
   const updateOceanOverlay = useCallback((colorMode, shipLon, shipLat, sampleIceConcentrationFn) => {
     const { waveGeo, waveMesh } = ctx.current;
     if (!waveMesh || !waveGeo) return;
+
+    const modeChanged = ctx.current.oceanColorMode !== colorMode;
+    ctx.current.oceanColorMode = colorMode;
     ctx.current.overlayFrame++;
-    if (ctx.current.overlayFrame % 120 !== 0) return;
+    if (!modeChanged && ctx.current.overlayFrame % 120 !== 0) return;
 
-    const geo = waveGeo;
-    const positions = geo.attributes.position;
-    const count = positions.count;
+    console.log('[OceanOverlay]', colorMode, 'lat:', shipLat?.toFixed(1), 'lon:', shipLon?.toFixed(1));
 
-    if (!geo.attributes.color) {
-      const arr = new Float32Array(count * 3);
-      for (let k = 0; k < count; k++) {
-        arr[k * 3] = 10 / 255;
-        arr[k * 3 + 1] = 42 / 255;
-        arr[k * 3 + 2] = 63 / 255;
-      }
-      geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
-    }
-    const colors = geo.attributes.color;
+    const mat = waveMesh.material;
+    if (!mat) return;
 
+    // ── none 모드: 텍스처 제거, 원래 바다색 복원 ──
     if (colorMode === 'none') {
-      for (let i = 0; i < count; i++) colors.setXYZ(i, 10 / 255, 42 / 255, 63 / 255);
-      colors.needsUpdate = true;
+      mat.map = null;
+      mat.vertexColors = false;
+      mat.color.setHex(0x0d4f8b);
+      mat.needsUpdate = true;
       return;
     }
 
+    // ── ice/depth 모드: DataTexture 생성 또는 재사용 ──
+    if (!ctx.current.iceTexData) {
+      ctx.current.iceTexData = new Uint8Array(ICE_TEX_SIZE * ICE_TEX_SIZE * 4);
+      ctx.current.iceTex = new THREE.DataTexture(
+        ctx.current.iceTexData, ICE_TEX_SIZE, ICE_TEX_SIZE,
+      );
+      ctx.current.iceTex.magFilter = THREE.LinearFilter;
+      ctx.current.iceTex.minFilter = THREE.LinearFilter;
+      ctx.current.iceTex.wrapS = THREE.ClampToEdgeWrapping;
+      ctx.current.iceTex.wrapT = THREE.ClampToEdgeWrapping;
+    }
+
+    const data = ctx.current.iceTexData;
+    const tex = ctx.current.iceTex;
     const metersPerDeg = 111320;
     const cosLat = Math.cos((shipLat * Math.PI) / 180);
+    // 바다 메시 크기 80000 × 80000, 스케일 1.5
+    const halfSize = 40000;
 
-    for (let i = 0; i < count; i++) {
-      const localX = positions.getX(i);
-      const localZ = positions.getZ(i);
-      const vLon = shipLon + (localX * 1.5) / (metersPerDeg * cosLat);
-      const vLat = shipLat - (localZ * 1.5) / metersPerDeg;
+    for (let ty = 0; ty < ICE_TEX_SIZE; ty++) {
+      for (let tx = 0; tx < ICE_TEX_SIZE; tx++) {
+        // 텍셀 → 로컬 좌표 → 위경도
+        const localX = (tx / (ICE_TEX_SIZE - 1) - 0.5) * 2 * halfSize;
+        const localZ = (ty / (ICE_TEX_SIZE - 1) - 0.5) * 2 * halfSize;
+        const vLon = shipLon + (localX * 1.5) / (metersPerDeg * cosLat);
+        const vLat = shipLat - (localZ * 1.5) / metersPerDeg;
 
-      let rgb;
-      if (colorMode === 'ice') {
+        let rgb;
         const conc = sampleIceConcentrationFn ? sampleIceConcentrationFn(vLon, vLat) : 0;
-        rgb = iceToRGB(conc || 0);
-      } else {
-        rgb = depthToRGB(estimateBathymetry(vLon, vLat));
+        if (colorMode === 'ice') {
+          rgb = iceToRGB(conc || 0);
+        } else if (colorMode === 'thickness') {
+          // 해빙 두께 추정: 농도 기반 (실데이터 없을 때 농도×5m으로 근사)
+          const thickM = (conc || 0) * 5.0;
+          rgb = thicknessToRGB(thickM);
+        } else if (colorMode === 'edge') {
+          rgb = edgeToRGB(conc || 0);
+        } else {
+          rgb = depthToRGB(estimateBathymetry(vLon, vLat));
+        }
+
+        const idx = (ty * ICE_TEX_SIZE + tx) * 4;
+        data[idx]     = Math.round(rgb[0] * 255);
+        data[idx + 1] = Math.round(rgb[1] * 255);
+        data[idx + 2] = Math.round(rgb[2] * 255);
+        data[idx + 3] = 255;
       }
-      colors.setXYZ(i, rgb[0], rgb[1], rgb[2]);
     }
-    colors.needsUpdate = true;
+
+    tex.needsUpdate = true;
+    mat.map = tex;
+    mat.vertexColors = false;
+    mat.color.setHex(0xffffff);
+    mat.needsUpdate = true;
   }, []);
 
   // updateFoam: animate bow-spray particles
@@ -1050,33 +1114,46 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
     if (!shipState || !ctx.current.shipGroup3) return;
     const { lat, lon, heading } = shipState;
     if (lat != null && lon != null && heading != null) {
-      // Parent is responsible for converting lat/lon to Three.js world coords
-      // and calling updateShipPosition via the ref. This effect just applies
-      // the heading for convenience when mode is not BRIDGE.
-      if (mode !== 'BRIDGE') {
-        const g = ctx.current.shipGroup3;
-        let diff = -heading - g.rotation.y;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        g.rotation.y += diff * 0.05;
+      // 위도 기반 빙산 표시 — 60°N 이상에서만 빙산 보임
+      const showIce = lat >= 60;
+      for (const ice of ctx.current.tIcebergs) {
+        ice.grp.visible = showIce;
+      }
+      for (const berg of ctx.current.realBergs) {
+        if (berg.grp) berg.grp.visible = showIce;
       }
     }
   }, [shipState, mode]);
 
+  // ── FOLLOW 줌 상태 (스크롤) ──────────────────────────────────────────────
+  const followZoomTargetRef = useRef(300);
+  const followZoomCurrentRef = useRef(300);
+
+  useEffect(() => {
+    function handleWheel(e) {
+      if (mode !== 'FOLLOW') return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 50 : -50;
+      followZoomTargetRef.current = Math.max(60, Math.min(2000, followZoomTargetRef.current + delta));
+    }
+    const el = wrapRef.current;
+    if (el) el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => { if (el) el.removeEventListener('wheel', handleWheel); };
+  }, [mode]);
+
   // ── Adjust camera for different modes ─────────────────────────────────────
   useEffect(() => {
-    const { camera, shipGroup3 } = ctx.current;
+    const { camera } = ctx.current;
     if (!camera) return;
-
     if (mode === 'BRIDGE') {
-      // 선교 1인칭: 브릿지 높이에서 뱃머리(-z) 방향을 봄
       camera.fov = 90;
       camera.near = 0.01;
       camera.position.set(0, 35, 10);
       camera.lookAt(0, 15, -500);
       camera.updateProjectionMatrix();
     } else if (mode === 'FOLLOW') {
-      // 선미 추적: 선미 뒤(+z) 위에서 뱃머리(-z) 방향을 봄
+      followZoomTargetRef.current = 300;
+      followZoomCurrentRef.current = 300;
       camera.fov = 75;
       camera.near = 0.1;
       camera.position.set(0, 80, 300);
@@ -1091,17 +1168,52 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
     let rafId;
     function loop(now) {
       rafId = requestAnimationFrame(loop);
-      const { renderer, scene, camera } = ctx.current;
+      const { renderer, scene, camera, shipGroup3 } = ctx.current;
       if (!renderer || !scene || !camera) return;
       try {
         const t = now * 0.001;
         animateOcean(t);
+
+        // 배 heading 부드러운 보간 (FOLLOW/자동 모드)
+        if (shipGroup3 && shipState) {
+          const headingRad = -(shipState.heading || 0) * Math.PI / 180;
+          let diff = headingRad - shipGroup3.rotation.y;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          shipGroup3.rotation.y += diff * 0.03;
+        }
+
+        // FOLLOW 카메라 — 배를 추적하면서 부드러운 줌
+        if (mode === 'FOLLOW' && camera && shipGroup3) {
+          followZoomCurrentRef.current += (followZoomTargetRef.current - followZoomCurrentRef.current) * 0.06;
+          const dist = followZoomCurrentRef.current;
+          const shipPos = shipGroup3.position;
+          const heading = shipGroup3.rotation.y; // -heading (이미 반전됨)
+
+          const y = Math.max(25, dist * 0.3);
+          // 배 뒤쪽(heading 반대)으로 거리만큼 오프셋
+          const camX = shipPos.x - Math.sin(heading) * dist;
+          const camZ = shipPos.z + Math.cos(heading) * dist;
+
+          camera.position.set(camX, y, camZ);
+
+          // 줌아웃 시 조감뷰로 전환
+          const pitchLerp = Math.min(1, dist / 1500);
+          const lookY = shipPos.y + 15 * (1 - pitchLerp);
+          const lookX = shipPos.x + Math.sin(heading) * dist * 0.3;
+          const lookZ = shipPos.z - Math.cos(heading) * dist * 0.3;
+          camera.lookAt(lookX, lookY, lookZ);
+
+          camera.fov = 75 - pitchLerp * 20;
+          camera.updateProjectionMatrix();
+        }
+
         renderer.render(scene, camera);
       } catch (e) { /* ignore */ }
     }
     rafId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId);
-  }, [visible, animateOcean]);
+  }, [visible, animateOcean, mode, shipState]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   const isVisible = visible === true;
