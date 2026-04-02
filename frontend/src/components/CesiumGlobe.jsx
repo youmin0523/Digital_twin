@@ -299,27 +299,20 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
             }
             viewer._satLayers = [];
 
-            const satNames = [
-              'VIIRS_SNPP_CorrectedReflectance_TrueColor',
-              'MODIS_Aqua_CorrectedReflectance_TrueColor',
-              'MODIS_Terra_CorrectedReflectance_TrueColor',
-            ];
-            for (const name of satNames) {
-              const lyr = new Cesium.ImageryLayer(
-                new Cesium.WebMapServiceImageryProvider({
-                  url: '/nsidc-proxy/',
-                  layers: name,
-                  parameters: { transparent: 'true', format: 'image/png', TIME: gibsTime },
-                  tileWidth: 512, tileHeight: 512, enablePickFeatures: false,
-                }),
-              );
-              lyr.show = satWasVisible;
-              lyr.alpha = 1.0;
-              lyr.colorToAlpha = Cesium.Color.BLACK;
-              lyr.colorToAlphaThreshold = 0.08;
-              viewer.imageryLayers.add(lyr);
-              viewer._satLayers.push(lyr);
-            }
+            // NASA Blue Marble Next Generation — 월별 합성 (단일 레이어)
+            const bmMonth = gibsTime.slice(0, 7);   // "YYYY-MM"
+            const lyr = new Cesium.ImageryLayer(
+              new Cesium.WebMapServiceImageryProvider({
+                url: 'https://neo.gsfc.nasa.gov/wms/wms',
+                layers: 'BlueMarbleNG-TB',
+                parameters: { transparent: 'false', format: 'image/png', TIME: bmMonth },
+                tileWidth: 512, tileHeight: 512, enablePickFeatures: false,
+              }),
+            );
+            lyr.show = satWasVisible;
+            lyr.alpha = 1.0;
+            viewer.imageryLayers.add(lyr);
+            viewer._satLayers.push(lyr);
 
             // ── 2. 모든 API 데이터 레이어를 위성영상 위로 올림 ──
             const allApiKeys = ['gebco', 'copThick', 'nsidcEdge', 'esaSar', 's2True', 's2Ndsi', 'nsidcConc'];

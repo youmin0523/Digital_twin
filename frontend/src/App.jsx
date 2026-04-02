@@ -45,6 +45,7 @@ function AppInner() {
   // 텔레포트 오버레이 상태
   const [teleportOpen, setTeleportOpen] = useState(false);
 
+
   // 토스트 알림 상태
   const [toastMsg, setToastMsg] = useState('');
   const toastTimerRef = useRef(null);
@@ -670,6 +671,7 @@ function AppInner() {
       }
     }
   }, [state.shipState, sampleIceFn, layerStates]);
+
 
   // 위성 실사영상 (MODIS/VIIRS) 토글
   const [satVisible, setSatVisible] = useState(false);
