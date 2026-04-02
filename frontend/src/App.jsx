@@ -16,6 +16,7 @@ import LegendContainer from './components/hud/LegendContainer';
 import Minimap from './components/hud/Minimap';
 import TeleportOverlay from './components/hud/TeleportOverlay';
 import RecenterButton from './components/hud/RecenterButton';
+import AiAnalysisPanel from './components/hud/AiAnalysisPanel';
 import DraggablePanel from './components/hud/DraggablePanel';
 import BridgeOverlay from './components/overlay/BridgeOverlay';
 import BinocularsMask from './components/overlay/BinocularsMask';
@@ -987,6 +988,11 @@ function AppInner() {
         onTeleport={handleTeleport}
         onClose={() => setTeleportOpen(false)}
       />
+
+      {/* AI 배치 분석 */}
+      <DraggablePanel defaultX={window.innerWidth - 340} defaultY={380}>
+        <AiAnalysisPanel />
+      </DraggablePanel>
 
       {/* 리센터 버튼 */}
       <RecenterButton onClick={handleRecenter} />

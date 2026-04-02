@@ -7,6 +7,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      '/ai-api': {
+        target: 'http://localhost:8001',
+        rewrite: (path) => path.replace(/^\/ai-api/, '/api'),
+      },
       '/api': 'http://localhost:8000',
       '/proxy': 'http://localhost:8000',
       '/nsidc-proxy': 'http://localhost:8000',
