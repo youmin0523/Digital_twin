@@ -34,7 +34,7 @@ export default function ShipSpecsPanel({
   onApply,
 }) {
   const s = specs || {};
-
+// 테스트 주석
   return (
     <div
       className="hud"

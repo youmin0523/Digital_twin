@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 const DRAG_THRESHOLD = 8; // px — 이 이상 움직여야 드래그 시작
 const IGNORE_TAGS = new Set(['INPUT', 'BUTTON', 'SELECT', 'LABEL', 'TEXTAREA']);
-
+// 테스트 주석
 export default function DraggablePanel({ children, defaultX, defaultY, style, className, id }) {
   const [pos, setPos] = useState({ x: defaultX ?? 0, y: defaultY ?? 0 });
   const state = useRef({ down: false, dragging: false, startX: 0, startY: 0, offX: 0, offY: 0, targetX: defaultX ?? 0, targetY: defaultY ?? 0, rafId: null });

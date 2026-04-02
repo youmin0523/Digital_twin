@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react';
 import * as THREE from 'three';
-
+// 테스트 주석
 // ── Constants ────────────────────────────────────────────────────────────────
 const MOUSE_SENS = 0.0004;
 const MAX_ROT = 0.03;

@@ -29,7 +29,7 @@ export default function ApiLayersControl({
       background: 'rgba(15, 23, 42, 0.8)',
     }}>
       <div className="hud-title" style={{ color: '#34d399' }}>
-        🌍 실시간 WMS 데이터 레이어
+        실시간 WMS 데이터 레이어
       </div>
 
       <div
@@ -51,7 +51,7 @@ export default function ApiLayersControl({
           fontSize: '12px',
           transition: 'color 0.2s',
         }}>
-          🛰️ 위성 실사영상 (MODIS/VIIRS)
+          위성 실사영상 (MODIS/VIIRS)
         </label>
       </div>
 
