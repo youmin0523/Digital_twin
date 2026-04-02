@@ -18,7 +18,7 @@ export default function HudRight({
 }) {
   return (
     <div className="hud" id="hud-right">
-      <div className="hud-title">⚖ 해빙 위험도 평가</div>
+      <div className="hud-title">해빙 위험도 평가</div>
       <div className="hud-row">
         {/* // //! [Original Code] <span className="hud-label">전방위험도</span> */}
         {/* // //* [Modified Code] 라벨 텍스트 가독성 개선 */}
@@ -32,10 +32,10 @@ export default function HudRight({
             background: 'rgba(0,0,0,0.2)',
             fontSize: '14px',
           }}
-        >
+        > 
           {danger || '낮음 🟢'}
         </span>
-      </div>
+      </div> 
       <div className="hud-row">
         <span className="hud-label">Ice Class</span>
         <span

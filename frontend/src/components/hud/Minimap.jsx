@@ -234,5 +234,5 @@ export default function Minimap({
         🛰 위치 이동
       </button>
     </div>
-  );
+  );// 테스트 주석
 }

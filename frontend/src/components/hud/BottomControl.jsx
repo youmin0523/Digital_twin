@@ -1,5 +1,5 @@
 import React from 'react';
-
+// 테스트 주석
 export default function BottomControl({
   isSimulating,
   onStart,

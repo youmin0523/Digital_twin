@@ -5,7 +5,7 @@ export default function HudLeft({ speed, throttle, progress, position, iceState,
     <div className="hud" id="hud-left">
       {/* // //! [Original Code] <div className="hud-title">선박 정보</div> */}
       {/* // //* [Modified Code] 아이콘 추가로 시각적 포인트 부여 */}
-      <div className="hud-title">🚢 선박 정보</div>
+      <div className="hud-title">선박 정보</div>
       <div className="hud-row">
         <span className="hud-label">속도</span>
         <span className="hud-value" id="hud-speed">{speed || '0.0 kn'}</span>

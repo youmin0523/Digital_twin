@@ -78,8 +78,8 @@ const initialState = {
   timelineDay: 0,
 };
 
-// ── Reducer ──────────────────────────────────────────────────────────────────
-
+// ── Reducer ─────────────────────────────────────────────────────────────────
+// 테스트 주석
 function reducer(state, action) {
   switch (action.type) {
     case 'SET_SIMULATING':

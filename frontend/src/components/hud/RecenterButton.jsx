@@ -9,7 +9,7 @@ import React from 'react';
  */
 export default function RecenterButton({ onClick, visible = true }) {
   if (!visible) return null;
-
+// 테스트 주석
   return (
     <div
       id="btn-recenter-float"

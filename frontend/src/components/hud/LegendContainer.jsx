@@ -13,7 +13,7 @@ const panelBase = {
 };
 
 /* ================================================================
-   GEBCO Bathymetry Legend
+   GEBCO Bathymetry Legend // 테스트 주석
    ================================================================ */
 function GebcoLegend() {
   return (

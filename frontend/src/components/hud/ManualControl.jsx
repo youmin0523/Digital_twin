@@ -2,7 +2,7 @@ import React from 'react';
 
 export default function ManualControl({ throttle, speed, heading, turnRate, fov, visible }) {
   if (!visible) return null;
-
+// 테스트 주석
   return (
     <div className="hud" id="hud-manual">
       <div className="hud-title">조종 계기</div>
