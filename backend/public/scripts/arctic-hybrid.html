@@ -1423,29 +1423,31 @@
           Concentration)</span>
         <span style="color:#3b82f6; font-size:9px;">NASA AMSRU2 25km</span>
       </div>
-      <!-- 컬러바 (가로) -->
+      <!-- 컬러바 (가로) — 실사풍 투명→청회색→흰색 -->
       <div style="position:relative; margin-bottom:6px;">
         <div style="
           width: 100%;
           height: 18px;
           border-radius: 4px;
           background: linear-gradient(to right,
-            #0a192f 0%,
-            #0055ff 25%,
-            #00aaff 50%,
-            #e0f7fa 75%,
-            #ffffff 100%
+            rgba(13,79,139,0) 0%,
+            rgba(90,130,160,0.3) 10%,
+            rgba(140,180,200,0.5) 30%,
+            rgba(180,210,225,0.7) 50%,
+            rgba(210,230,240,0.85) 70%,
+            rgba(240,248,255,0.95) 100%
           );
           border: 1px solid rgba(59,130,246,0.3);
         "></div>
       </div>
       <!-- 눈금 레이블 -->
       <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-        <span style="font-size:9px; color:#4a6a8a;">0%</span>
-        <span style="font-size:9px; color:#60a5fa;">25%</span>
-        <span style="font-size:9px; color:#93c5fd;">50%</span>
-        <span style="font-size:9px; color:#e0f7fa;">75%</span>
-        <span style="font-size:9px; color:#ffffff;">100%</span>
+        <span style="font-size:9px; color:#666;">0%</span>
+        <span style="font-size:9px; color:#8aa0a8;">30%</span>
+        <span style="font-size:9px; color:#a0c0d0;">50%</span>
+        <span style="font-size:9px; color:#b4d2e1;">70%</span>
+        <span style="font-size:9px; color:#d2e6f0;">85%</span>
+        <span style="font-size:9px; color:#f0f8ff;">100%</span>
       </div>
     </div> <!-- /nsidc-legend -->
 
@@ -3479,12 +3481,14 @@
           radiusUnits: 'meters',
           radiusMinPixels: 2,
           getFillColor: d => {
+            // 실사풍 해빙 팔레트: 투명 바다 → 청회색 → 흰색
             const w = d.weight;
-            if (w > 0.8)  return [255, 255, 255, 210];
-            if (w > 0.6)  return [200, 230, 255, 190];
-            if (w > 0.4)  return [100, 180, 255, 150];
-            if (w > 0.2)  return [0, 120, 220, 110];
-            return [0, 80, 180, 60];
+            if (w > 0.85) return [240, 248, 255, 242];
+            if (w > 0.70) return [210, 230, 240, 216];
+            if (w > 0.50) return [180, 210, 225, 178];
+            if (w > 0.30) return [140, 180, 200, 128];
+            if (w > 0.10) return [ 90, 130, 160,  76];
+            return [0, 0, 0, 0];
           },
           updateTriggers: { getPosition: cachedIceKey, getFillColor: cachedIceKey },
         }),
@@ -3962,11 +3966,14 @@
 
     // ── NSIDC 범례 색상 매핑 (concentration 0~1 → RGB 0~1) ──
     function iceToRGB(conc) {
+      // 실사풍 해빙 팔레트: 투명 바다 → 청회색 → 흰색
       let r, g, b;
-      if (conc < 0.25)      { const t = conc / 0.25;          r = 10 - t * 10; g = 25 + t * 60; b = 47 + t * 208; }
-      else if (conc < 0.50) { const t = (conc - 0.25) / 0.25; r = 0; g = 85 + t * 85; b = 255; }
-      else if (conc < 0.75) { const t = (conc - 0.50) / 0.25; r = t * 224; g = 170 + t * 77; b = 255 - t * 5; }
-      else                  { const t = (conc - 0.75) / 0.25; r = 224 + t * 31; g = 247 + t * 8; b = 250 + t * 5; }
+      if (conc < 0.10)      { r = 13; g = 79; b = 139; }                                                          // 바다(투명)
+      else if (conc < 0.30) { const t = (conc - 0.10) / 0.20; r = 13 + t * 77; g = 79 + t * 51; b = 139 + t * 21; }  // → 청회색
+      else if (conc < 0.50) { const t = (conc - 0.30) / 0.20; r = 90 + t * 50; g = 130 + t * 50; b = 160 + t * 40; } // → 중간
+      else if (conc < 0.70) { const t = (conc - 0.50) / 0.20; r = 140 + t * 40; g = 180 + t * 30; b = 200 + t * 25; }
+      else if (conc < 0.85) { const t = (conc - 0.70) / 0.15; r = 180 + t * 30; g = 210 + t * 20; b = 225 + t * 15; }
+      else                  { const t = (conc - 0.85) / 0.15; r = 210 + t * 30; g = 230 + t * 18; b = 240 + t * 15; } // → 흰색
       return [r / 255, g / 255, b / 255];
     }
 

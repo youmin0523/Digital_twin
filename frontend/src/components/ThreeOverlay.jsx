@@ -80,17 +80,15 @@ function depthToRGB(d) {
   return [r / 255, g / 255, b / 255];
 }
 
-// NSIDC 팔레트 색상 스톱 — 연속 그라데이션 보간
+// 실사풍 해빙 팔레트 — 투명 바다 → 청회색 → 흰색
 const ICE_STOPS = [
-  { at: 0.00, r:  13, g:  79, b: 139 },  // 바다
-  { at: 0.15, r:  13, g:  79, b: 139 },  // 바다
-  { at: 0.20, r: 106, g:  13, b: 173 },  // 보라
-  { at: 0.30, r:   0, g:   0, b: 255 },  // 파랑
-  { at: 0.45, r:   0, g: 204, b:   0 },  // 초록
-  { at: 0.60, r: 255, g: 255, b:   0 },  // 노랑
-  { at: 0.72, r: 255, g: 136, b:   0 },  // 주황
-  { at: 0.85, r: 255, g:   0, b:   0 },  // 빨강
-  { at: 1.00, r: 255, g: 105, b: 180 },  // 분홍
+  { at: 0.00, r:  13, g:  79, b: 139 },  // 바다 (투명 영역)
+  { at: 0.10, r:  13, g:  79, b: 139 },  // 바다 (투명 영역)
+  { at: 0.30, r:  90, g: 130, b: 160 },  // 연한 청회색
+  { at: 0.50, r: 140, g: 180, b: 200 },  // 중간 청회색
+  { at: 0.70, r: 180, g: 210, b: 225 },  // 연한 하늘색
+  { at: 0.85, r: 210, g: 230, b: 240 },  // 밝은 빙백색
+  { at: 1.00, r: 240, g: 248, b: 255 },  // 거의 흰색
 ];
 
 function iceToRGB(conc) {
@@ -693,11 +691,22 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
           rgb = depthToRGB(estimateBathymetry(vLon, vLat));
         }
 
+        // 0~10% 농도는 투명(바다 노출), 그 위는 농도에 비례한 알파
+        let alpha = 255;
+        if (colorMode === 'ice') {
+          const c = conc || 0;
+          if (c < 0.10) alpha = 0;
+          else if (c < 0.30) alpha = Math.round(76);
+          else if (c < 0.50) alpha = Math.round(128);
+          else if (c < 0.70) alpha = Math.round(178);
+          else if (c < 0.85) alpha = Math.round(216);
+          else alpha = Math.round(242);
+        }
         const idx = (ty * ICE_TEX_SIZE + tx) * 4;
         data[idx]     = Math.round(rgb[0] * 255);
         data[idx + 1] = Math.round(rgb[1] * 255);
         data[idx + 2] = Math.round(rgb[2] * 255);
-        data[idx + 3] = 255;
+        data[idx + 3] = alpha;
       }
     }
 

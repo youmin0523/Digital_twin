@@ -125,15 +125,14 @@ function buildLayers(iceData, bergData, dangerGeoJSON, realBergData) {
       radiusUnits: 'meters',
       radiusMinPixels: 2,
       getFillColor: (d) => {
-        // NSIDC 위성 팔레트: 흰(고농도) → 하늘 → 파랑 → 남색(저농도)
+        // 실사풍 해빙 팔레트: 투명 바다 → 청회색 → 흰색
         const w = d.weight;
-        if (w > 0.9) return [255, 255, 255, 220];
-        if (w > 0.8) return [220, 235, 255, 210];
-        if (w > 0.7) return [170, 210, 250, 200];
-        if (w > 0.5) return [100, 170, 230, 180];
-        if (w > 0.3) return [50, 120, 200, 160];
-        if (w > 0.15) return [20, 70, 160, 140];
-        return [10, 40, 120, 100];
+        if (w > 0.85) return [240, 248, 255, 242];   // 거의 흰색
+        if (w > 0.70) return [210, 230, 240, 216];   // 밝은 빙백색
+        if (w > 0.50) return [180, 210, 225, 178];   // 연한 하늘색
+        if (w > 0.30) return [140, 180, 200, 128];   // 중간 청회색
+        if (w > 0.10) return [ 90, 130, 160,  76];   // 연한 청회색
+        return [0, 0, 0, 0];                          // 완전 투명
       },
       pickable: false,
       updateTriggers: {

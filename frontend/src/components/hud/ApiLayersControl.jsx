@@ -1,13 +1,13 @@
 import React from 'react';
 
 const LAYERS = [
-  { id: 'layer-nsidc-conc', stateKey: 'nsidcConc', label: 'NSIDC \uD574\uBE59 \uB18D\uB3C4',       title: '\uBD81\uADF9\uD574 \uD574\uBE59\uC758 \uBA74\uC801 \uB300\uBE44 \uC5BC\uC74C\uC758 \uBE44\uC728(%)\uC744 \uC2E4\uC2DC\uAC04 \uC2DC\uAC01\uD654\uD569\uB2C8\uB2E4.' },
-  { id: 'layer-cop-thick',  stateKey: 'copThick',  label: 'Copernicus \uD574\uBE59 \uB450\uAED8',    title: 'Copernicus \uBAA8\uB378 \uAE30\uBC18\uC758 \uD574\uBE59 \uB450\uAED8 \uC608\uCE21\uAC12\uC744 \uC2DC\uAC01\uD654\uD569\uB2C8\uB2E4.' },
-  { id: 'layer-nsidc-edge', stateKey: 'nsidcEdge', label: 'NSIDC \uACBD\uACC4\uC120 (Today)',       title: '\uC704\uC131 \uBC1D\uAE30\uC628\uB3C4 \uB370\uC774\uD130 \uAE30\uBC18\uC73C\uB85C \uC624\uB298\uC758 \uD574\uBE59 \uACBD\uACC4\uC120\uC744 \uD45C\uC2DC\uD569\uB2C8\uB2E4.' },
-  { id: 'layer-esa-sar',    stateKey: 'esaSar',    label: 'ESA Sentinel-1 \uC704\uC131',             title: 'ESA \uC8FC\uAD00 \uC13C\uD2F0\uB110-1 \uC704\uC131\uC758 \uD569\uC131\uAC1C\uAD6C\uB808\uC774\uB354(SAR) \uC601\uC0C1\uC744 \uC81C\uACF5\uD569\uB2C8\uB2E4.' },
-  { id: 'layer-gebco-bathy', stateKey: 'gebcoBathy', label: 'GEBCO \uD574\uC800 \uC218\uC2EC\uB3C4', title: 'EMODnet/GEBCO \uC218\uC2EC \uCC99\uB3C4 \uBC0F \uD574\uC800 \uC9C0\uD615\uC744 \uC2DC\uAC01\uD654\uD569\uB2C8\uB2E4.' },
-  { id: 'layer-s2-true',    stateKey: 's2True',    label: 'Sentinel-2 \uC790\uC5F0\uC0C9',           title: '\uAD11\uD559 \uC704\uC131\uC758 \uC790\uC5F0\uC0C9 \uBC0F \uACE0\uD574\uC0C1\uB3C4 \uAD6C\uB984 \uC774\uBBF8\uC9C0\uB97C \uC2DC\uAC01\uD654\uD569\uB2C8\uB2E4.' },
-  { id: 'layer-s2-ndsi',    stateKey: 's2Ndsi',    label: 'Sentinel-2 NDSI (\uD574\uBE59 \uD0D0\uC9C0)', title: '\uD574\uBE59 \uD0D0\uC9C0 \uC9C0\uC218(NDSI)\uB97C \uD45C\uC2DC\uD558\uC5EC \uB208\uACFC \uAD6C\uB984\uC744 \uBA85\uD655\uD788 \uAD6C\uBD84\uD569\uB2C8\uB2E4.' },
+  { id: 'layer-nsidc-conc', stateKey: 'nsidcConc', label: 'NSIDC 해빙 농도',       title: '북극해 해빙의 면적 대비 얼음의 비율(%)을 실시간 시각화합니다.' },
+  { id: 'layer-cop-thick',  stateKey: 'copThick',  label: 'Copernicus 해빙 두께',    title: 'Copernicus 모델 기반의 해빙 두께 예측값을 시각화합니다.' },
+  { id: 'layer-nsidc-edge', stateKey: 'nsidcEdge', label: 'NSIDC 경계선 (Today)',       title: '위성 밝기온도 데이터 기반으로 오늘의 해빙 경계선을 표시합니다.' },
+  { id: 'layer-esa-sar',    stateKey: 'esaSar',    label: 'ESA Sentinel-1 위성',             title: 'ESA 주관 센티널-1 위성의 합성개구레이더(SAR) 영상을 제공합니다.' },
+  { id: 'layer-gebco-bathy', stateKey: 'gebcoBathy', label: 'GEBCO 해저 수심도', title: 'EMODnet/GEBCO 수심 척도 및 해저 지형을 시각화합니다.' },
+  { id: 'layer-s2-true',    stateKey: 's2True',    label: 'Sentinel-2 자연색',           title: '광학 위성의 자연색 및 고해상도 구름 이미지를 시각화합니다.' },
+  { id: 'layer-s2-ndsi',    stateKey: 's2Ndsi',    label: 'Sentinel-2 NDSI (해빙 탐지)', title: '해빙 탐지 지수(NDSI)를 표시하여 눈과 구름을 명확히 구분합니다.' },
 ];
 
 export default function ApiLayersControl({
@@ -91,7 +91,7 @@ export default function ApiLayersControl({
               }}
             >
               <span className="hud-label" style={{ fontSize: '10px', whiteSpace: 'nowrap' }}>
-                {'\uD22C\uBA85\uB3C4'}
+                {'투명도'}
               </span>
               <input
                 type="range"
@@ -110,6 +110,7 @@ export default function ApiLayersControl({
           )}
         </React.Fragment>
       ))}
+
     </div>
   );
 }
