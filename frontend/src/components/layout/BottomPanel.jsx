@@ -6,7 +6,7 @@ const DEFAULT_CHECKS = {
 };
 import './BottomPanel.css';
 
-const TABS = ['Ship Ice Info', 'Ship Weather Info', 'Ship Design Info', 'Ship Service Info'];
+const TABS = ['Ship Ice & Weather', 'Ship Design Info', 'Ship Service Info'];
 
 /* ── RIO 게이지 SVG (compact 65x55) ── */
 function RioGauge({ value, level }) {
@@ -72,38 +72,12 @@ function DataRow({ label, value, cls }) {
   );
 }
 
-/* ── Tab 1: Ship Ice Info ── */
-function IceInfoPanel({ hud }) {
+/* ── Tab 1: Ship Ice & Weather (통합) ── */
+function IceWeatherPanel({ hud }) {
   const sicNum = parseFloat(hud.sic) || 0;
   const rfiNum = parseFloat(hud.rfi) || 0;
   const rioLevel = sicNum < 15 ? 'safe' : sicNum < 40 ? 'warning' : 'danger';
   const iceType = sicNum > 70 ? '다년빙' : sicNum > 30 ? '일년빙' : sicNum > 10 ? '신생빙' : '없음';
-
-  return (
-    <div className="bp-content">
-      <div className="bp-content__left">
-        <RioGauge value={rfiNum} level={rioLevel} />
-        <div className="bp-info-stack">
-          <DataRow label="Ice Class" value={hud.iceClass || 'PC2'} />
-          <DataRow label="SIC" value={hud.sic} />
-          <DataRow label="빙해상태" value={hud.iceState} />
-          <DataRow label="RFI 지수" value={hud.rfi} />
-          <DataRow label="수온" value={hud.temp} />
-        </div>
-      </div>
-      <div className="bp-divider" />
-      <div className="bp-content__right bp-cards">
-        <InfoCard label="해빙 농도" value={hud.sic} unit="%" />
-        <InfoCard label="해빙 두께" value={sicNum > 30 ? (sicNum / 50).toFixed(1) : '0.0'} unit="m" />
-        <InfoCard label="해빙 유형" value={iceType} />
-        <InfoCard label="POLARIS RIO" value={rfiNum.toFixed(1)} accent={rioLevel === 'safe' ? '#27ae60' : rioLevel === 'warning' ? '#f39c12' : '#e74c3c'} />
-      </div>
-    </div>
-  );
-}
-
-/* ── Tab 2: Ship Weather Info ── */
-function WeatherInfoPanel({ hud }) {
   const windSpeed = (parseFloat(hud.hs) * 3.2 + 1.5).toFixed(1);
   const windDir = Math.round(180 + Math.random() * 60);
   const visibility = parseFloat(hud.hs) > 2 ? '5.0 km' : '10+ km';
@@ -111,19 +85,31 @@ function WeatherInfoPanel({ hud }) {
 
   return (
     <div className="bp-content">
-      <div className="bp-content__left bp-cards" style={{ flexWrap: 'wrap', maxWidth: 180 }}>
-        <InfoCard label="파고 Hs" value={hud.hs} accent="#5fa8f5" />
-        <InfoCard label="풍속" value={windSpeed} unit="m/s" />
-        <InfoCard label="풍향" value={windDir + '°'} />
-        <InfoCard label="수온" value={hud.temp} accent={parseFloat(hud.temp) < 0 ? '#4ecdc4' : '#f39c12'} />
+      {/* 좌: RIO 게이지 + 해빙 정보 */}
+      <RioGauge value={rfiNum} level={rioLevel} />
+      <div className="bp-info-stack" style={{ width: 150 }}>
+        <DataRow label="Ice Class" value={hud.iceClass || 'PC2'} />
+        <DataRow label="SIC" value={hud.sic} />
+        <DataRow label="빙해상태" value={hud.iceState} />
+        <DataRow label="RFI 지수" value={hud.rfi} />
+        <DataRow label="해빙 유형" value={iceType} />
       </div>
       <div className="bp-divider" />
-      <div className="bp-content__right bp-info-stack">
-        <DataRow label="Roll" value={hud.roll} />
-        <DataRow label="Pitch" value={hud.pitch} />
+      {/* 중: 해빙 카드 */}
+      <div className="bp-cards">
+        <InfoCard label="해빙 농도" value={hud.sic} unit="%" />
+        <InfoCard label="해빙 두께" value={sicNum > 30 ? (sicNum / 50).toFixed(1) : '0.0'} unit="m" />
+        <InfoCard label="POLARIS RIO" value={rfiNum.toFixed(1)} accent={rioLevel === 'safe' ? '#27ae60' : rioLevel === 'warning' ? '#f39c12' : '#e74c3c'} />
+      </div>
+      <div className="bp-divider" />
+      {/* 우: 기상 정보 */}
+      <div className="bp-info-stack" style={{ minWidth: 190 }}>
+        <DataRow label="파고 Hs" value={hud.hs} />
+        <DataRow label="풍속" value={windSpeed + ' m/s'} />
+        <DataRow label="수온" value={hud.temp} />
+        <DataRow label="Roll / Pitch" value={`${hud.roll} / ${hud.pitch}`} />
         <DataRow label="해역 상태" value={hud.seaLabel} />
-        <DataRow label="시정" value={visibility} />
-        <DataRow label="기압" value={pressure + ' hPa'} />
+        <DataRow label="시정 / 기압" value={`${visibility} / ${pressure}hPa`} />
       </div>
     </div>
   );
@@ -223,52 +209,102 @@ function DesignField({ label, value, unit, onChange }) {
 
 /* ── Tab 4: Ship Service Info ── */
 function ServiceInfoPanel({ hud, currentRoute, evaluationResult }) {
-  const routeData = [
-    { name: 'NSR', dist: '7,200', days: '14', cost: '$280K', co2: '1,840t' },
-    { name: 'NWP', dist: '8,100', days: '16', cost: '$320K', co2: '2,070t' },
-    { name: 'TSR', dist: '6,900', days: '13', cost: '$260K', co2: '1,760t' },
-    { name: 'SUEZ', dist: '11,200', days: '22', cost: '$450K', co2: '2,860t' },
-    { name: 'CAPE', dist: '14,500', days: '30', cost: '$580K', co2: '3,710t' },
+  const allRoutes = [
+    { name: 'NSR', dist: 7200, days: 14, cost: 280, co2: 1840, arctic: true },
+    { name: 'NWP', dist: 8100, days: 16, cost: 320, co2: 2070, arctic: true },
+    { name: 'TSR', dist: 6900, days: 13, cost: 260, co2: 1760, arctic: true },
+    { name: 'SUEZ', dist: 11200, days: 22, cost: 450, co2: 2860, arctic: false },
+    { name: 'CAPE', dist: 14500, days: 30, cost: 580, co2: 3710, arctic: false },
   ];
 
-  const currDist = evaluationResult?.distances?.current || 7200;
-  const suezDist = evaluationResult?.distances?.suez || 11200;
-  const savedDist = suezDist - currDist;
-  const savedDays = Math.round(savedDist / (7200 / 14));
+  // 적합성 판단: NSR_APPROVED 또는 NSR_RESTRICTED → 적합, REROUTE_* → 부적합
+  const st = evaluationResult?.status || '';
+  const isSuitable = st === 'NSR_APPROVED' || st === 'NSR_RESTRICTED';
+  const isPending = !evaluationResult;
+
+  // 적합 → 전체 5행, 부적합 → SUEZ/CAPE만
+  const visibleRoutes = isPending ? allRoutes : isSuitable ? allRoutes : allRoutes.filter(r => !r.arctic);
+
+  // 절감 계산 (적합일 때만)
+  const currentRouteData = allRoutes.find(r => r.name === currentRoute);
+  const suezRoute = allRoutes.find(r => r.name === 'SUEZ');
+  const savedDist = isSuitable && currentRouteData && suezRoute ? suezRoute.dist - currentRouteData.dist : 0;
+  const savedDays = isSuitable && currentRouteData && suezRoute ? suezRoute.days - currentRouteData.days : 0;
+  const savedCost = isSuitable && currentRouteData && suezRoute ? suezRoute.cost - currentRouteData.cost : 0;
+  const savedCo2 = isSuitable && currentRouteData && suezRoute ? suezRoute.co2 - currentRouteData.co2 : 0;
+
+  const statusLabel = {
+    NSR_APPROVED: '북극항로 운항 적합',
+    NSR_RESTRICTED: '조건부 운항 허가',
+    REROUTE_SUEZ: '북극항로 부적합 — 수에즈 우회',
+    REROUTE_CAPE: '북극항로 부적합 — 희망봉 우회',
+  };
+  const statusColor = {
+    NSR_APPROVED: '#27ae60', NSR_RESTRICTED: '#f39c12',
+    REROUTE_SUEZ: '#e74c3c', REROUTE_CAPE: '#e74c3c',
+  };
 
   return (
     <div className="bp-content">
-      <div className="bp-content__left">
-        <SpeedGauge speed={hud.speed} />
-        <div className="bp-info-stack">
-          <DataRow label="침로" value={(parseFloat(hud.position?.split(',')[1]) || 0).toFixed(0) + '°T'} />
-          <DataRow label="진행률" value={hud.progress} />
-          <DataRow label="스로틀" value={hud.throttle} />
-          <DataRow label="현재단계" value={hud.phase} />
-          <DataRow label="위치" value={hud.position} />
-          <DataRow label="빙결상태" value={hud.iceState} />
-        </div>
+      {/* 좌: 운항 정보 */}
+      <SpeedGauge speed={hud.speed} />
+      <div className="bp-info-stack" style={{ minWidth: 150 }}>
+        <DataRow label="침로" value={(parseFloat(hud.position?.split(',')[1]) || 0).toFixed(0) + '°T'} />
+        <DataRow label="진행률" value={hud.progress} />
+        <DataRow label="스로틀" value={hud.throttle} />
+        <DataRow label="현재단계" value={hud.phase} />
+        <DataRow label="위치" value={hud.position} />
+        <DataRow label="빙결상태" value={hud.iceState} />
       </div>
       <div className="bp-divider" />
-      <div className="bp-content__right" style={{ overflow: 'hidden' }}>
+      {/* 중: Route Comparison + 평가 상태 */}
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: 1, minWidth: 0 }}>
+        {/* 평가 배지 */}
+        {evaluationResult ? (
+          <div className="bp-eval-badge" style={{
+            color: statusColor[evaluationResult.status] || '#6a89b8',
+            borderColor: statusColor[evaluationResult.status] || '#1a2a4a',
+            marginBottom: 4,
+          }}>
+            {statusLabel[evaluationResult.status] || evaluationResult.status}
+            {evaluationResult.rioScore != null && ` (RIO ${evaluationResult.rioScore.toFixed(1)})`}
+          </div>
+        ) : (
+          <div className="bp-eval-badge" style={{ color: '#6a89b8', borderColor: '#1a2a4a', marginBottom: 4 }}>
+            평가 대기 — 제원 데이터를 적용하세요
+          </div>
+        )}
         <span className="bp-service__table-title">Route Comparison</span>
         <table className="bp-service__table">
           <thead>
             <tr><th>항로</th><th>거리</th><th>소요</th><th>비용</th><th>CO₂</th></tr>
           </thead>
           <tbody>
-            {routeData.map(r => (
+            {visibleRoutes.map(r => (
               <tr key={r.name} className={r.name === currentRoute ? 'bp-service__row--active' : ''}>
-                <td>{r.name}</td><td>{r.dist}</td><td>{r.days}일</td><td>{r.cost}</td><td>{r.co2}</td>
+                <td>{r.name}</td>
+                <td>{r.dist.toLocaleString()}km</td>
+                <td>{r.days}일</td>
+                <td>${r.cost}K</td>
+                <td>{r.co2.toLocaleString()}t</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div className="bp-service__savings">
-          <InfoCard label="거리 절감" value={savedDist.toLocaleString()} unit="km" accent="#27ae60" />
-          <InfoCard label="소요일 절감" value={savedDays > 0 ? savedDays : 0} unit="일" accent="#27ae60" />
-        </div>
       </div>
+      {/* 우: 절감 효과 (적합일 때만) */}
+      {isSuitable && (
+        <>
+          <div className="bp-divider" />
+          <div className="bp-info-stack" style={{ minWidth: 130 }}>
+            <span className="bp-service__table-title">{currentRoute} vs SUEZ 절감</span>
+            <DataRow label="거리" value={`-${savedDist.toLocaleString()}km`} cls="bp-val--save" />
+            <DataRow label="소요일" value={`-${savedDays}일`} cls="bp-val--save" />
+            <DataRow label="비용" value={`-$${savedCost}K`} cls="bp-val--save" />
+            <DataRow label="CO₂" value={`-${savedCo2.toLocaleString()}t`} cls="bp-val--save" />
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -285,27 +321,18 @@ export default function BottomPanel({
   onEvaluate,
   currentRoute,
 }) {
-  const [activeTab, setActiveTab] = useState(0);
-
   return (
     <div className="bp">
-      {/* Tab Header */}
-      <div className="bp-tabs">
-        {TABS.map((tab, i) => (
-          <button
-            key={tab}
-            className={`bp-tabs__btn ${activeTab === i ? 'bp-tabs__btn--active' : ''}`}
-            onClick={() => setActiveTab(i)}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-      {/* Tab Content */}
-      <div className="bp-panel">
-        {activeTab === 0 && <IceInfoPanel hud={hud} />}
-        {activeTab === 1 && <WeatherInfoPanel hud={hud} />}
-        {activeTab === 2 && (
+      <div className="bp-panel bp-panel--triple">
+        {/* 좌: Ice & Weather */}
+        <div className="bp-section">
+          <div className="bp-section__title">Ship Ice & Weather</div>
+          <IceWeatherPanel hud={hud} />
+        </div>
+        <div className="bp-divider" />
+        {/* 중: Design */}
+        <div className="bp-section">
+          <div className="bp-section__title">Ship Design Info</div>
           <DesignInfoPanel
             specs={specs}
             onSpecChange={onSpecChange}
@@ -313,14 +340,17 @@ export default function BottomPanel({
             onApply={onApply}
             onRecenter={onRecenter}
           />
-        )}
-        {activeTab === 3 && (
+        </div>
+        <div className="bp-divider" />
+        {/* 우: Service */}
+        <div className="bp-section">
+          <div className="bp-section__title">Ship Service Info</div>
           <ServiceInfoPanel
             hud={hud}
             currentRoute={currentRoute}
             evaluationResult={evaluationResult}
           />
-        )}
+        </div>
       </div>
     </div>
   );
