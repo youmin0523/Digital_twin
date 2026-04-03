@@ -2,13 +2,15 @@ import React from 'react';
 
 /* ── Shared legend panel base style ── */
 const panelBase = {
-  background: 'rgba(6, 12, 28, 0.92)',
-  borderRadius: '8px',
-  padding: '12px 16px 10px',
-  fontFamily: "'Courier New', monospace",
+  background: 'rgba(13, 19, 41, 0.9)',
+  border: '1px solid #1a2a4a',
+  borderRadius: '4px',
+  padding: '10px 14px 8px',
+  fontFamily: "'Segoe UI', system-ui, sans-serif",
   backdropFilter: 'blur(8px)',
-  boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
-  minWidth: '320px',
+  boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+  minWidth: '280px',
+  maxWidth: '320px',
   pointerEvents: 'auto',
 };
 
@@ -19,7 +21,7 @@ function GebcoLegend() {
   return (
     <div
       id="gebco-legend"
-      style={{ ...panelBase, border: '1px solid #059669' }}
+      style={{ ...panelBase, borderColor: '#059669' }}
     >
       {/* Title */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -138,7 +140,7 @@ function NsidcLegend() {
   return (
     <div
       id="nsidc-legend"
-      style={{ ...panelBase, border: '1px solid #3b82f6' }}
+      style={{ ...panelBase, borderColor: '#3b82f6' }}
     >
       {/* Title */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -213,7 +215,7 @@ function CopLegend() {
   return (
     <div
       id="cop-legend"
-      style={{ ...panelBase, border: '1px solid #a855f7' }}
+      style={{ ...panelBase, borderColor: '#a855f7' }}
     >
       {/* Title */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -255,23 +257,26 @@ export default function LegendContainer({
   nsidcVisible,
   copVisible,
 }) {
+  const anyVisible = gebcoVisible || nsidcVisible || copVisible;
+  if (!anyVisible) return null;
+
   return (
     <div
       id="legends-container"
       style={{
-        position: 'fixed',
-        top: '250px',
-        left: '232px',
-        zIndex: 200,
+        position: 'absolute',
+        bottom: '60px',
+        left: '10px',
+        zIndex: 210,
         display: 'flex',
         flexDirection: 'column',
-        gap: '10px',
+        gap: '8px',
         pointerEvents: 'none',
       }}
     >
-      {gebcoVisible && <GebcoLegend />}
       {nsidcVisible && <NsidcLegend />}
       {copVisible && <CopLegend />}
+      {gebcoVisible && <GebcoLegend />}
     </div>
   );
 }

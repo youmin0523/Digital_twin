@@ -1,0 +1,61 @@
+.sim-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 210;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(11, 16, 35, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  backdrop-filter: blur(8px);
+}
+
+.sim-controls__btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.sim-controls__btn:hover {
+  background: var(--bg-active);
+  border-color: var(--border-active);
+}
+
+.sim-controls__btn--active {
+  background: var(--bg-active);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sim-controls__speed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+}
+
+.sim-controls__slider {
+  width: 80px;
+  accent-color: var(--accent);
+  height: 3px;
+}
+
+.sim-controls__speed-label {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 32px;
+  font-variant-numeric: tabular-nums;
+}
