@@ -71,14 +71,15 @@ function AppInner() {
   const shipSpecsRef = useRef(state.shipSpecs);
   const simElapsedRef = useRef(0);
   const currentModeRef = useRef('SATELLITE');
-  const nsidcActiveRef = useRef(true); // nsidcConc 기본 ON
+  const nsidcActiveRef = useRef(false); // nsidcConc 기본 OFF
   const iceGridCacheRef = useRef(null); // 해빙 격자 O(1) lookup 캐시
   const realBergsRef = useRef([]); // NIC 실제 빙산 위치
   const lastBergsUpdateRef = useRef(0); // 마지막 updateRealBergs 호출 시각
   const bergCesiumEntitiesRef = useRef([]); // Cesium 빙산 엔티티 목록
-  const userCameraInteracting = useRef(false); // 사용자 카메라 드래그 중 여부
+  const userCameraInteracting = useRef(false); // 사용자 카메라 조작 중 여부
+  const cameraInteractTimer = useRef(null);  // 조작 후 추적 재개 딜레이
   const shipStateRef = useRef(state.shipState);
-  const oceanOverlayModeRef = useRef('ice'); // nsidcConc 기본 ON
+  const oceanOverlayModeRef = useRef('none'); // 모든 WMS 레이어 기본 OFF
 
   useEffect(() => {
     isSimulatingRef.current = state.isSimulating;
@@ -348,31 +349,31 @@ function AppInner() {
           });
         }
 
-        // Cesium 카메라 추적 (SATELLITE/WIDE 모드) - 사용자 드래그 중엔 스킵
+        // ── Cesium 선박 엔티티 위치 업데이트 (모든 모드에서) ──
+        if (cesiumRef.current && cesiumRef.current.updateShipEntity) {
+          cesiumRef.current.updateShipEntity(pos, hdgDeg, shipSpecsRef.current);
+        }
+
+        // ── Cesium 카메라 추적 (SATELLITE/WIDE 모드 전용) ──
         const viewer = viewerRef.current;
-        if (viewer && !viewer.isDestroyed() && !userCameraInteracting.current) {
+        const curMode = currentModeRef.current;
+        if (
+          viewer && !viewer.isDestroyed() &&
+          !userCameraInteracting.current &&
+          (curMode === 'SATELLITE' || curMode === 'WIDE')
+        ) {
           try {
+            // 현재 카메라 고도를 유지하면서 선박 위치만 따라감
+            const camPos = viewer.camera.positionCartographic;
+            const currentAlt = camPos ? camPos.height : (curMode === 'WIDE' ? 3000000 : 120000);
             viewer.camera.setView({
-              destination: Cesium.Cartesian3.fromDegrees(
-                pos.lon,
-                pos.lat,
-                50000,
-              ),
+              destination: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, currentAlt),
               orientation: {
-                heading: Cesium.Math.toRadians(hdgDeg),
-                pitch: Cesium.Math.toRadians(-45),
+                heading: viewer.camera.heading,
+                pitch: viewer.camera.pitch,
                 roll: 0,
               },
             });
-
-            // ── Cesium 상의 선박 엔티티 업데이트 ──
-            if (cesiumRef.current && cesiumRef.current.updateShipEntity) {
-              cesiumRef.current.updateShipEntity(
-                pos,
-                hdgDeg,
-                shipSpecsRef.current,
-              );
-            }
           } catch (e) {
             /* ignore */
           }
@@ -384,7 +385,6 @@ function AppInner() {
         }
 
         // BRIDGE / FOLLOW 모드: Three.js 선박 시각 이동
-        const curMode = currentModeRef.current;
         if (curMode === 'BRIDGE' || curMode === 'FOLLOW') {
           const three = threeRef.current;
           if (three?.shipPivot) {
@@ -549,7 +549,7 @@ function AppInner() {
 
   // API 레이어 상태
   const [layerStates, setLayerStates] = useState({
-    nsidcConc: true,
+    nsidcConc: false,
     copThick: false,
     nsidcEdge: false,
     esaSar: false,
@@ -588,18 +588,23 @@ function AppInner() {
     const handler = new Cesium.ScreenSpaceEventHandler(
       cesiumViewerState.scene.canvas,
     );
-    handler.setInputAction(() => {
+    const startInteract = () => {
       userCameraInteracting.current = true;
-    }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
-    handler.setInputAction(() => {
-      userCameraInteracting.current = false;
-    }, Cesium.ScreenSpaceEventType.LEFT_UP);
-    handler.setInputAction(() => {
-      userCameraInteracting.current = false;
-    }, Cesium.ScreenSpaceEventType.MIDDLE_UP);
-    handler.setInputAction(() => {
-      userCameraInteracting.current = false;
-    }, Cesium.ScreenSpaceEventType.RIGHT_UP);
+      if (cameraInteractTimer.current) clearTimeout(cameraInteractTimer.current);
+    };
+    const endInteract = () => {
+      if (cameraInteractTimer.current) clearTimeout(cameraInteractTimer.current);
+      cameraInteractTimer.current = setTimeout(() => {
+        userCameraInteracting.current = false;
+      }, 3000);
+    };
+    handler.setInputAction(startInteract, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+    handler.setInputAction(endInteract, Cesium.ScreenSpaceEventType.LEFT_UP);
+    handler.setInputAction(startInteract, Cesium.ScreenSpaceEventType.MIDDLE_DOWN);
+    handler.setInputAction(endInteract, Cesium.ScreenSpaceEventType.MIDDLE_UP);
+    handler.setInputAction(startInteract, Cesium.ScreenSpaceEventType.RIGHT_DOWN);
+    handler.setInputAction(endInteract, Cesium.ScreenSpaceEventType.RIGHT_UP);
+    handler.setInputAction(() => { startInteract(); endInteract(); }, Cesium.ScreenSpaceEventType.WHEEL);
     handleMonthChange('live');
     return () => {
       handler.destroy();
@@ -607,11 +612,25 @@ function AppInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cesiumViewerState]);
 
-  // Cesium 뷰어 준비 완료
+  // Cesium 뷰어 준비 완료 → 선박 출발 위치로 카메라 이동
   const handleViewerReady = useCallback((viewer) => {
     viewerRef.current = viewer;
     setCesiumViewerState(viewer);
-    console.log('[App] Cesium viewer ready');
+    // 초기 지구본 뷰(13,000km) 대신 선박 위치(부산)로 이동
+    const { lon, lat } = shipStateRef.current;
+    setTimeout(() => {
+      if (viewer && !viewer.isDestroyed()) {
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
+          orientation: {
+            heading: 0,
+            pitch: Cesium.Math.toRadians(-80),
+            roll: 0,
+          },
+          duration: 2.0,
+        });
+      }
+    }, 2500); // 초기 flyTo 애니메이션(2초) 완료 후 실행
   }, []);
 
   // 시뮬레이션 제어
@@ -638,10 +657,25 @@ function AppInner() {
         payload: mode === 'BRIDGE' || mode === 'FOLLOW',
       });
 
-      // SATELLITE/WIDE 전환 시 Three.js 바다 색상 리셋
+      // SATELLITE/WIDE 전환 시 카메라를 선박 위치로 이동
       if (mode === 'SATELLITE' || mode === 'WIDE') {
         const { lon, lat } = state.shipState;
         threeRef.current?.updateOceanOverlay('none', lon, lat, null);
+
+        const viewer = viewerRef.current;
+        if (viewer && !viewer.isDestroyed()) {
+          const alt = mode === 'WIDE' ? 3000000 : 120000;
+          const pitch = mode === 'WIDE' ? -60 : -80;
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
+            orientation: {
+              heading: 0,
+              pitch: Cesium.Math.toRadians(pitch),
+              roll: 0,
+            },
+            duration: 1.0,
+          });
+        }
       }
     },
     [dispatch, state.shipState],
@@ -1132,7 +1166,12 @@ function AppInner() {
       if (viewer && !viewer.isDestroyed()) {
         try {
           viewer.camera.flyTo({
-            destination: Cesium.Cartesian3.fromDegrees(lon, lat, 50000),
+            destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
+            orientation: {
+              heading: 0,
+              pitch: Cesium.Math.toRadians(-80),
+              roll: 0,
+            },
             duration: 1.5,
           });
         } catch (e) {
@@ -1158,7 +1197,12 @@ function AppInner() {
     if (viewer) {
       const { lon, lat } = state.shipState;
       viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(lon, lat, 50000),
+        destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
+        orientation: {
+          heading: 0,
+          pitch: Cesium.Math.toRadians(-80),
+          roll: 0,
+        },
         duration: 1.0,
       });
     }
