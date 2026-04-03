@@ -1,4 +1,9 @@
 import React, { useState } from 'react';
+
+const DEFAULT_CHECKS = {
+  pwom: true, nsra: true, winter: true, zeroDis: false,
+  comms: true, navigator: true, sanctioned: false, coldRoute: false,
+};
 import './BottomPanel.css';
 
 const TABS = ['Ship Ice Info', 'Ship Weather Info', 'Ship Design Info', 'Ship Service Info'];
@@ -126,9 +131,18 @@ function WeatherInfoPanel({ hud }) {
 
 /* ── Tab 3: Ship Design Info ── */
 function DesignInfoPanel({
-  specs, onSpecChange, onPresetLoad, onApply,
-  evaluationResult, onEvaluate, onRecenter,
+  specs, onSpecChange, onPresetLoad, onApply, onRecenter,
 }) {
+  const [rescueDays, setRescueDays] = useState(7);
+  const [tempMargin, setTempMargin] = useState(12);
+  const [checks, setChecks] = useState(DEFAULT_CHECKS);
+
+  const toggleCheck = (key) =>
+    setChecks((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const handleApplyClick = () =>
+    onApply({ draft: specs.draft || 8.5, rescueDays, tempMargin, checks });
+
   return (
     <div className="bp-content bp-content--design">
       {/* 좌: 선종 + 선박 제원 */}
@@ -168,22 +182,24 @@ function DesignInfoPanel({
         <span className="bp-design__col-title">POLAR CODE 안전 설계 기준</span>
         <DesignField label="Draft" value={specs.draft || 8.5} unit="m"
           onChange={v => onSpecChange('draft', Number(v))} />
-        <DesignField label="Rescue" value="7" unit="일" onChange={() => {}} />
-        <DesignField label="온도여유" value="12" unit="°C" onChange={() => {}} />
+        <DesignField label="Rescue" value={rescueDays} unit="일"
+          onChange={v => setRescueDays(Number(v))} />
+        <DesignField label="온도여유" value={tempMargin} unit="°C"
+          onChange={v => setTempMargin(Number(v))} />
         <span className="bp-design__col-title" style={{ marginTop: 4 }}>항행 설비 안전 체크리스트</span>
         <div className="bp-design__checks">
-          <label><input type="checkbox" defaultChecked /> PWOM 비치</label>
-          <label><input type="checkbox" defaultChecked /> NSRA 허가</label>
-          <label><input type="checkbox" defaultChecked /> 방한 설비</label>
-          <label><input type="checkbox" /> 생존 장비</label>
-          <label><input type="checkbox" defaultChecked /> 극지 통신</label>
-          <label><input type="checkbox" defaultChecked /> 극지 항해사</label>
+          <label><input type="checkbox" checked={checks.pwom} onChange={() => toggleCheck('pwom')} /> PWOM 비치</label>
+          <label><input type="checkbox" checked={checks.nsra} onChange={() => toggleCheck('nsra')} /> NSRA 허가</label>
+          <label><input type="checkbox" checked={checks.winter} onChange={() => toggleCheck('winter')} /> 방한 설비</label>
+          <label><input type="checkbox" checked={checks.zeroDis} onChange={() => toggleCheck('zeroDis')} /> 생존 장비</label>
+          <label><input type="checkbox" checked={checks.comms} onChange={() => toggleCheck('comms')} /> 극지 통신</label>
+          <label><input type="checkbox" checked={checks.navigator} onChange={() => toggleCheck('navigator')} /> 극지 항해사</label>
         </div>
       </div>
       <div className="bp-divider" />
       {/* 우: 버튼 */}
       <div className="bp-content__col bp-content__col--actions">
-        <button className="bp-design__btn bp-design__btn--primary" onClick={onApply}>
+        <button className="bp-design__btn bp-design__btn--primary" onClick={handleApplyClick}>
           제원 데이터 적용
         </button>
         <button className="bp-design__btn" onClick={onRecenter}>
@@ -296,8 +312,6 @@ export default function BottomPanel({
             onPresetLoad={onPresetLoad}
             onApply={onApply}
             onRecenter={onRecenter}
-            evaluationResult={evaluationResult}
-            onEvaluate={onEvaluate}
           />
         )}
         {activeTab === 3 && (

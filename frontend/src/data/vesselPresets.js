@@ -5,6 +5,7 @@
 
 export const SHIP_PRESETS = {
   icebreaker: {
+    type: 'icebreaker',
     disp: 20000,
     len: 160,
     width: 30,
@@ -12,8 +13,9 @@ export const SHIP_PRESETS = {
     iceClass: 'PC2',
     draft: 8.5,
   },
-  lng: { disp: 95000, len: 295, width: 46, gm: 5.1, iceClass: 'PC4', draft: 12.0 },
+  lng: { type: 'lng', disp: 95000, len: 295, width: 46, gm: 5.1, iceClass: 'PC4', draft: 12.0 },
   container: {
+    type: 'container',
     disp: 55000,
     len: 240,
     width: 38,

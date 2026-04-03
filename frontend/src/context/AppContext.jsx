@@ -27,10 +27,11 @@ const initialState = {
 
   // Ship specs
   shipSpecs: {
-    displacement: 25000,
-    length: 200,
-    width: 32,
-    gm: 1.8,
+    type: 'icebreaker',
+    displacement: 20000,
+    length: 160,
+    width: 30,
+    gm: 3.2,
     draft: 8.5,
     iceClass: 'PC2',
   },

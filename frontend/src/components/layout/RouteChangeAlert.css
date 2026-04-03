@@ -1,0 +1,159 @@
+/* ── Route Change Alert Modal ── */
+
+.rca-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(3px);
+}
+
+.rca {
+  background: #0d1a1a;
+  border: 1px solid #ef4444;
+  border-radius: 10px;
+  width: 430px;
+  max-width: 95vw;
+  box-shadow: 0 0 50px rgba(239, 68, 68, 0.25), 0 0 20px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  animation: rca-appear 0.2s ease-out;
+}
+
+@keyframes rca-appear {
+  from { transform: scale(0.92); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+/* ── Header ── */
+.rca__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.rca__title {
+  color: #ef4444;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.rca__close {
+  background: transparent;
+  border: none;
+  color: rgba(239, 68, 68, 0.6);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.rca__close:hover { color: #ef4444; }
+
+/* ── Body ── */
+.rca__body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rca__section-label {
+  color: rgba(239, 68, 68, 0.55);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: -4px;
+}
+
+/* ── Step Badge ── */
+.rca__step-badge {
+  display: inline-block;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+/* ── Route Row ── */
+.rca__route-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rca__route-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 14px;
+  border-radius: 5px;
+  border: 1px solid;
+}
+
+.rca__route-badge--from {
+  background: rgba(74, 100, 144, 0.15);
+  border-color: #4a6a8a;
+  color: #6a89b8;
+}
+
+.rca__route-badge--to {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.rca__arrow {
+  color: #f87171;
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* ── Reason Box ── */
+.rca__reason-box {
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: #fca5a5;
+  font-size: 11px;
+  line-height: 1.65;
+  max-height: 90px;
+  overflow-y: auto;
+}
+
+/* ── Footer ── */
+.rca__footer {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(239, 68, 68, 0.15);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rca__btn {
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  padding: 8px 24px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rca__btn:hover {
+  background: rgba(239, 68, 68, 0.35);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+}
