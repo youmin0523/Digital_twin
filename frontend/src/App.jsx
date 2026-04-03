@@ -13,6 +13,8 @@ import Sidebar from './components/layout/Sidebar';
 import SimulationControls from './components/layout/SimulationControls';
 import TimelineBar from './components/layout/TimelineBar';
 import BottomPanel from './components/layout/BottomPanel';
+import ShipSpecsSummaryModal from './components/layout/ShipSpecsSummaryModal';
+import RouteChangeAlert from './components/layout/RouteChangeAlert';
 import { ROUTES, TOTAL_SECONDS } from './data/arcticRoutes';
 import { SHIP_PRESETS } from './data/vesselPresets';
 import useManualControl from './hooks/useManualControl';
@@ -260,6 +262,11 @@ function AppInner() {
                 roll: 0,
               },
             });
+            
+            // ── Cesium 상의 선박 엔티티 업데이트 ──
+            if (cesiumRef.current && cesiumRef.current.updateShipEntity) {
+              cesiumRef.current.updateShipEntity(pos, hdgDeg, shipSpecsRef.current);
+            }
           } catch (e) { /* ignore */ }
         }
 
@@ -273,11 +280,11 @@ function AppInner() {
         if (curMode === 'BRIDGE' || curMode === 'FOLLOW') {
           const three = threeRef.current;
           if (three?.shipPivot) {
-            const hdgRad = hdgDeg * Math.PI / 180;
-            // 시각적 이동 속도 (mult에 비례하되 최대 40 units/sec)
-            const visualSpeed = Math.min(mult * 2, 40);
-            three.shipPivot.position.x += Math.sin(hdgRad) * visualSpeed * dt;
-            three.shipPivot.position.z -= Math.cos(hdgRad) * visualSpeed * dt;
+// //* [Modified Code] 관동 기반 이동을 제거하고, Base Reference(부산) 기준 위/경도 직사영 사용 (렌더링 동기화)
+            const METERS_PER_DEGREE_LAT = 111132.954;
+            const mPerDegLon = 111319.491 * Math.cos(35.1 * Math.PI / 180);
+            three.shipPivot.position.x = ((pos.lon - 129.0) * mPerDegLon) / 1.5;
+            three.shipPivot.position.z = (-(pos.lat - 35.1) * METERS_PER_DEGREE_LAT) / 1.5;
             // 선박 흔들림 (roll/pitch/heave)
             if (three.updateShipMotion) three.updateShipMotion(dt, pos.lat);
           }
@@ -318,12 +325,20 @@ function AppInner() {
         const three = threeRef.current;
         if (three && three.shipPivot) {
           three.shipPivot.rotation.y = -manualHeading;
-          three.shipPivot.position.x +=
-            Math.sin(manualHeading) * manualSpeed * dt * moveScale;
-          three.shipPivot.position.z -=
-            Math.cos(manualHeading) * manualSpeed * dt * moveScale;
+          
+          // //* [Modified Code] 수동 이동 시 Three.js 좌표 평면을 기준으로 전역 위도/경도를 역산출해 동기화 (레이어/배경 일치용)
+          three.shipPivot.position.x += Math.sin(manualHeading) * manualSpeed * dt * moveScale;
+          three.shipPivot.position.z -= Math.cos(manualHeading) * manualSpeed * dt * moveScale;
 
-          // 카메라는 ThreeOverlay 렌더 루프에서 처리 (BRIDGE/FOLLOW)
+          const METERS_PER_DEGREE_LAT = 111132.954;
+          const mPerDegLon = 111319.491 * Math.cos(35.1 * Math.PI / 180);
+          const newLon = 129.0 + (three.shipPivot.position.x * 1.5) / mPerDegLon;
+          const newLat = 35.1 - (three.shipPivot.position.z * 1.5) / METERS_PER_DEGREE_LAT;
+
+          dispatch({
+            type: 'SET_SHIP_STATE',
+            payload: { lat: newLat, lon: newLon, heading: ((manualHeading * 180 / Math.PI) + 360) % 360 },
+          });
         }
 
         // HUD 수동 계기 업데이트
@@ -431,6 +446,9 @@ function AppInner() {
 
   // 라우팅 평가 결과
   const [evaluationResult, setEvaluationResult] = useState(null);
+  const [showSpecsModal, setShowSpecsModal] = useState(false);
+  const [pendingPolarParams, setPendingPolarParams] = useState(null);
+  const [routeAlert, setRouteAlert] = useState(null);
 
   // Cesium viewer 준비되면 LIVE 빙산 데이터 로딩 + 카메라 상호작용 감지
   useEffect(() => {
@@ -540,10 +558,11 @@ function AppInner() {
     [dispatch],
   );
 
-  // 제원 적용 버튼
-  const handleApplySpecs = useCallback(() => {
-    showToast(`제원 적용 완료 — ${state.shipSpecs.iceClass}, ${state.shipSpecs.displacement}t, 흘수 ${state.shipSpecs.draft || 8.5}m`);
-  }, [state.shipSpecs, showToast]);
+  // 제원 적용 버튼 — 모달 오픈
+  const handleApplySpecs = useCallback((polarParams) => {
+    setPendingPolarParams(polarParams);
+    setShowSpecsModal(true);
+  }, []);
 
   // FOV
   const handleFovChange = useCallback(
@@ -823,10 +842,11 @@ function AppInner() {
     const currentDist = Math.round(calculateRouteDistanceKM(currentWps));
     const suezDist = Math.round(calculateRouteDistanceKM(suezWps));
 
+    const finalReason = result.reason + ` (최악 구간: ${worstLat.toFixed(1)}°N, SIC ${Math.round(worstConc * 100)}%)`;
     setEvaluationResult({
       status: result.status,
       rioScore: result.rioScore,
-      reason: result.reason + ` (최악 구간: ${worstLat.toFixed(1)}°N, SIC ${Math.round(worstConc * 100)}%)`,
+      reason: finalReason,
       distances: {
         current: currentDist,
         suez: suezDist,
@@ -834,7 +854,46 @@ function AppInner() {
     });
 
     showToast(`POLARIS 평가 완료: ${result.status} (최악 SIC ${Math.round(worstConc * 100)}%)`);
+    return { status: result.status, rioScore: result.rioScore, reason: finalReason };
   }, [state.shipState, state.shipSpecs, state.currentRouteKey, showToast]);
+
+  // 모달 확인 — 평가 실행 + 항로 불일치 감지
+  const STATUS_TO_REROUTE = { REROUTE_SUEZ: 'SUEZ', REROUTE_CAPE: 'CAPE' };
+
+  const handleModalConfirm = useCallback(() => {
+    setShowSpecsModal(false);
+    if (!pendingPolarParams) return;
+    const { draft, rescueDays, tempMargin, checks } = pendingPolarParams;
+    const evalResult = handleEvaluate({
+      draft,
+      rescueDays,
+      tempMargin,
+      hasPwom:      checks.pwom,
+      hasNsra:      checks.nsra,
+      hasWinter:    checks.winter,
+      hasZeroDis:   checks.zeroDis,
+      hasComms:     checks.comms,
+      hasNavigator: checks.navigator,
+      isSanctioned: checks.sanctioned,
+      isColdRoute:  checks.coldRoute,
+    });
+
+    // 항로 변경 필요 여부 확인
+    const suggestedRoute = STATUS_TO_REROUTE[evalResult?.status];
+    if (suggestedRoute && suggestedRoute !== state.currentRouteKey) {
+      const stepMatch = evalResult.reason.match(/\[Step (\w+)\]/);
+      setRouteAlert({
+        fromRoute: state.currentRouteKey,
+        toRoute:   suggestedRoute,
+        stepTag:   stepMatch ? stepMatch[1] : null,
+        reason:    evalResult.reason,
+      });
+    }
+
+    showToast(`제원 적용 완료 — ${state.shipSpecs.iceClass}, ${state.shipSpecs.displacement}t`);
+  }, [pendingPolarParams, handleEvaluate, state.currentRouteKey, state.shipSpecs, showToast]);
+
+  const handleModalClose = useCallback(() => setShowSpecsModal(false), []);
 
   // 텔레포트
   const handleTeleport = useCallback(
@@ -916,6 +975,7 @@ function AppInner() {
             ref={threeRef}
             visible={state.currentMode === 'BRIDGE' || state.currentMode === 'FOLLOW'}
             shipState={state.shipState}
+            specs={state.shipSpecs}
             mode={state.currentMode}
           />
           <DeckOverlay
@@ -979,6 +1039,32 @@ function AppInner() {
         evaluationResult={evaluationResult}
         onEvaluate={handleEvaluate}
         currentRoute={state.currentRouteKey}
+      />
+
+      {/* Ship Specs Summary Modal */}
+      <ShipSpecsSummaryModal
+        open={showSpecsModal}
+        specs={state.shipSpecs}
+        polarParams={pendingPolarParams}
+        currentRoute={state.currentRouteKey}
+        onConfirm={handleModalConfirm}
+        onClose={handleModalClose}
+      />
+
+      {/* Route Change Alert */}
+      <RouteChangeAlert
+        visible={routeAlert !== null}
+        fromRoute={routeAlert?.fromRoute}
+        toRoute={routeAlert?.toRoute}
+        stepTag={routeAlert?.stepTag}
+        reason={routeAlert?.reason}
+        onClose={() => setRouteAlert(null)}
+        onConfirm={() => {
+          if (routeAlert?.toRoute) {
+            handleRouteChange(routeAlert.toRoute);
+            setRouteAlert(null);
+          }
+        }}
       />
 
       {/* Teleport Overlay */}
