@@ -85,7 +85,6 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
           color: Cesium.Color.YELLOW,
           outlineColor: Cesium.Color.BLACK,
           outlineWidth: 1,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
         label: {
           text: wp.label,
@@ -95,7 +94,6 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
           outlineWidth: 2,
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
           pixelOffset: new Cesium.Cartesian2(0, -16),
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
           scaleByDistance: new Cesium.NearFarScalar(1e5, 1, 6e6, 0.3),
         },
       });

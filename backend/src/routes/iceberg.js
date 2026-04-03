@@ -10,8 +10,8 @@ router.get('/latest', async (req, res) => {
     if (!data) {
       return res.status(404).json({ error: 'Iceberg data not found' });
     }
-    const arcticBergs = (data.bergs || []).filter(b => b.lat >= 40);
-    res.json({ ...data, bergs: arcticBergs, berg_count: arcticBergs.length });
+    const bergs = data.bergs || [];
+    res.json({ ...data, bergs, berg_count: bergs.length });
   } catch (err) {
     console.error('[Iceberg] error:', err.message);
     res.status(500).json({ error: err.message });

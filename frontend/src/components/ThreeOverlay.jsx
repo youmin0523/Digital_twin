@@ -16,6 +16,7 @@ const METERS_PER_DEGREE_LON_AT_EQUATOR = 111319.491;
 
 const FOAM_COUNT = 60;
 const MAX_LOCAL_ICEBERGS = 180;
+const SHIP_BASE_Y = 5; // 선체 기본 수선 높이 (수면 위로 올리기)
 
 const ICE_TYPES = [
   { name: 'tabular', prob: 0.08, w: [400, 900], d: [350, 800], h: [120, 250], subRatio: 5 },
@@ -186,6 +187,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
     // ship
     shipGroup3: null,
     shipMesh3: null,
+    shipUpper3: null,
     cameraPivot3: null,
     // icebergs
     tIcebergs: [],
@@ -438,71 +440,155 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
 
     const shipGroup3 = new THREE.Group();
     const shipMesh3 = new THREE.Group();
+    const shipUpper3 = new THREE.Group(); // 상부구조 — BRIDGE 모드에서 숨김
     const cameraPivot3 = new THREE.Object3D();
 
-    const mk = (geo, mat, px, py, pz, ry = 0) => {
+    // 선체 파트를 shipMesh3에 직접 추가 (BRIDGE 모드에서도 표시)
+    const mkH = (geo, mat, px, py, pz, rx = 0, ry = 0) => {
       trackDisposable(geo);
       trackDisposable(mat);
       const m = new THREE.Mesh(geo, mat);
       m.position.set(px, py, pz);
+      m.rotation.x = rx;
       m.rotation.y = ry;
       m.castShadow = true;
       m.receiveShadow = true;
       shipMesh3.add(m);
     };
+    // 상부구조 파트를 shipUpper3에 추가 (BRIDGE 모드에서 숨김)
+    const mkU = (geo, mat, px, py, pz, rx = 0, ry = 0) => {
+      trackDisposable(geo);
+      trackDisposable(mat);
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(px, py, pz);
+      m.rotation.x = rx;
+      m.rotation.y = ry;
+      m.castShadow = true;
+      m.receiveShadow = true;
+      shipUpper3.add(m);
+    };
 
-    // Red hull body
-    mk(
-      new THREE.BoxGeometry(28, 10, 160),
-      new THREE.MeshPhongMaterial({ color: 0xcc2222 }),
-      0, 0, 0,
-    );
-    // Bow cone
-    mk(
-      new THREE.CylinderGeometry(0, 14, 18, 4),
-      new THREE.MeshPhongMaterial({ color: 0xaa1818 }),
-      0, 0, -89,
-      Math.PI / 4,
-    );
-    // Superstructure main block
-    mk(
-      new THREE.BoxGeometry(24, 18, 55),
-      new THREE.MeshPhongMaterial({ color: 0xf0f0f0 }),
-      0, 14, 15,
-    );
-    // Bridge deck
-    mk(
-      new THREE.BoxGeometry(22, 8, 16),
-      new THREE.MeshPhongMaterial({ color: 0xe0e0e0 }),
-      0, 27, 10,
-    );
-    // Funnel / smokestack
-    mk(
-      new THREE.CylinderGeometry(2.5, 3, 18, 8),
-      new THREE.MeshPhongMaterial({ color: 0x222222 }),
-      0, 32, 5,
-    );
-    // Boom / crane arm
-    const bmGeo = trackDisposable(new THREE.BoxGeometry(1, 1, 30));
-    const bmMat = trackDisposable(new THREE.MeshPhongMaterial({ color: 0xffcc00 }));
-    const bm = new THREE.Mesh(bmGeo, bmMat);
-    bm.rotation.z = Math.PI / 6;
-    bm.position.set(10, 22, -30);
-    bm.castShadow = true;
-    shipMesh3.add(bm);
-    // Radar dome
-    mk(
-      new THREE.SphereGeometry(3, 8, 6),
-      new THREE.MeshPhongMaterial({ color: 0x888888 }),
-      0, 36, 8,
-    );
+    // ── 색상 팔레트 (PKX-B 스타일 초계함) ──────────────────────────────────
+    const C = {
+      hull:    new THREE.MeshPhongMaterial({ color: 0x4a5c6a }),
+      hullDk:  new THREE.MeshPhongMaterial({ color: 0x38484f }),
+      red:     new THREE.MeshPhongMaterial({ color: 0x8b1a14 }),
+      deck:    new THREE.MeshPhongMaterial({ color: 0x3c4d58 }),
+      super1:  new THREE.MeshPhongMaterial({ color: 0x5c6d7a }),
+      super2:  new THREE.MeshPhongMaterial({ color: 0x6a7b88 }),
+      bridge:  new THREE.MeshPhongMaterial({ color: 0x727f8c }),
+      window:  new THREE.MeshPhongMaterial({ color: 0x1a2430 }),
+      dark:    new THREE.MeshPhongMaterial({ color: 0x252f38 }),
+      black:   new THREE.MeshPhongMaterial({ color: 0x111111 }),
+      gun:     new THREE.MeshPhongMaterial({ color: 0x4f5e6b }),
+      white:   new THREE.MeshPhongMaterial({ color: 0xddddcc }),
+    };
+    Object.values(C).forEach(m => trackDisposable(m));
 
+    // ── 선체 (HULL) — BRIDGE에서도 보임 ────────────────────────────────────
+    // 주 선체
+    mkH(new THREE.BoxGeometry(28, 9, 182), C.hull, 0, 0, 0);
+    // 흘수선 아래 적갈색
+    mkH(new THREE.BoxGeometry(29, 4, 182), C.red, 0, -5.5, 0);
+    // 선저 킬
+    mkH(new THREE.BoxGeometry(10, 1.5, 184), C.hullDk, 0, -8, 0);
+    // 선수 (날카로운 bow — 4면 피라미드)
+    mkH(new THREE.CylinderGeometry(0, 14, 28, 4), C.hullDk, 0, 0, -105, 0, Math.PI / 4);
+    // 선수 하부 빨간 피라미드
+    mkH(new THREE.CylinderGeometry(0, 14, 28, 4), C.red, 0, -5, -105, 0, Math.PI / 4);
+    // 메인 갑판
+    mkH(new THREE.BoxGeometry(28, 1.5, 182), C.deck, 0, 5, 0);
+    // 함수 갑판 (elevated forward deck)
+    mkH(new THREE.BoxGeometry(22, 1, 55), C.deck, 0, 6.8, -59);
+    // 함수 갑판 측면 bulwark (좌)
+    mkH(new THREE.BoxGeometry(1, 3, 55), C.hull, -11, 7.5, -59);
+    // 함수 갑판 측면 bulwark (우)
+    mkH(new THREE.BoxGeometry(1, 3, 55), C.hull, 11, 7.5, -59);
+    // 함포 포탑 베이스 (Bofors 40mm 스타일)
+    mkH(new THREE.CylinderGeometry(4.8, 5.5, 4, 12), C.gun, 0, 9, -68);
+    // 함포 방패 (angular shield)
+    mkH(new THREE.BoxGeometry(7, 5.5, 8), C.gun, 0, 12, -67);
+    // 포신
+    mkH(new THREE.CylinderGeometry(0.65, 0.9, 24, 6), C.dark, 0, 13, -80, -Math.PI / 2);
+    // 선미 헬기 갑판
+    mkH(new THREE.BoxGeometry(26, 1, 42), C.deck, 0, 9, 79);
+    // 헬기 갑판 H 마킹 (가로)
+    mkH(new THREE.BoxGeometry(18, 0.3, 1), C.white, 0, 9.8, 79);
+    // 헬기 갑판 H 마킹 (세로)
+    mkH(new THREE.BoxGeometry(1, 0.3, 18), C.white, 0, 9.8, 79);
+    // 선미 transom
+    mkH(new THREE.BoxGeometry(28, 9, 2), C.hullDk, 0, 0, 92);
+
+    // ── 상부구조 (UPPER) — BRIDGE에서 숨김 ─────────────────────────────────
+    // 1단 상부구조 (하부)
+    mkU(new THREE.BoxGeometry(22, 12, 72), C.super1, 0, 11, 12);
+    // 1단 상부구조 앞 경사면 (트랩 모양)
+    mkU(new THREE.BoxGeometry(21, 12, 6), C.super1, 0, 11, -25);
+    // 2단 (mid level)
+    mkU(new THREE.BoxGeometry(20, 8, 46), C.super2, 0, 21, 8);
+    // 3단 브릿지 블록
+    mkU(new THREE.BoxGeometry(19, 7, 32), C.bridge, 0, 27, 3);
+    // 브릿지 창문 띠 (어두운 유리)
+    mkU(new THREE.BoxGeometry(18.5, 3, 30), C.window, 0, 26.5, -10);
+    // 브릿지 최상단
+    mkU(new THREE.BoxGeometry(17, 3.5, 28), C.bridge, 0, 31.5, 2);
+    // 연돌 (angled funnel)
+    mkU(new THREE.CylinderGeometry(1.5, 3, 12, 8), C.black, 0, 28, 20);
+    // 연돌 연기 가이드
+    mkU(new THREE.BoxGeometry(5, 2, 3), C.dark, 0, 34, 20);
+    // 메인 마스트 폴
+    mkU(new THREE.CylinderGeometry(0.7, 0.9, 32, 6), C.dark, 0, 38, 7);
+    // 마스트 A-프레임 지지대 (좌)
+    {
+      const ag = trackDisposable(new THREE.CylinderGeometry(0.4, 0.4, 16, 4));
+      const am = new THREE.Mesh(ag, C.dark);
+      am.position.set(-6, 28, 7); am.rotation.z = 0.5;
+      shipUpper3.add(am);
+    }
+    // 마스트 A-프레임 지지대 (우)
+    {
+      const ag = trackDisposable(new THREE.CylinderGeometry(0.4, 0.4, 16, 4));
+      const am = new THREE.Mesh(ag, C.dark);
+      am.position.set(6, 28, 7); am.rotation.z = -0.5;
+      shipUpper3.add(am);
+    }
+    // 레이더 플랫폼 1
+    mkU(new THREE.BoxGeometry(14, 1.5, 12), C.dark, 0, 55, 7);
+    // 위상배열 레이더 (flat phased array — 앞면)
+    mkU(new THREE.BoxGeometry(15, 11, 1.5), C.dark, 0, 54, 1);
+    // 위상배열 레이더 (뒷면)
+    mkU(new THREE.BoxGeometry(15, 11, 1.5), C.dark, 0, 54, 13);
+    // 위상배열 레이더 (좌)
+    mkU(new THREE.BoxGeometry(1.5, 11, 12), C.dark, -7.5, 54, 7);
+    // 위상배열 레이더 (우)
+    mkU(new THREE.BoxGeometry(1.5, 11, 12), C.dark, 7.5, 54, 7);
+    // 회전 레이더 (SPS 스타일)
+    mkU(new THREE.BoxGeometry(14, 2, 3), C.dark, 0, 62, 7);
+    mkU(new THREE.CylinderGeometry(0.4, 0.4, 4, 4), C.dark, 0, 60, 7);
+    // 화력통제 레이더 구 (STIR 스타일)
+    mkU(new THREE.SphereGeometry(3, 10, 8), C.super1, 0, 44, -6);
+    mkU(new THREE.CylinderGeometry(0.8, 0.8, 6, 6), C.dark, 0, 40, -6);
+    // 측면 함대함 미사일 런처 (좌)
+    mkU(new THREE.BoxGeometry(5, 4.5, 11), C.gun, -14, 11, 18);
+    mkU(new THREE.BoxGeometry(4.5, 1, 10), C.dark, -14, 13.5, 18);
+    // 측면 함대함 미사일 런처 (우)
+    mkU(new THREE.BoxGeometry(5, 4.5, 11), C.gun, 14, 11, 18);
+    mkU(new THREE.BoxGeometry(4.5, 1, 10), C.dark, 14, 13.5, 18);
+    // 후방 CIWS / 소형 포 (선미 갑판)
+    mkU(new THREE.CylinderGeometry(3, 3.5, 3, 10), C.gun, 0, 12, 60);
+    mkU(new THREE.BoxGeometry(5, 4, 5), C.gun, 0, 14.5, 60);
+    mkU(new THREE.CylinderGeometry(0.5, 0.7, 14, 6), C.dark, 0, 16, 55, -Math.PI / 2);
+
+    shipMesh3.scale.set(1.4, 1.4, 1.4); // 선박 전체 스케일 업 (웅장함)
+    shipMesh3.position.y = SHIP_BASE_Y;
+    shipMesh3.add(shipUpper3);
     shipGroup3.add(shipMesh3);
     shipGroup3.add(cameraPivot3);
     scene.add(shipGroup3);
 
     ctx.current.shipGroup3 = shipGroup3;
     ctx.current.shipMesh3 = shipMesh3;
+    ctx.current.shipUpper3 = shipUpper3;
     ctx.current.cameraPivot3 = cameraPivot3;
   }, [trackDisposable]);
 
@@ -814,9 +900,16 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
     if (c.shipMesh3) {
       c.shipMesh3.rotation.z = c.shipRoll + c.impactRoll;
       c.shipMesh3.rotation.x = c.shipPitch + c.impactPitch;
-      c.shipMesh3.position.y = c.shipHeave;
+      c.shipMesh3.position.y = SHIP_BASE_Y + c.shipHeave;
     }
   }, []);
+
+  // BRIDGE 모드에서 상부구조 숨기기 (선체/선수는 그대로 표시)
+  useEffect(() => {
+    if (ctx.current.shipUpper3) {
+      ctx.current.shipUpper3.visible = mode !== 'BRIDGE';
+    }
+  }, [mode]);
 
   // updateNightMode: polar night lighting transition
   const updateNightMode = useCallback((lat) => {
@@ -1135,8 +1228,8 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
   }, [shipState, mode]);
 
   // ── FOLLOW 줌 상태 (스크롤) ──────────────────────────────────────────────
-  const followZoomTargetRef = useRef(300);
-  const followZoomCurrentRef = useRef(300);
+  const followZoomTargetRef = useRef(220);
+  const followZoomCurrentRef = useRef(220);
 
   useEffect(() => {
     function handleWheel(e) {
@@ -1150,6 +1243,48 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
     return () => { if (el) el.removeEventListener('wheel', handleWheel); };
   }, [mode]);
 
+  // ── FOLLOW 오빗 상태 (드래그 회전) ────────────────────────────────────────
+  const orbitRef = useRef({ yaw: 0, pitch: 0.06, dragging: false, lastX: 0, lastY: 0 });
+
+  useEffect(() => {
+    if (mode !== 'FOLLOW') return;
+    const el = wrapRef.current;
+    if (!el) return;
+    const orbit = orbitRef.current;
+
+    const onDown = (e) => {
+      orbit.dragging = true;
+      orbit.lastX = e.clientX;
+      orbit.lastY = e.clientY;
+      el.style.cursor = 'grabbing';
+    };
+    const onMove = (e) => {
+      if (!orbit.dragging) return;
+      const dx = e.clientX - orbit.lastX;
+      const dy = e.clientY - orbit.lastY;
+      orbit.yaw   -= dx * 0.006;
+      orbit.pitch  = Math.max(-0.05, Math.min(0.9, orbit.pitch - dy * 0.004));
+      orbit.lastX = e.clientX;
+      orbit.lastY = e.clientY;
+    };
+    const onUp = () => {
+      orbit.dragging = false;
+      el.style.cursor = 'grab';
+    };
+
+    el.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      orbit.yaw = 0;
+      orbit.pitch = 0.06;
+      orbit.dragging = false;
+    };
+  }, [mode]);
+
   // ── Adjust camera for different modes ─────────────────────────────────────
   useEffect(() => {
     const { camera } = ctx.current;
@@ -1161,8 +1296,8 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
       camera.lookAt(0, 15, -500);
       camera.updateProjectionMatrix();
     } else if (mode === 'FOLLOW') {
-      followZoomTargetRef.current = 300;
-      followZoomCurrentRef.current = 300;
+      followZoomTargetRef.current = 220;
+      followZoomCurrentRef.current = 220;
       camera.fov = 75;
       camera.near = 0.1;
       camera.position.set(0, 80, 300);
@@ -1192,27 +1327,45 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, mode
           shipGroup3.rotation.y += diff * 0.03;
         }
 
-        // FOLLOW 카메라 — 배를 추적하면서 부드러운 줌
+        // BRIDGE 카메라 — 선박 위치/방향에 맞춰 매 프레임 갱신
+        if (mode === 'BRIDGE' && camera && shipGroup3) {
+          const pos = shipGroup3.position;
+          const ry = shipGroup3.rotation.y;
+          // 로컬 브릿지 위치 (0, 35, 10) → 월드 좌표
+          const bx = pos.x + 10 * Math.sin(ry);
+          const bz = pos.z + 10 * Math.cos(ry);
+          // 1.4× 스케일 기준 브릿지 높이 ≈ SHIP_BASE_Y + 27*1.4 ≈ 43
+          camera.position.set(bx, pos.y + SHIP_BASE_Y + 38, bz);
+          // 선수 방향을 수평으로 바라봄
+          camera.lookAt(
+            pos.x - Math.sin(ry) * 500,
+            pos.y + SHIP_BASE_Y + 18,
+            pos.z - Math.cos(ry) * 500,
+          );
+        }
+
+        // FOLLOW 카메라 — 오빗 드래그 + 부드러운 줌
         if (mode === 'FOLLOW' && camera && shipGroup3) {
           followZoomCurrentRef.current += (followZoomTargetRef.current - followZoomCurrentRef.current) * 0.06;
           const dist = followZoomCurrentRef.current;
           const shipPos = shipGroup3.position;
-          const heading = shipGroup3.rotation.y; // -heading (이미 반전됨)
+          const ry = shipGroup3.rotation.y; // 선박 회전각
+          const orbit = orbitRef.current;
 
-          const y = Math.max(25, dist * 0.3);
-          // 배 뒤쪽(heading 반대)으로 거리만큼 오프셋
-          const camX = shipPos.x - Math.sin(heading) * dist;
-          const camZ = shipPos.z + Math.cos(heading) * dist;
+          // 선미 기준 월드 각도 + 오빗 yaw 오프셋
+          const angle = Math.PI / 2 + ry + orbit.yaw;
+          const pitch = orbit.pitch; // 0=수평, 양수=위
 
-          camera.position.set(camX, y, camZ);
+          const camX = shipPos.x + Math.cos(angle) * dist * Math.cos(pitch);
+          const camZ = shipPos.z + Math.sin(angle) * dist * Math.cos(pitch);
+          // 수평에 가까운 낮은 카메라 높이 — 선박이 수면 위로 우뚝 서 보이도록
+          const camY = shipPos.y + SHIP_BASE_Y + dist * 0.04 + 8 + Math.sin(pitch) * dist * 0.5;
 
-          // 줌아웃 시 조감뷰로 전환
+          camera.position.set(camX, Math.max(SHIP_BASE_Y + 2, camY), camZ);
+          // 선박 중간 높이(상부구조 하단)를 바라봄
+          camera.lookAt(shipPos.x, shipPos.y + SHIP_BASE_Y * 1.4 + 20, shipPos.z);
+
           const pitchLerp = Math.min(1, dist / 1500);
-          const lookY = shipPos.y + 15 * (1 - pitchLerp);
-          const lookX = shipPos.x + Math.sin(heading) * dist * 0.3;
-          const lookZ = shipPos.z - Math.cos(heading) * dist * 0.3;
-          camera.lookAt(lookX, lookY, lookZ);
-
           camera.fov = 75 - pitchLerp * 20;
           camera.updateProjectionMatrix();
         }
