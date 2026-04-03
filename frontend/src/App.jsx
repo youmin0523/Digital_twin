@@ -23,7 +23,7 @@ import BinocularsMask from './components/overlay/BinocularsMask';
 import { ROUTES, TOTAL_SECONDS } from './data/arcticRoutes';
 import { SHIP_PRESETS } from './data/vesselPresets';
 import useManualControl from './hooks/useManualControl';
-import { fetchIceConcentration } from './services/api';
+import { fetchIceConcentration, fetchIcebergs } from './services/api';
 import { buildTimings, routePos, routeHeading, calculateRouteDistanceKM, getSeaState } from './services/shipSimulator';
 import { evaluateRouting, deriveIceConditions } from './services/polarisRIO';
 
@@ -64,6 +64,10 @@ function AppInner() {
   const currentModeRef = useRef('SATELLITE');
   const nsidcActiveRef = useRef(true); // nsidcConc 기본 ON
   const iceGridCacheRef = useRef(null); // 해빙 격자 O(1) lookup 캐시
+  const realBergsRef = useRef([]); // NIC 실제 빙산 위치
+  const lastBergsUpdateRef = useRef(0); // 마지막 updateRealBergs 호출 시각
+  const bergCesiumEntitiesRef = useRef([]); // Cesium 빙산 엔티티 목록
+  const userCameraInteracting = useRef(false); // 사용자 카메라 드래그 중 여부
   const shipStateRef = useRef(state.shipState);
   const oceanOverlayModeRef = useRef('ice'); // nsidcConc 기본 ON
 
@@ -250,9 +254,9 @@ function AppInner() {
           });
         }
 
-        // Cesium 카메라 추적 (SATELLITE/WIDE 모드)
+        // Cesium 카메라 추적 (SATELLITE/WIDE 모드) - 사용자 드래그 중엔 스킵
         const viewer = viewerRef.current;
-        if (viewer && !viewer.isDestroyed()) {
+        if (viewer && !viewer.isDestroyed() && !userCameraInteracting.current) {
           try {
             viewer.camera.setView({
               destination: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, 50000),
@@ -268,6 +272,26 @@ function AppInner() {
         // 항해 완료
         if (progress >= 1) {
           dispatch({ type: 'SET_SIMULATING', payload: false });
+        }
+
+        // BRIDGE / FOLLOW 모드: Three.js 선박 시각 이동
+        const curMode = currentModeRef.current;
+        if (curMode === 'BRIDGE' || curMode === 'FOLLOW') {
+          const three = threeRef.current;
+          if (three?.shipPivot) {
+            const hdgRad = hdgDeg * Math.PI / 180;
+            // 시각적 이동 속도 (mult에 비례하되 최대 40 units/sec)
+            const visualSpeed = Math.min(mult * 2, 40);
+            three.shipPivot.position.x += Math.sin(hdgRad) * visualSpeed * dt;
+            three.shipPivot.position.z -= Math.cos(hdgRad) * visualSpeed * dt;
+            // 선박 흔들림 (roll/pitch/heave)
+            if (three.updateShipMotion) three.updateShipMotion(dt, pos.lat);
+          }
+          // 실제 빙산 위치 5초마다 갱신 (선박 이동에 따라 50km 내 빙산 재계산)
+          if (realBergsRef.current.length > 0 && now - lastBergsUpdateRef.current > 5000) {
+            threeRef.current?.updateRealBergs(realBergsRef.current, pos.lat, pos.lon);
+            lastBergsUpdateRef.current = now;
+          }
         }
       }
 
@@ -305,13 +329,7 @@ function AppInner() {
           three.shipPivot.position.z -=
             Math.cos(manualHeading) * manualSpeed * dt * moveScale;
 
-          const { camera } = three;
-          if (camera) {
-            const ship = three.shipPivot.position;
-            camera.position.x = ship.x;
-            camera.position.z = ship.z + 200;
-            camera.lookAt(ship.x, 15, ship.z - 200);
-          }
+          // 카메라는 ThreeOverlay 렌더 루프에서 처리 (BRIDGE/FOLLOW)
         }
 
         // HUD 수동 계기 업데이트
@@ -407,11 +425,16 @@ function AppInner() {
   // 라우팅 평가 결과
   const [evaluationResult, setEvaluationResult] = useState(null);
 
-  // Cesium viewer 준비되면 LIVE 빙산 데이터 로딩 (DeckOverlay가 viewer를 받은 후)
+  // Cesium viewer 준비되면 LIVE 빙산 데이터 로딩 + 카메라 상호작용 감지
   useEffect(() => {
-    if (cesiumViewerState) {
-      handleMonthChange('live');
-    }
+    if (!cesiumViewerState) return;
+    const handler = new Cesium.ScreenSpaceEventHandler(cesiumViewerState.scene.canvas);
+    handler.setInputAction(() => { userCameraInteracting.current = true; }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+    handler.setInputAction(() => { userCameraInteracting.current = false; }, Cesium.ScreenSpaceEventType.LEFT_UP);
+    handler.setInputAction(() => { userCameraInteracting.current = false; }, Cesium.ScreenSpaceEventType.MIDDLE_UP);
+    handler.setInputAction(() => { userCameraInteracting.current = false; }, Cesium.ScreenSpaceEventType.RIGHT_UP);
+    handleMonthChange('live');
+    return () => { handler.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cesiumViewerState]);
 
@@ -441,7 +464,7 @@ function AppInner() {
   const handleModeChange = useCallback(
     (mode) => {
       dispatch({ type: 'SET_MODE', payload: mode });
-      dispatch({ type: 'SET_BRIDGE_VISIBLE', payload: mode === 'BRIDGE' });
+      dispatch({ type: 'SET_BRIDGE_VISIBLE', payload: mode === 'BRIDGE' || mode === 'FOLLOW' });
 
       // SATELLITE/WIDE 전환 시 Three.js 바다 색상 리셋
       if (mode === 'SATELLITE' || mode === 'WIDE') {
@@ -546,33 +569,69 @@ function AppInner() {
           weight: c.concentration,
         }));
 
-        // 북극(lat>=60°) 고농도(>=80%) 셀 → 노란 빙하 위험 마커로 표시
-        const MARKER_MAX = 300;
-        const highConcCells = icePoints.filter(
-          (c) => c.lat >= 60 && c.weight >= 0.8,
-        );
-        const step =
-          highConcCells.length > MARKER_MAX
-            ? Math.floor(highConcCells.length / MARKER_MAX)
-            : 1;
-        const realBergs = highConcCells
-          .filter((_, i) => i % step === 0)
-          .slice(0, MARKER_MAX)
-          .map((c) => ({
-            lon: c.lon,
-            lat: c.lat,
-            size: 18000 + c.weight * 22000,
-          }));
+        const isLive = (month === 'live');
 
-        // SATELLITE / WIDE 모드: DeckOverlay 업데이트
-        deckRef.current?.updateLayers({
-          iceData: icePoints,
-          realBergData: realBergs,
-        });
+        // ── A. 빙산 Cesium 엔티티 갱신 (최신: NIC 실데이터 / 아카이브: 고농도 셀 파생) ──
+        const viewer = viewerRef.current;
+        if (viewer && !viewer.isDestroyed()) {
+          for (const ent of bergCesiumEntitiesRef.current) viewer.entities.remove(ent);
+          bergCesiumEntitiesRef.current = [];
 
-        // BRIDGE / FOLLOW 모드: ThreeOverlay에 실제 빙산 위치 반영
+          let bergList = [];
+          if (isLive) {
+            try {
+              const bergData = await fetchIcebergs();
+              bergList = (bergData?.bergs || []).map((b) => ({
+                id: b.id, lon: b.lon, lat: b.lat,
+                length_m: b.length_m || 5000, width_m: b.width_m || 2000,
+              }));
+            } catch (e) { console.warn('[BergData] fetch 실패:', e.message); }
+          } else {
+            // 아카이브: 해당 월 고농도 셀(≥0.8) → 빙산 위치로 활용
+            const BERG_MAX = 300;
+            const highConc = icePoints.filter((c) => c.lat > 60 && c.weight >= 0.8);
+            const step = highConc.length > BERG_MAX ? Math.floor(highConc.length / BERG_MAX) : 1;
+            bergList = highConc
+              .filter((_, i) => i % step === 0).slice(0, BERG_MAX)
+              .map((c) => ({
+                id: null, lon: c.lon, lat: c.lat,
+                length_m: 10000 + c.weight * 20000,
+                width_m:   5000 + c.weight * 10000,
+              }));
+          }
+
+          for (const b of bergList) {
+            const ent = viewer.entities.add({
+              position: Cesium.Cartesian3.fromDegrees(b.lon, b.lat, 0),
+              point: {
+                pixelSize: 10, color: Cesium.Color.YELLOW,
+                outlineColor: Cesium.Color.ORANGERED, outlineWidth: 2,
+              },
+              ...(b.id ? { label: {
+                text: b.id, font: '11px sans-serif',
+                fillColor: Cesium.Color.YELLOW, outlineColor: Cesium.Color.BLACK,
+                outlineWidth: 2, style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                pixelOffset: new Cesium.Cartesian2(0, -14),
+              }} : {}),
+            });
+            bergCesiumEntitiesRef.current.push(ent);
+          }
+
+          // ThreeOverlay용: 항상 북극(lat>60) 고농도(≥0.8) 셀 사용 (NIC 데이터는 남반구라 불가)
+          const BERG_MAX_THREE = 300;
+          const highConcCells = icePoints.filter((c) => c.lat > 60 && c.weight >= 0.8);
+          const threeStep = highConcCells.length > BERG_MAX_THREE ? Math.floor(highConcCells.length / BERG_MAX_THREE) : 1;
+          realBergsRef.current = highConcCells
+            .filter((_, i) => i % threeStep === 0).slice(0, BERG_MAX_THREE)
+            .map((c) => ({ lon: c.lon, lat: c.lat, size: 8000 + c.weight * 15000 }));
+        }
+
+        // DeckOverlay 업데이트 (보조)
+        deckRef.current?.updateLayers({ iceData: icePoints, realBergData: [] });
+
+        // BRIDGE / FOLLOW 모드: 현재 선박 위치 기준 초기 반영
         const { lat, lon } = state.shipState;
-        threeRef.current?.updateRealBergs(realBergs, lat, lon);
+        threeRef.current?.updateRealBergs(realBergsRef.current, lat, lon);
 
         // 해빙 격자 O(1) lookup 캐시 생성 (BRIDGE/FOLLOW 바다 색상용)
         const grid = new Map();
@@ -849,6 +908,7 @@ function AppInner() {
         heading={state.shipState.heading}
         speed={state.hud.speed}
         rollAngle={parseFloat(state.hud.roll) || 0}
+        mode={state.currentMode}
       />
 
       {/* 쌍안경 */}

@@ -247,6 +247,7 @@ const DeckOverlay = forwardRef(function DeckOverlay(
         pitch: Math.max(0, Math.min(85, 90 + pitchDeg)),
       },
     });
+    deckInstance.redraw('syncDeckView');
   }, [cesiumViewer]);
 
   // ----- Initialise deck.gl instance -----
@@ -401,6 +402,7 @@ const DeckOverlay = forwardRef(function DeckOverlay(
               realBergDataRef.current,
             ),
           });
+          deckRef.current.redraw('updateLayers');
         }
       },
     }),
