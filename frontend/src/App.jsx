@@ -4,22 +4,15 @@ import { AppProvider, useAppState, useDispatch } from './context/AppContext';
 import CesiumGlobe from './components/CesiumGlobe';
 import ThreeOverlay from './components/ThreeOverlay';
 import DeckOverlay from './components/DeckOverlay';
-import HudLeft from './components/hud/HudLeft';
-import HudRight from './components/hud/HudRight';
-import CameraPanel from './components/hud/CameraPanel';
-import ManualControl from './components/hud/ManualControl';
-import ShipSpecsPanel from './components/hud/ShipSpecsPanel';
-import BottomControl from './components/hud/BottomControl';
-import RoutingEvaluationPanel from './components/hud/RoutingEvaluationPanel';
-import ApiLayersControl from './components/hud/ApiLayersControl';
-import LegendContainer from './components/hud/LegendContainer';
-import Minimap from './components/hud/Minimap';
-import TeleportOverlay from './components/hud/TeleportOverlay';
-import RecenterButton from './components/hud/RecenterButton';
-import AiAnalysisPanel from './components/hud/AiAnalysisPanel';
-import DraggablePanel from './components/hud/DraggablePanel';
 import BridgeOverlay from './components/overlay/BridgeOverlay';
 import BinocularsMask from './components/overlay/BinocularsMask';
+import LegendContainer from './components/hud/LegendContainer';
+import TeleportOverlay from './components/hud/TeleportOverlay';
+import Header from './components/layout/Header';
+import Sidebar from './components/layout/Sidebar';
+import SimulationControls from './components/layout/SimulationControls';
+import TimelineBar from './components/layout/TimelineBar';
+import BottomPanel from './components/layout/BottomPanel';
 import { ROUTES, TOTAL_SECONDS } from './data/arcticRoutes';
 import { SHIP_PRESETS } from './data/vesselPresets';
 import useManualControl from './hooks/useManualControl';
@@ -422,6 +415,19 @@ function AppInner() {
     s2Ndsi: false,
   });
   const [gebcoOpacity, setGebcoOpacity] = useState(75);
+
+  // 항로 표시 상태 (다중 체크박스)
+  const [routeVisibility, setRouteVisibility] = useState({
+    NSR: true, NWP: false, TSR: false, SUEZ: false, CAPE: false,
+  });
+  const handleRouteVisibilityChange = useCallback((key, visible) => {
+    setRouteVisibility(prev => ({ ...prev, [key]: visible }));
+    // Cesium polyline 표시/숨김은 CesiumGlobe에서 처리
+    const viewer = viewerRef.current;
+    if (viewer && viewer._routeEntities && viewer._routeEntities[key]) {
+      viewer._routeEntities[key].show = visible;
+    }
+  }, []);
 
   // 라우팅 평가 결과
   const [evaluationResult, setEvaluationResult] = useState(null);
@@ -876,172 +882,106 @@ function AppInner() {
   const waypoints = ROUTES[state.currentRouteKey] || ROUTES.NSR;
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      {/* 3D 엔진 레이어 */}
-      {/* Cesium 항상 전체 화면 — 모든 모드에서 WMS 레이어 표시 */}
-      <CesiumGlobe
-        ref={cesiumRef}
-        currentRouteKey={state.currentRouteKey}
-        onViewerReady={handleViewerReady}
-      />
+    <div className="dt-app">
+      {/* ═══ Header ═══ */}
+      <Header />
 
-      <ThreeOverlay
-        ref={threeRef}
-        visible={
-          state.currentMode === 'BRIDGE' || state.currentMode === 'FOLLOW'
-        }
-        shipState={state.shipState}
-        mode={state.currentMode}
-      />
-
-      <DeckOverlay
-        ref={deckRef}
-        visible={
-          state.currentMode === 'SATELLITE' || state.currentMode === 'WIDE'
-        }
-        cesiumViewer={cesiumViewerState}
-      />
-
-      <div id="fade"></div>
-
-      {/* 브릿지 오버레이 */}
-      <BridgeOverlay
-        visible={state.bridgeVisible}
-        heading={state.shipState.heading}
-        speed={state.hud.speed}
-        rollAngle={parseFloat(state.hud.roll) || 0}
-        mode={state.currentMode}
-      />
-
-      {/* 쌍안경 */}
-      <BinocularsMask
-        visible={state.binocularsActive}
-        label="x 8.0 BINOCULARS"
-      />
-
-      {/* HUD 패널: 왼쪽 선박정보 */}
-      <DraggablePanel defaultX={12} defaultY={12}>
-        <HudLeft
-          speed={state.hud.speed}
-          throttle={state.hud.throttle}
-          progress={state.hud.progress}
-          position={state.hud.position}
-          iceState={state.hud.iceState}
-          phase={state.hud.phase}
-        />
-      </DraggablePanel>
-
-      {/* 해빙위험도 */}
-      <DraggablePanel defaultX={window.innerWidth - 260} defaultY={12}>
-        <HudRight
-          danger={state.hud.danger}
-          dangerClass={state.hud.dangerClass}
-          iceClass={state.hud.iceClass}
-          sic={state.hud.sic}
-          temp={state.hud.temp}
-          rfi={state.hud.rfi}
-          hs={state.hud.hs}
-          roll={state.hud.roll}
-          pitch={state.hud.pitch}
-          seaLabel={state.hud.seaLabel}
-          dataSource={state.iceDataSource}
-          bergAlert={state.hud.bergAlert}
-          bergAlertVisible={state.hud.bergAlertVisible}
-          onMonthChange={handleMonthChange}
-        />
-      </DraggablePanel>
-
-      {/* 선박 제원 설정 */}
-      <DraggablePanel defaultX={window.innerWidth - 280} defaultY={420}>
-        <ShipSpecsPanel
-          specs={state.shipSpecs}
-          onSpecChange={handleSpecChange}
-          onPresetLoad={handlePresetLoad}
+      {/* ═══ Main Area (Sidebar + Viewport) ═══ */}
+      <div className="dt-main">
+        <Sidebar
+          currentRoute={state.currentRouteKey}
           onRouteChange={handleRouteChange}
-          currentRoute={state.currentRouteKey}
-          onApply={handleApplySpecs}
-        />
-      </DraggablePanel>
-
-      {/* NSR 항로 평가 */}
-      <DraggablePanel defaultX={window.innerWidth - 340} defaultY={750}>
-        <RoutingEvaluationPanel
-          onEvaluate={handleEvaluate}
-          evaluationResult={evaluationResult}
-          currentRoute={state.currentRouteKey}
-        />
-      </DraggablePanel>
-
-      {/* 카메라 전환 */}
-      <DraggablePanel defaultX={Math.round(window.innerWidth / 2 - 120)} defaultY={12}>
-        <CameraPanel
+          routeVisibility={routeVisibility}
+          onRouteVisibilityChange={handleRouteVisibilityChange}
           currentMode={state.currentMode}
+          manualMode={state.manualMode}
           onModeChange={handleModeChange}
           onManualToggle={handleManualToggle}
-          zoomBar={state.zoomBar}
-          zoomDist={state.zoomDist}
-          fov={state.fov}
-          onFovChange={handleFovChange}
-        />
-      </DraggablePanel>
-
-      {/* 수동 조종 계기 */}
-      {state.manualMode && (
-        <DraggablePanel defaultX={window.innerWidth - 250} defaultY={window.innerHeight - 250}>
-          <ManualControl
-            throttle={state.manualThrottle}
-            speed={state.manualSpeed}
-            heading={state.manualHeading}
-            turnRate={state.manualYawRate}
-            fov={state.fov}
-            visible={true}
-          />
-        </DraggablePanel>
-      )}
-
-      {/* API 레이어 토글 */}
-      <DraggablePanel defaultX={232} defaultY={12}>
-        <ApiLayersControl
           layerStates={layerStates}
           onLayerToggle={handleLayerToggle}
-          gebcoOpacity={gebcoOpacity}
-          onGebcoOpacityChange={handleGebcoOpacityChange}
           satVisible={satVisible}
           onSatToggle={handleSatToggle}
+          iceDataSource={state.iceDataSource}
+          onMonthChange={handleMonthChange}
         />
-      </DraggablePanel>
 
-      {/* 범례 패널들 */}
-      <LegendContainer
-        gebcoVisible={layerStates.gebcoBathy}
-        nsidcVisible={layerStates.nsidcConc}
-        copVisible={layerStates.copThick}
+        <div className="dt-viewport">
+          {/* 3D Engine Layers */}
+          <CesiumGlobe
+            ref={cesiumRef}
+            currentRouteKey={state.currentRouteKey}
+            onViewerReady={handleViewerReady}
+          />
+          <ThreeOverlay
+            ref={threeRef}
+            visible={state.currentMode === 'BRIDGE' || state.currentMode === 'FOLLOW'}
+            shipState={state.shipState}
+            mode={state.currentMode}
+          />
+          <DeckOverlay
+            ref={deckRef}
+            visible={state.currentMode === 'SATELLITE' || state.currentMode === 'WIDE'}
+            cesiumViewer={cesiumViewerState}
+          />
+          <div id="fade" />
+
+          {/* Bridge Overlay */}
+          <BridgeOverlay
+            visible={state.bridgeVisible}
+            heading={state.shipState.heading}
+            speed={state.hud.speed}
+            rollAngle={parseFloat(state.hud.roll) || 0}
+            mode={state.currentMode}
+          />
+          <BinocularsMask visible={state.binocularsActive} label="x 8.0 BINOCULARS" />
+
+          {/* Viewport Overlays */}
+          <SimulationControls
+            isSimulating={state.isSimulating}
+            onStart={handleStart}
+            onReset={handleReset}
+            multiplier={state.multiplier}
+            onMultiplierChange={handleMultiplierChange}
+          />
+          <TimelineBar
+            simProgress={state.simProgress}
+            timelineDay={state.timelineDay}
+            onTimelineChange={handleTimelineChange}
+            currentRouteKey={state.currentRouteKey}
+          />
+
+          {/* WMS Legends (bottom-left overlay, above timeline) */}
+          <LegendContainer
+            gebcoVisible={layerStates.gebcoBathy}
+            nsidcVisible={layerStates.nsidcConc}
+            copVisible={layerStates.copThick}
+          />
+
+          {/* Indicators */}
+          {state.manualMode && (
+            <div id="manual-indicator">⚑ 수동 조종 모드</div>
+          )}
+          <div id="hud-hint" />
+          <div id="polar-night-ind">극야 구간</div>
+          <div id="banner" />
+          <div id="gebco-depth-popup" />
+        </div>
+      </div>
+
+      {/* ═══ Bottom Panel ═══ */}
+      <BottomPanel
+        hud={state.hud}
+        specs={state.shipSpecs}
+        onSpecChange={handleSpecChange}
+        onPresetLoad={handlePresetLoad}
+        onApply={handleApplySpecs}
+        onRecenter={handleRecenter}
+        evaluationResult={evaluationResult}
+        onEvaluate={handleEvaluate}
+        currentRoute={state.currentRouteKey}
       />
 
-      {/* 하단 컨트롤 */}
-      <DraggablePanel defaultX={Math.round(window.innerWidth / 2 - 220)} defaultY={window.innerHeight - 80}>
-        <BottomControl
-          isSimulating={state.isSimulating}
-          onStart={handleStart}
-          onReset={handleReset}
-          multiplier={state.multiplier}
-          onMultiplierChange={handleMultiplierChange}
-          timelineDay={state.timelineDay}
-          onTimelineChange={handleTimelineChange}
-        />
-      </DraggablePanel>
-
-      {/* 미니맵 */}
-      <DraggablePanel defaultX={12} defaultY={window.innerHeight - 320}>
-        <Minimap
-          shipPos={state.shipState}
-          progress={state.simProgress}
-          waypoints={waypoints}
-          onOpenTeleport={() => setTeleportOpen(true)}
-        />
-      </DraggablePanel>
-
-      {/* 텔레포트 오버레이 */}
+      {/* Teleport Overlay */}
       <TeleportOverlay
         visible={teleportOpen}
         waypoints={waypoints}
@@ -1051,49 +991,8 @@ function AppInner() {
         onClose={() => setTeleportOpen(false)}
       />
 
-      {/* AI 배치 분석 */}
-      <DraggablePanel defaultX={window.innerWidth - 340} defaultY={380}>
-        <AiAnalysisPanel />
-      </DraggablePanel>
-
-      {/* 리센터 버튼 */}
-      <RecenterButton onClick={handleRecenter} />
-
-      {/* 상태 인디케이터 */}
-      <div
-        id="manual-indicator"
-        style={{ display: state.manualMode ? 'block' : 'none' }}
-      >
-        ⚑ 수동 조종 모드
-      </div>
-      <div id="hud-hint"></div>
-      <div id="polar-night-ind">🌑 극야 구간</div>
-      <div id="banner">부산 → 북극항로 → 로테르담 | 14일 운항</div>
-      <div
-        id="toast"
-        style={{
-          display: toastMsg ? 'block' : 'none',
-          position: 'fixed',
-          bottom: '80px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          background: 'rgba(0, 8, 20, 0.92)',
-          color: '#93c5fd',
-          border: '1px solid #1e40af',
-          borderRadius: '8px',
-          padding: '10px 20px',
-          fontSize: '13px',
-          fontFamily: "'Courier New', monospace",
-          zIndex: 999,
-          backdropFilter: 'blur(6px)',
-          boxShadow: '0 0 20px rgba(0, 30, 100, 0.6)',
-          maxWidth: '500px',
-          textAlign: 'center',
-        }}
-      >
-        {toastMsg}
-      </div>
-      <div id="gebco-depth-popup"></div>
+      {/* Toast */}
+      {toastMsg && <div className="dt-toast">{toastMsg}</div>}
     </div>
   );
 }

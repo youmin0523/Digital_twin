@@ -1,0 +1,77 @@
+.dt-header {
+  height: var(--header-height);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  flex-shrink: 0;
+  z-index: 300;
+}
+
+.dt-header__logo {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.dt-header__logo-main {
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 2px;
+}
+
+.dt-header__logo-sub {
+  color: var(--accent-blue);
+  font-weight: 300;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.dt-header__status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.dt-header__indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dt-header__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dt-header__dot--ok {
+  background: var(--status-safe);
+  box-shadow: 0 0 5px var(--status-safe);
+}
+
+.dt-header__dot--warn {
+  background: var(--status-caution);
+  box-shadow: 0 0 5px var(--status-caution);
+}
+
+.dt-header__dot--err {
+  background: var(--status-danger);
+  box-shadow: 0 0 5px var(--status-danger);
+}
+
+.dt-header__indicator-label {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.dt-header__clock {
+  color: var(--accent);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  margin-left: 8px;
+}
