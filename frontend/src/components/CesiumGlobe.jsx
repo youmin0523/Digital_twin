@@ -150,7 +150,9 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
           homeButton: false, sceneModePicker: false, navigationHelpButton: false,
           fullscreenButton: false, infoBox: false, selectionIndicator: false,
           // ★ 중요: 실시간 시뮬레이션을 위해 렌더링 루프를 최적화 ★
-          requestRenderMode: false, 
+          requestRenderMode: false,
+          // //* [Modified Code] Cesium ION 로고(크레딧) 숨기기
+          creditContainer: document.createElement('div'),
         });
 
         Cesium.createWorldTerrainAsync().then((terrain) => {

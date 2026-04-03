@@ -175,10 +175,16 @@ export default function Minimap({
       id="minimap-wrap"
       style={{
         position: 'absolute',
-        bottom: 70,
-        left: 12,
-        padding: 16,
-        width: 232,
+        bottom: 50,
+        right: 10,
+        padding: '16px 20px',
+        width: 240,
+        zIndex: 300,
+        background: 'rgba(13, 19, 41, 0.9)',
+        border: '1px solid #1a2a4a',
+        borderRadius: '8px',
+        backdropFilter: 'blur(8px)',
+        boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
       }}
     >
       <div className="hud-title">📍 현재 위치</div>
@@ -234,5 +240,5 @@ export default function Minimap({
         🛰 위치 이동
       </button>
     </div>
-  );// 테스트 주석
+  ); // 테스트 주석
 }

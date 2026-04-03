@@ -1,4 +1,10 @@
-import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import React, {
+  useRef,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+} from 'react';
 import * as Cesium from 'cesium';
 import { AppProvider, useAppState, useDispatch } from './context/AppContext';
 import CesiumGlobe from './components/CesiumGlobe';
@@ -8,6 +14,8 @@ import BridgeOverlay from './components/overlay/BridgeOverlay';
 import BinocularsMask from './components/overlay/BinocularsMask';
 import LegendContainer from './components/hud/LegendContainer';
 import TeleportOverlay from './components/hud/TeleportOverlay';
+// //* [Modified Code] 우측 하단 레이더 UI 컴포넌트 임포트
+import Minimap from './components/hud/Minimap';
 import Header from './components/layout/Header';
 import Sidebar from './components/layout/Sidebar';
 import SimulationControls from './components/layout/SimulationControls';
@@ -19,7 +27,13 @@ import { ROUTES, TOTAL_SECONDS } from './data/arcticRoutes';
 import { SHIP_PRESETS } from './data/vesselPresets';
 import useManualControl from './hooks/useManualControl';
 import { fetchIceConcentration, fetchIcebergs } from './services/api';
-import { buildTimings, routePos, routeHeading, calculateRouteDistanceKM, getSeaState } from './services/shipSimulator';
+import {
+  buildTimings,
+  routePos,
+  routeHeading,
+  calculateRouteDistanceKM,
+  getSeaState,
+} from './services/shipSimulator';
 import { evaluateRouting, deriveIceConditions } from './services/polarisRIO';
 
 function AppInner() {
@@ -39,7 +53,6 @@ function AppInner() {
 
   // 텔레포트 오버레이 상태
   const [teleportOpen, setTeleportOpen] = useState(false);
-
 
   // 토스트 알림 상태
   const [toastMsg, setToastMsg] = useState('');
@@ -67,26 +80,48 @@ function AppInner() {
   const shipStateRef = useRef(state.shipState);
   const oceanOverlayModeRef = useRef('ice'); // nsidcConc 기본 ON
 
-  useEffect(() => { isSimulatingRef.current = state.isSimulating; }, [state.isSimulating]);
+  useEffect(() => {
+    isSimulatingRef.current = state.isSimulating;
+  }, [state.isSimulating]);
   useEffect(() => {
     shipStateRef.current = state.shipState;
     // shipState 변경 시 HUD 기본 정보 항상 업데이트 (시뮬레이션 여부 무관)
     const { lat, lon } = state.shipState;
-    const sicVal = lat < 60 ? 0 : lat < 68 ? ((lat - 60) / 8) * 0.3
-      : lat < 75 ? 0.3 + ((lat - 68) / 7) * 0.4
-      : lat < 82 ? 0.7 + ((lat - 75) / 7) * 0.25 : 0.95;
+    const sicVal =
+      lat < 60
+        ? 0
+        : lat < 68
+          ? ((lat - 60) / 8) * 0.3
+          : lat < 75
+            ? 0.3 + ((lat - 68) / 7) * 0.4
+            : lat < 82
+              ? 0.7 + ((lat - 75) / 7) * 0.25
+              : 0.95;
     let dangerLabel, dangerCls;
-    if (sicVal < 0.15) { dangerLabel = '낮음 🟢'; dangerCls = 'safe'; }
-    else if (sicVal < 0.40) { dangerLabel = '보통 🟡'; dangerCls = 'moderate'; }
-    else if (sicVal < 0.70) { dangerLabel = '높음 🟠'; dangerCls = 'warning'; }
-    else { dangerLabel = '극심 🔴'; dangerCls = 'critical'; }
+    if (sicVal < 0.15) {
+      dangerLabel = '낮음 🟢';
+      dangerCls = 'safe';
+    } else if (sicVal < 0.4) {
+      dangerLabel = '보통 🟡';
+      dangerCls = 'moderate';
+    } else if (sicVal < 0.7) {
+      dangerLabel = '높음 🟠';
+      dangerCls = 'warning';
+    } else {
+      dangerLabel = '극심 🔴';
+      dangerCls = 'critical';
+    }
     const tempEst = lat > 80 ? -1.8 : lat > 70 ? -0.5 : lat > 60 ? 2.1 : 8.5;
     const sea = getSeaState(lat);
-    const phase = !state.isSimulating ? '대기 중'
-      : state.simProgress < 0.02 ? '출항'
-      : lat > 66 ? '북극 항해 중'
-      : state.simProgress > 0.95 ? '입항 접근'
-      : '항해 중';
+    const phase = !state.isSimulating
+      ? '대기 중'
+      : state.simProgress < 0.02
+        ? '출항'
+        : lat > 66
+          ? '북극 항해 중'
+          : state.simProgress > 0.95
+            ? '입항 접근'
+            : '항해 중';
 
     // 속도: 시뮬레이션 중이면 계산, 아니면 수동 속도 또는 0
     let speedText = '0.0 kn';
@@ -104,18 +139,29 @@ function AppInner() {
     }
 
     // RFI 지수: 해빙농도 기반 위험 지수 (0~10)
-    const rfiVal = sicVal < 0.15 ? 0 : sicVal < 0.4 ? sicVal * 5 : sicVal < 0.7 ? 3 + (sicVal - 0.4) * 10 : 6 + (sicVal - 0.7) * 13.3;
+    const rfiVal =
+      sicVal < 0.15
+        ? 0
+        : sicVal < 0.4
+          ? sicVal * 5
+          : sicVal < 0.7
+            ? 3 + (sicVal - 0.4) * 10
+            : 6 + (sicVal - 0.7) * 13.3;
 
     // Roll/Pitch: ThreeOverlay motionState에서 읽기
     const motion = threeRef.current?.motionState;
-    const rollDeg = motion ? (motion.shipRoll * 180 / Math.PI) : 0;
-    const pitchDeg = motion ? (motion.shipPitch * 180 / Math.PI) : 0;
+    const rollDeg = motion ? (motion.shipRoll * 180) / Math.PI : 0;
+    const pitchDeg = motion ? (motion.shipPitch * 180) / Math.PI : 0;
 
     // 빙산 경보: 가까운 빙산 거리 기반
     const nearestIce = motion?.nearestIceDist ?? Infinity;
     const bergAlertVisible = nearestIce < 500 && lat >= 60;
-    const bergAlert = nearestIce < 200 ? `빙산 충돌 위험! 거리 ${Math.round(nearestIce)}m`
-      : nearestIce < 500 ? `전방 빙산 접근 중 — ${Math.round(nearestIce)}m` : '';
+    const bergAlert =
+      nearestIce < 200
+        ? `빙산 충돌 위험! 거리 ${Math.round(nearestIce)}m`
+        : nearestIce < 500
+          ? `전방 빙산 접근 중 — ${Math.round(nearestIce)}m`
+          : '';
 
     dispatch({
       type: 'UPDATE_HUD',
@@ -124,7 +170,12 @@ function AppInner() {
         throttle: throttleText,
         progress: (state.simProgress * 100).toFixed(1) + '%',
         position: lat.toFixed(2) + '°N, ' + lon.toFixed(2) + '°E',
-        iceState: sicVal > 0.5 ? '결빙 수역' : sicVal > 0.15 ? '해빙 경계' : '개방 수역',
+        iceState:
+          sicVal > 0.5
+            ? '결빙 수역'
+            : sicVal > 0.15
+              ? '해빙 경계'
+              : '개방 수역',
         phase,
         danger: dangerLabel,
         dangerClass: dangerCls,
@@ -140,14 +191,33 @@ function AppInner() {
         bergAlertVisible,
       },
     });
-  }, [state.shipState, state.shipSpecs.iceClass, state.isSimulating, state.manualMode,
-      state.manualSpeed, state.manualThrottle, state.multiplier, state.simProgress,
-      state.currentRouteKey, dispatch]);
-  useEffect(() => { currentModeRef.current = state.currentMode; }, [state.currentMode]);
-  useEffect(() => { multiplierRef.current = state.multiplier; }, [state.multiplier]);
-  useEffect(() => { manualModeRef.current = state.manualMode; }, [state.manualMode]);
-  useEffect(() => { currentRouteKeyRef.current = state.currentRouteKey; }, [state.currentRouteKey]);
-  useEffect(() => { shipSpecsRef.current = state.shipSpecs; }, [state.shipSpecs]);
+  }, [
+    state.shipState,
+    state.shipSpecs.iceClass,
+    state.isSimulating,
+    state.manualMode,
+    state.manualSpeed,
+    state.manualThrottle,
+    state.multiplier,
+    state.simProgress,
+    state.currentRouteKey,
+    dispatch,
+  ]);
+  useEffect(() => {
+    currentModeRef.current = state.currentMode;
+  }, [state.currentMode]);
+  useEffect(() => {
+    multiplierRef.current = state.multiplier;
+  }, [state.multiplier]);
+  useEffect(() => {
+    manualModeRef.current = state.manualMode;
+  }, [state.manualMode]);
+  useEffect(() => {
+    currentRouteKeyRef.current = state.currentRouteKey;
+  }, [state.currentRouteKey]);
+  useEffect(() => {
+    shipSpecsRef.current = state.shipSpecs;
+  }, [state.shipSpecs]);
 
   // ── 타임드 웨이포인트 (항로 변경 시 재계산) ────────────────────
   const timedWaypoints = useMemo(() => {
@@ -155,7 +225,9 @@ function AppInner() {
     return buildTimings(wps);
   }, [state.currentRouteKey]);
   const timedWpRef = useRef(timedWaypoints);
-  useEffect(() => { timedWpRef.current = timedWaypoints; }, [timedWaypoints]);
+  useEffect(() => {
+    timedWpRef.current = timedWaypoints;
+  }, [timedWaypoints]);
 
   // ── 메인 애니메이션 루프 ──────────────────────────────────────
   useEffect(() => {
@@ -183,7 +255,7 @@ function AppInner() {
 
         const pos = routePos(progress, TWP, wps);
         const hdg = routeHeading(progress, TWP, wps);
-        const hdgDeg = ((hdg * 180 / Math.PI) + 360) % 360;
+        const hdgDeg = ((hdg * 180) / Math.PI + 360) % 360;
 
         // 상태 업데이트
         dispatch({ type: 'SET_PROGRESS', payload: progress });
@@ -207,18 +279,32 @@ function AppInner() {
           const sea = getSeaState(pos.lat);
 
           // 해빙 농도 추정 (위도 기반)
-          const sicVal = pos.lat < 60 ? 0
-            : pos.lat < 68 ? ((pos.lat - 60) / 8) * 0.3
-            : pos.lat < 75 ? 0.3 + ((pos.lat - 68) / 7) * 0.4
-            : pos.lat < 82 ? 0.7 + ((pos.lat - 75) / 7) * 0.25
-            : 0.95;
+          const sicVal =
+            pos.lat < 60
+              ? 0
+              : pos.lat < 68
+                ? ((pos.lat - 60) / 8) * 0.3
+                : pos.lat < 75
+                  ? 0.3 + ((pos.lat - 68) / 7) * 0.4
+                  : pos.lat < 82
+                    ? 0.7 + ((pos.lat - 75) / 7) * 0.25
+                    : 0.95;
 
           // 위험도 라벨
           let dangerLabel, dangerCls;
-          if (sicVal < 0.15) { dangerLabel = '낮음 🟢'; dangerCls = 'safe'; }
-          else if (sicVal < 0.40) { dangerLabel = '보통 🟡'; dangerCls = 'moderate'; }
-          else if (sicVal < 0.70) { dangerLabel = '높음 🟠'; dangerCls = 'warning'; }
-          else { dangerLabel = '극심 🔴'; dangerCls = 'critical'; }
+          if (sicVal < 0.15) {
+            dangerLabel = '낮음 🟢';
+            dangerCls = 'safe';
+          } else if (sicVal < 0.4) {
+            dangerLabel = '보통 🟡';
+            dangerCls = 'moderate';
+          } else if (sicVal < 0.7) {
+            dangerLabel = '높음 🟠';
+            dangerCls = 'warning';
+          } else {
+            dangerLabel = '극심 🔴';
+            dangerCls = 'critical';
+          }
 
           // 현재 단계 판별
           let phase;
@@ -228,7 +314,14 @@ function AppInner() {
           else phase = '항해 중';
 
           // 수온 추정 (위도 기반)
-          const tempEst = pos.lat > 80 ? -1.8 : pos.lat > 70 ? -0.5 : pos.lat > 60 ? 2.1 : 8.5;
+          const tempEst =
+            pos.lat > 80
+              ? -1.8
+              : pos.lat > 70
+                ? -0.5
+                : pos.lat > 60
+                  ? 2.1
+                  : 8.5;
 
           dispatch({
             type: 'UPDATE_HUD',
@@ -237,7 +330,12 @@ function AppInner() {
               throttle: '자동 ×' + Math.round(mult / 20),
               progress: (progress * 100).toFixed(1) + '%',
               position: pos.lat.toFixed(2) + '°N, ' + pos.lon.toFixed(2) + '°E',
-              iceState: sicVal > 0.5 ? '결빙 수역' : sicVal > 0.15 ? '해빙 경계' : '개방 수역',
+              iceState:
+                sicVal > 0.5
+                  ? '결빙 수역'
+                  : sicVal > 0.15
+                    ? '해빙 경계'
+                    : '개방 수역',
               phase,
               danger: dangerLabel,
               dangerClass: dangerCls,
@@ -255,19 +353,29 @@ function AppInner() {
         if (viewer && !viewer.isDestroyed() && !userCameraInteracting.current) {
           try {
             viewer.camera.setView({
-              destination: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, 50000),
+              destination: Cesium.Cartesian3.fromDegrees(
+                pos.lon,
+                pos.lat,
+                50000,
+              ),
               orientation: {
                 heading: Cesium.Math.toRadians(hdgDeg),
                 pitch: Cesium.Math.toRadians(-45),
                 roll: 0,
               },
             });
-            
+
             // ── Cesium 상의 선박 엔티티 업데이트 ──
             if (cesiumRef.current && cesiumRef.current.updateShipEntity) {
-              cesiumRef.current.updateShipEntity(pos, hdgDeg, shipSpecsRef.current);
+              cesiumRef.current.updateShipEntity(
+                pos,
+                hdgDeg,
+                shipSpecsRef.current,
+              );
             }
-          } catch (e) { /* ignore */ }
+          } catch (e) {
+            /* ignore */
+          }
         }
 
         // 항해 완료
@@ -280,17 +388,25 @@ function AppInner() {
         if (curMode === 'BRIDGE' || curMode === 'FOLLOW') {
           const three = threeRef.current;
           if (three?.shipPivot) {
-// //* [Modified Code] 관동 기반 이동을 제거하고, Base Reference(부산) 기준 위/경도 직사영 사용 (렌더링 동기화)
+            // //* [Modified Code] 관동 기반 이동을 제거하고, Base Reference(부산) 기준 위/경도 직사영 사용 (렌더링 동기화)
             const METERS_PER_DEGREE_LAT = 111132.954;
-            const mPerDegLon = 111319.491 * Math.cos(35.1 * Math.PI / 180);
+            const mPerDegLon = 111319.491 * Math.cos((35.1 * Math.PI) / 180);
             three.shipPivot.position.x = ((pos.lon - 129.0) * mPerDegLon) / 1.5;
-            three.shipPivot.position.z = (-(pos.lat - 35.1) * METERS_PER_DEGREE_LAT) / 1.5;
+            three.shipPivot.position.z =
+              (-(pos.lat - 35.1) * METERS_PER_DEGREE_LAT) / 1.5;
             // 선박 흔들림 (roll/pitch/heave)
             if (three.updateShipMotion) three.updateShipMotion(dt, pos.lat);
           }
           // 실제 빙산 위치 5초마다 갱신 (선박 이동에 따라 50km 내 빙산 재계산)
-          if (realBergsRef.current.length > 0 && now - lastBergsUpdateRef.current > 5000) {
-            threeRef.current?.updateRealBergs(realBergsRef.current, pos.lat, pos.lon);
+          if (
+            realBergsRef.current.length > 0 &&
+            now - lastBergsUpdateRef.current > 5000
+          ) {
+            threeRef.current?.updateRealBergs(
+              realBergsRef.current,
+              pos.lat,
+              pos.lon,
+            );
             lastBergsUpdateRef.current = now;
           }
         }
@@ -325,19 +441,27 @@ function AppInner() {
         const three = threeRef.current;
         if (three && three.shipPivot) {
           three.shipPivot.rotation.y = -manualHeading;
-          
+
           // //* [Modified Code] 수동 이동 시 Three.js 좌표 평면을 기준으로 전역 위도/경도를 역산출해 동기화 (레이어/배경 일치용)
-          three.shipPivot.position.x += Math.sin(manualHeading) * manualSpeed * dt * moveScale;
-          three.shipPivot.position.z -= Math.cos(manualHeading) * manualSpeed * dt * moveScale;
+          three.shipPivot.position.x +=
+            Math.sin(manualHeading) * manualSpeed * dt * moveScale;
+          three.shipPivot.position.z -=
+            Math.cos(manualHeading) * manualSpeed * dt * moveScale;
 
           const METERS_PER_DEGREE_LAT = 111132.954;
-          const mPerDegLon = 111319.491 * Math.cos(35.1 * Math.PI / 180);
-          const newLon = 129.0 + (three.shipPivot.position.x * 1.5) / mPerDegLon;
-          const newLat = 35.1 - (three.shipPivot.position.z * 1.5) / METERS_PER_DEGREE_LAT;
+          const mPerDegLon = 111319.491 * Math.cos((35.1 * Math.PI) / 180);
+          const newLon =
+            129.0 + (three.shipPivot.position.x * 1.5) / mPerDegLon;
+          const newLat =
+            35.1 - (three.shipPivot.position.z * 1.5) / METERS_PER_DEGREE_LAT;
 
           dispatch({
             type: 'SET_SHIP_STATE',
-            payload: { lat: newLat, lon: newLon, heading: ((manualHeading * 180 / Math.PI) + 360) % 360 },
+            payload: {
+              lat: newLat,
+              lon: newLon,
+              heading: ((manualHeading * 180) / Math.PI + 360) % 360,
+            },
           });
         }
 
@@ -379,8 +503,10 @@ function AppInner() {
               return 0.95;
             };
             if (!grid || grid.size === 0) return estimate(lat);
-            const latF = Math.floor(lat), lonF = Math.floor(lon);
-            const tLat = lat - latF, tLon = lon - lonF;
+            const latF = Math.floor(lat),
+              lonF = Math.floor(lon);
+            const tLat = lat - latF,
+              tLon = lon - lonF;
             const lookup = (la, lo) => {
               const v = grid.get(`${la},${lo}`);
               if (v !== undefined) return v;
@@ -397,10 +523,12 @@ function AppInner() {
             const c10 = lookup(latF + 1, lonF);
             const c01 = lookup(latF, lonF + 1);
             const c11 = lookup(latF + 1, lonF + 1);
-            return c00 * (1 - tLat) * (1 - tLon)
-                 + c10 * tLat * (1 - tLon)
-                 + c01 * (1 - tLat) * tLon
-                 + c11 * tLat * tLon;
+            return (
+              c00 * (1 - tLat) * (1 - tLon) +
+              c10 * tLat * (1 - tLon) +
+              c01 * (1 - tLat) * tLon +
+              c11 * tLat * tLon
+            );
           };
 
           // oceanOverlayModeRef에 저장된 모드 사용 (handleLayerToggle에서 갱신)
@@ -433,10 +561,14 @@ function AppInner() {
 
   // 항로 표시 상태 (다중 체크박스)
   const [routeVisibility, setRouteVisibility] = useState({
-    NSR: true, NWP: false, TSR: false, SUEZ: false, CAPE: false,
+    NSR: true,
+    NWP: false,
+    TSR: false,
+    SUEZ: false,
+    CAPE: false,
   });
   const handleRouteVisibilityChange = useCallback((key, visible) => {
-    setRouteVisibility(prev => ({ ...prev, [key]: visible }));
+    setRouteVisibility((prev) => ({ ...prev, [key]: visible }));
     // Cesium polyline 표시/숨김은 CesiumGlobe에서 처리
     const viewer = viewerRef.current;
     if (viewer && viewer._routeEntities && viewer._routeEntities[key]) {
@@ -453,13 +585,25 @@ function AppInner() {
   // Cesium viewer 준비되면 LIVE 빙산 데이터 로딩 + 카메라 상호작용 감지
   useEffect(() => {
     if (!cesiumViewerState) return;
-    const handler = new Cesium.ScreenSpaceEventHandler(cesiumViewerState.scene.canvas);
-    handler.setInputAction(() => { userCameraInteracting.current = true; }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
-    handler.setInputAction(() => { userCameraInteracting.current = false; }, Cesium.ScreenSpaceEventType.LEFT_UP);
-    handler.setInputAction(() => { userCameraInteracting.current = false; }, Cesium.ScreenSpaceEventType.MIDDLE_UP);
-    handler.setInputAction(() => { userCameraInteracting.current = false; }, Cesium.ScreenSpaceEventType.RIGHT_UP);
+    const handler = new Cesium.ScreenSpaceEventHandler(
+      cesiumViewerState.scene.canvas,
+    );
+    handler.setInputAction(() => {
+      userCameraInteracting.current = true;
+    }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+    handler.setInputAction(() => {
+      userCameraInteracting.current = false;
+    }, Cesium.ScreenSpaceEventType.LEFT_UP);
+    handler.setInputAction(() => {
+      userCameraInteracting.current = false;
+    }, Cesium.ScreenSpaceEventType.MIDDLE_UP);
+    handler.setInputAction(() => {
+      userCameraInteracting.current = false;
+    }, Cesium.ScreenSpaceEventType.RIGHT_UP);
     handleMonthChange('live');
-    return () => { handler.destroy(); };
+    return () => {
+      handler.destroy();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cesiumViewerState]);
 
@@ -489,7 +633,10 @@ function AppInner() {
   const handleModeChange = useCallback(
     (mode) => {
       dispatch({ type: 'SET_MODE', payload: mode });
-      dispatch({ type: 'SET_BRIDGE_VISIBLE', payload: mode === 'BRIDGE' || mode === 'FOLLOW' });
+      dispatch({
+        type: 'SET_BRIDGE_VISIBLE',
+        payload: mode === 'BRIDGE' || mode === 'FOLLOW',
+      });
 
       // SATELLITE/WIDE 전환 시 Three.js 바다 색상 리셋
       if (mode === 'SATELLITE' || mode === 'WIDE') {
@@ -529,7 +676,11 @@ function AppInner() {
       const hdg = routeHeading(newProgress, TWP, wps);
       dispatch({
         type: 'SET_SHIP_STATE',
-        payload: { lat: pos.lat, lon: pos.lon, heading: ((hdg * 180 / Math.PI) + 360) % 360 },
+        payload: {
+          lat: pos.lat,
+          lon: pos.lon,
+          heading: ((hdg * 180) / Math.PI + 360) % 360,
+        },
       });
     },
     [dispatch, state.currentRouteKey, timedWaypoints],
@@ -595,12 +746,13 @@ function AppInner() {
           weight: c.concentration,
         }));
 
-        const isLive = (month === 'live');
+        const isLive = month === 'live';
 
         // ── A. 빙산 Cesium 엔티티 갱신 (최신: NIC 실데이터 / 아카이브: 고농도 셀 파생) ──
         const viewer = viewerRef.current;
         if (viewer && !viewer.isDestroyed()) {
-          for (const ent of bergCesiumEntitiesRef.current) viewer.entities.remove(ent);
+          for (const ent of bergCesiumEntitiesRef.current)
+            viewer.entities.remove(ent);
           bergCesiumEntitiesRef.current = [];
 
           let bergList = [];
@@ -608,21 +760,34 @@ function AppInner() {
             try {
               const bergData = await fetchIcebergs();
               bergList = (bergData?.bergs || []).map((b) => ({
-                id: b.id, lon: b.lon, lat: b.lat,
-                length_m: b.length_m || 5000, width_m: b.width_m || 2000,
+                id: b.id,
+                lon: b.lon,
+                lat: b.lat,
+                length_m: b.length_m || 5000,
+                width_m: b.width_m || 2000,
               }));
-            } catch (e) { console.warn('[BergData] fetch 실패:', e.message); }
+            } catch (e) {
+              console.warn('[BergData] fetch 실패:', e.message);
+            }
           } else {
             // 아카이브: 해당 월 고농도 셀(≥0.8) → 빙산 위치로 활용
             const BERG_MAX = 300;
-            const highConc = icePoints.filter((c) => c.lat > 60 && c.weight >= 0.8);
-            const step = highConc.length > BERG_MAX ? Math.floor(highConc.length / BERG_MAX) : 1;
+            const highConc = icePoints.filter(
+              (c) => c.lat > 60 && c.weight >= 0.8,
+            );
+            const step =
+              highConc.length > BERG_MAX
+                ? Math.floor(highConc.length / BERG_MAX)
+                : 1;
             bergList = highConc
-              .filter((_, i) => i % step === 0).slice(0, BERG_MAX)
+              .filter((_, i) => i % step === 0)
+              .slice(0, BERG_MAX)
               .map((c) => ({
-                id: null, lon: c.lon, lat: c.lat,
+                id: null,
+                lon: c.lon,
+                lat: c.lat,
                 length_m: 10000 + c.weight * 20000,
-                width_m:   5000 + c.weight * 10000,
+                width_m: 5000 + c.weight * 10000,
               }));
           }
 
@@ -630,26 +795,45 @@ function AppInner() {
             const ent = viewer.entities.add({
               position: Cesium.Cartesian3.fromDegrees(b.lon, b.lat, 0),
               point: {
-                pixelSize: 10, color: Cesium.Color.YELLOW,
-                outlineColor: Cesium.Color.ORANGERED, outlineWidth: 2,
+                pixelSize: 10,
+                color: Cesium.Color.YELLOW,
+                outlineColor: Cesium.Color.ORANGERED,
+                outlineWidth: 2,
               },
-              ...(b.id ? { label: {
-                text: b.id, font: '11px sans-serif',
-                fillColor: Cesium.Color.YELLOW, outlineColor: Cesium.Color.BLACK,
-                outlineWidth: 2, style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                pixelOffset: new Cesium.Cartesian2(0, -14),
-              }} : {}),
+              ...(b.id
+                ? {
+                    label: {
+                      text: b.id,
+                      font: '11px sans-serif',
+                      fillColor: Cesium.Color.YELLOW,
+                      outlineColor: Cesium.Color.BLACK,
+                      outlineWidth: 2,
+                      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                      pixelOffset: new Cesium.Cartesian2(0, -14),
+                    },
+                  }
+                : {}),
             });
             bergCesiumEntitiesRef.current.push(ent);
           }
 
           // ThreeOverlay용: 항상 북극(lat>60) 고농도(≥0.8) 셀 사용 (NIC 데이터는 남반구라 불가)
           const BERG_MAX_THREE = 300;
-          const highConcCells = icePoints.filter((c) => c.lat > 60 && c.weight >= 0.8);
-          const threeStep = highConcCells.length > BERG_MAX_THREE ? Math.floor(highConcCells.length / BERG_MAX_THREE) : 1;
+          const highConcCells = icePoints.filter(
+            (c) => c.lat > 60 && c.weight >= 0.8,
+          );
+          const threeStep =
+            highConcCells.length > BERG_MAX_THREE
+              ? Math.floor(highConcCells.length / BERG_MAX_THREE)
+              : 1;
           realBergsRef.current = highConcCells
-            .filter((_, i) => i % threeStep === 0).slice(0, BERG_MAX_THREE)
-            .map((c) => ({ lon: c.lon, lat: c.lat, size: 8000 + c.weight * 15000 }));
+            .filter((_, i) => i % threeStep === 0)
+            .slice(0, BERG_MAX_THREE)
+            .map((c) => ({
+              lon: c.lon,
+              lat: c.lat,
+              size: 8000 + c.weight * 15000,
+            }));
         }
 
         // DeckOverlay 업데이트 (보조)
@@ -679,14 +863,18 @@ function AppInner() {
         });
 
         const cellCount = iceData?.cell_count || icePoints.length;
-        showToast(`${source} 로드 완료 — ${cellCount.toLocaleString()}개 셀, WMS 위성영상 갱신됨`);
+        showToast(
+          `${source} 로드 완료 — ${cellCount.toLocaleString()}개 셀, WMS 위성영상 갱신됨`,
+        );
       } catch (err) {
         console.warn('[IceData] fetch 실패, 절차적 폴백 유지:', err.message);
         dispatch({
           type: 'SET_ICE_DATA',
           payload: { data: null, key: month, source: '절차적 폴백' },
         });
-        showToast(`해빙 데이터 로드 실패: ${err.message} — 절차적 폴백 사용 중`);
+        showToast(
+          `해빙 데이터 로드 실패: ${err.message} — 절차적 폴백 사용 중`,
+        );
       }
     },
     [state.shipState, dispatch, showToast],
@@ -708,54 +896,71 @@ function AppInner() {
     return grid.get(key) ?? 0;
   }, []);
 
-  const handleLayerToggle = useCallback((layerKey, checked) => {
-    setLayerStates((prev) => ({ ...prev, [layerKey]: checked }));
-    const viewer = viewerRef.current;
-    if (!viewer || !viewer._apiLayers) return;
-    const layerMap = {
-      gebcoBathy: 'gebco',
-      nsidcConc: 'nsidcConc',
-      copThick: 'copThick',
-      nsidcEdge: 'nsidcEdge',
-      esaSar: 'esaSar',
-      s2True: 's2True',
-      s2Ndsi: 's2Ndsi',
-    };
-    const cesiumLayer = viewer._apiLayers[layerMap[layerKey]];
-    if (cesiumLayer) {
-      cesiumLayer.show = checked;
-      if (checked) {
-        try { viewer.imageryLayers.raiseToTop(cesiumLayer); } catch (_) {}
-      }
-    }
-
-    // WMS 레이어 토글 → BRIDGE/FOLLOW 바다 색상 모드 결정
-    const oceanLayers = { nsidcConc: 'ice', copThick: 'thickness', nsidcEdge: 'edge', gebcoBathy: 'depth' };
-    if (layerKey in oceanLayers) {
-      if (layerKey === 'nsidcConc') nsidcActiveRef.current = checked;
-
-      let overlayMode;
-      if (checked) {
-        // 켠 레이어를 즉시 적용
-        overlayMode = oceanLayers[layerKey];
-      } else {
-        // 끈 경우 → 남아있는 활성 레이어 중 하나 선택
-        const newStates = { ...layerStates, [layerKey]: false };
-        overlayMode = 'none';
-        for (const [key, mode] of Object.entries(oceanLayers)) {
-          if (newStates[key]) { overlayMode = mode; break; }
+  const handleLayerToggle = useCallback(
+    (layerKey, checked) => {
+      setLayerStates((prev) => ({ ...prev, [layerKey]: checked }));
+      const viewer = viewerRef.current;
+      if (!viewer || !viewer._apiLayers) return;
+      const layerMap = {
+        gebcoBathy: 'gebco',
+        nsidcConc: 'nsidcConc',
+        copThick: 'copThick',
+        nsidcEdge: 'nsidcEdge',
+        esaSar: 'esaSar',
+        s2True: 's2True',
+        s2Ndsi: 's2Ndsi',
+      };
+      const cesiumLayer = viewer._apiLayers[layerMap[layerKey]];
+      if (cesiumLayer) {
+        cesiumLayer.show = checked;
+        if (checked) {
+          try {
+            viewer.imageryLayers.raiseToTop(cesiumLayer);
+          } catch (_) {}
         }
       }
-      oceanOverlayModeRef.current = overlayMode;
 
-      const mode = currentModeRef.current;
-      if (mode === 'BRIDGE' || mode === 'FOLLOW') {
-        const { lat, lon } = state.shipState;
-        threeRef.current?.updateOceanOverlay(overlayMode, lon, lat, sampleIceFn);
+      // WMS 레이어 토글 → BRIDGE/FOLLOW 바다 색상 모드 결정
+      const oceanLayers = {
+        nsidcConc: 'ice',
+        copThick: 'thickness',
+        nsidcEdge: 'edge',
+        gebcoBathy: 'depth',
+      };
+      if (layerKey in oceanLayers) {
+        if (layerKey === 'nsidcConc') nsidcActiveRef.current = checked;
+
+        let overlayMode;
+        if (checked) {
+          // 켠 레이어를 즉시 적용
+          overlayMode = oceanLayers[layerKey];
+        } else {
+          // 끈 경우 → 남아있는 활성 레이어 중 하나 선택
+          const newStates = { ...layerStates, [layerKey]: false };
+          overlayMode = 'none';
+          for (const [key, mode] of Object.entries(oceanLayers)) {
+            if (newStates[key]) {
+              overlayMode = mode;
+              break;
+            }
+          }
+        }
+        oceanOverlayModeRef.current = overlayMode;
+
+        const mode = currentModeRef.current;
+        if (mode === 'BRIDGE' || mode === 'FOLLOW') {
+          const { lat, lon } = state.shipState;
+          threeRef.current?.updateOceanOverlay(
+            overlayMode,
+            lon,
+            lat,
+            sampleIceFn,
+          );
+        }
       }
-    }
-  }, [state.shipState, sampleIceFn, layerStates]);
-
+    },
+    [state.shipState, sampleIceFn, layerStates],
+  );
 
   // 위성 실사영상 (MODIS/VIIRS) 토글
   const [satVisible, setSatVisible] = useState(false);
@@ -779,83 +984,96 @@ function AppInner() {
   }, []);
 
   // 라우팅 평가 — 항로 전체 구간에서 최악 빙해역 기준 POLARIS RIO 계산
-  const handleEvaluate = useCallback((formData) => {
-    console.log('[Routing] evaluate:', formData);
+  const handleEvaluate = useCallback(
+    (formData) => {
+      console.log('[Routing] evaluate:', formData);
 
-    // 해빙 농도 조회 함수 (격자 캐시 우선, 없으면 위도 폴백)
-    const grid = iceGridCacheRef.current;
-    const sampleIce = (_lon, _lat) => {
-      if (grid && grid.size > 0) {
-        const v = grid.get(`${Math.round(_lat)},${Math.round(_lon)}`);
-        if (v !== undefined) return v;
-        for (let dl = -1; dl <= 1; dl++) {
-          for (let dn = -1; dn <= 1; dn++) {
-            if (dl === 0 && dn === 0) continue;
-            const v2 = grid.get(`${Math.round(_lat) + dl},${Math.round(_lon) + dn}`);
-            if (v2 !== undefined) return v2;
+      // 해빙 농도 조회 함수 (격자 캐시 우선, 없으면 위도 폴백)
+      const grid = iceGridCacheRef.current;
+      const sampleIce = (_lon, _lat) => {
+        if (grid && grid.size > 0) {
+          const v = grid.get(`${Math.round(_lat)},${Math.round(_lon)}`);
+          if (v !== undefined) return v;
+          for (let dl = -1; dl <= 1; dl++) {
+            for (let dn = -1; dn <= 1; dn++) {
+              if (dl === 0 && dn === 0) continue;
+              const v2 = grid.get(
+                `${Math.round(_lat) + dl},${Math.round(_lon) + dn}`,
+              );
+              if (v2 !== undefined) return v2;
+            }
           }
         }
+        if (_lat < 60) return 0;
+        if (_lat < 68) return ((_lat - 60) / 8) * 0.3;
+        if (_lat < 75) return 0.3 + ((_lat - 68) / 7) * 0.4;
+        if (_lat < 82) return 0.7 + ((_lat - 75) / 7) * 0.25;
+        return 0.95;
+      };
+
+      // 항로 전체 구간 샘플링 — 최악 구간(최고 농도) 기준으로 평가
+      const currentWps = ROUTES[state.currentRouteKey] || ROUTES.NSR;
+      let worstLat = state.shipState.lat;
+      let worstLon = state.shipState.lon;
+      let worstConc = 0;
+      for (const wp of currentWps) {
+        const conc = sampleIce(wp.lon, wp.lat);
+        if (conc > worstConc) {
+          worstConc = conc;
+          worstLat = wp.lat;
+          worstLon = wp.lon;
+        }
       }
-      if (_lat < 60) return 0;
-      if (_lat < 68) return ((_lat - 60) / 8) * 0.3;
-      if (_lat < 75) return 0.3 + ((_lat - 68) / 7) * 0.4;
-      if (_lat < 82) return 0.7 + ((_lat - 75) / 7) * 0.25;
-      return 0.95;
-    };
 
-    // 항로 전체 구간 샘플링 — 최악 구간(최고 농도) 기준으로 평가
-    const currentWps = ROUTES[state.currentRouteKey] || ROUTES.NSR;
-    let worstLat = state.shipState.lat;
-    let worstLon = state.shipState.lon;
-    let worstConc = 0;
-    for (const wp of currentWps) {
-      const conc = sampleIce(wp.lon, wp.lat);
-      if (conc > worstConc) {
-        worstConc = conc;
-        worstLat = wp.lat;
-        worstLon = wp.lon;
-      }
-    }
+      // 최악 구간의 해빙 조건으로 POLARIS 평가
+      const iceConditions = deriveIceConditions(worstLon, worstLat, sampleIce);
 
-    // 최악 구간의 해빙 조건으로 POLARIS 평가
-    const iceConditions = deriveIceConditions(worstLon, worstLat, sampleIce);
+      const result = evaluateRouting({
+        isSanctionedCountry: formData.isSanctioned || false,
+        hasNsraPermit: formData.hasNsra !== false,
+        hasPwom: formData.hasPwom !== false,
+        draft: formData.draft || state.shipSpecs.draft || 8.5,
+        beam: state.shipSpecs.width || 30,
+        maxRescueDays: formData.rescueDays || 7,
+        isTempBelowMinus10: formData.isColdRoute || false,
+        designTempMargin: formData.tempMargin || 12,
+        hasWinterization: formData.hasWinter !== false,
+        hasZeroDischarge: formData.hasZeroDis !== false,
+        hasPolarComms: formData.hasComms !== false,
+        hasIceNavigator: formData.hasNavigator !== false,
+        iceClass: state.shipSpecs.iceClass || 'PC2',
+        iceConditions,
+      });
 
-    const result = evaluateRouting({
-      isSanctionedCountry: formData.isSanctioned || false,
-      hasNsraPermit: formData.hasNsra !== false,
-      hasPwom: formData.hasPwom !== false,
-      draft: formData.draft || state.shipSpecs.draft || 8.5,
-      beam: state.shipSpecs.width || 30,
-      maxRescueDays: formData.rescueDays || 7,
-      isTempBelowMinus10: formData.isColdRoute || false,
-      designTempMargin: formData.tempMargin || 12,
-      hasWinterization: formData.hasWinter !== false,
-      hasZeroDischarge: formData.hasZeroDis !== false,
-      hasPolarComms: formData.hasComms !== false,
-      hasIceNavigator: formData.hasNavigator !== false,
-      iceClass: state.shipSpecs.iceClass || 'PC2',
-      iceConditions,
-    });
+      // 항로 거리 계산
+      const suezWps = ROUTES.SUEZ;
+      const currentDist = Math.round(calculateRouteDistanceKM(currentWps));
+      const suezDist = Math.round(calculateRouteDistanceKM(suezWps));
 
-    // 항로 거리 계산
-    const suezWps = ROUTES.SUEZ;
-    const currentDist = Math.round(calculateRouteDistanceKM(currentWps));
-    const suezDist = Math.round(calculateRouteDistanceKM(suezWps));
+      const finalReason =
+        result.reason +
+        ` (최악 구간: ${worstLat.toFixed(1)}°N, SIC ${Math.round(worstConc * 100)}%)`;
+      setEvaluationResult({
+        status: result.status,
+        rioScore: result.rioScore,
+        reason: finalReason,
+        distances: {
+          current: currentDist,
+          suez: suezDist,
+        },
+      });
 
-    const finalReason = result.reason + ` (최악 구간: ${worstLat.toFixed(1)}°N, SIC ${Math.round(worstConc * 100)}%)`;
-    setEvaluationResult({
-      status: result.status,
-      rioScore: result.rioScore,
-      reason: finalReason,
-      distances: {
-        current: currentDist,
-        suez: suezDist,
-      },
-    });
-
-    showToast(`POLARIS 평가 완료: ${result.status} (최악 SIC ${Math.round(worstConc * 100)}%)`);
-    return { status: result.status, rioScore: result.rioScore, reason: finalReason };
-  }, [state.shipState, state.shipSpecs, state.currentRouteKey, showToast]);
+      showToast(
+        `POLARIS 평가 완료: ${result.status} (최악 SIC ${Math.round(worstConc * 100)}%)`,
+      );
+      return {
+        status: result.status,
+        rioScore: result.rioScore,
+        reason: finalReason,
+      };
+    },
+    [state.shipState, state.shipSpecs, state.currentRouteKey, showToast],
+  );
 
   // 모달 확인 — 평가 실행 + 항로 불일치 감지
   const STATUS_TO_REROUTE = { REROUTE_SUEZ: 'SUEZ', REROUTE_CAPE: 'CAPE' };
@@ -868,14 +1086,14 @@ function AppInner() {
       draft,
       rescueDays,
       tempMargin,
-      hasPwom:      checks.pwom,
-      hasNsra:      checks.nsra,
-      hasWinter:    checks.winter,
-      hasZeroDis:   checks.zeroDis,
-      hasComms:     checks.comms,
+      hasPwom: checks.pwom,
+      hasNsra: checks.nsra,
+      hasWinter: checks.winter,
+      hasZeroDis: checks.zeroDis,
+      hasComms: checks.comms,
       hasNavigator: checks.navigator,
       isSanctioned: checks.sanctioned,
-      isColdRoute:  checks.coldRoute,
+      isColdRoute: checks.coldRoute,
     });
 
     // 항로 변경 필요 여부 확인
@@ -884,14 +1102,22 @@ function AppInner() {
       const stepMatch = evalResult.reason.match(/\[Step (\w+)\]/);
       setRouteAlert({
         fromRoute: state.currentRouteKey,
-        toRoute:   suggestedRoute,
-        stepTag:   stepMatch ? stepMatch[1] : null,
-        reason:    evalResult.reason,
+        toRoute: suggestedRoute,
+        stepTag: stepMatch ? stepMatch[1] : null,
+        reason: evalResult.reason,
       });
     }
 
-    showToast(`제원 적용 완료 — ${state.shipSpecs.iceClass}, ${state.shipSpecs.displacement}t`);
-  }, [pendingPolarParams, handleEvaluate, state.currentRouteKey, state.shipSpecs, showToast]);
+    showToast(
+      `제원 적용 완료 — ${state.shipSpecs.iceClass}, ${state.shipSpecs.displacement}t`,
+    );
+  }, [
+    pendingPolarParams,
+    handleEvaluate,
+    state.currentRouteKey,
+    state.shipSpecs,
+    showToast,
+  ]);
 
   const handleModalClose = useCallback(() => setShowSpecsModal(false), []);
 
@@ -973,14 +1199,18 @@ function AppInner() {
           />
           <ThreeOverlay
             ref={threeRef}
-            visible={state.currentMode === 'BRIDGE' || state.currentMode === 'FOLLOW'}
+            visible={
+              state.currentMode === 'BRIDGE' || state.currentMode === 'FOLLOW'
+            }
             shipState={state.shipState}
             specs={state.shipSpecs}
             mode={state.currentMode}
           />
           <DeckOverlay
             ref={deckRef}
-            visible={state.currentMode === 'SATELLITE' || state.currentMode === 'WIDE'}
+            visible={
+              state.currentMode === 'SATELLITE' || state.currentMode === 'WIDE'
+            }
             cesiumViewer={cesiumViewerState}
           />
           <div id="fade" />
@@ -993,7 +1223,10 @@ function AppInner() {
             rollAngle={parseFloat(state.hud.roll) || 0}
             mode={state.currentMode}
           />
-          <BinocularsMask visible={state.binocularsActive} label="x 8.0 BINOCULARS" />
+          <BinocularsMask
+            visible={state.binocularsActive}
+            label="x 8.0 BINOCULARS"
+          />
 
           {/* Viewport Overlays */}
           <SimulationControls
@@ -1025,6 +1258,15 @@ function AppInner() {
           <div id="polar-night-ind">극야 구간</div>
           <div id="banner" />
           <div id="gebco-depth-popup" />
+
+          {/* //* [Modified Code] 레이더(미니맵)을 메인 뷰포트 영역 내부 우측 하단에 부착하여 패널에 가려지지 않게 함 */}
+          <Minimap
+            shipPos={state.shipState}
+            progress={state.simProgress}
+            heading={state.shipState.heading}
+            waypoints={waypoints}
+            onOpenTeleport={() => setTeleportOpen(true)}
+          />
         </div>
       </div>
 
