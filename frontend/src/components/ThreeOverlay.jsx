@@ -40,6 +40,15 @@ function pickType() {
   return ICE_TYPES[ICE_TYPES.length - 1];
 }
 
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
 // ── Bathymetry / color mapping ───────────────────────────────────────────────
 function estimateBathymetry(lon, lat) {
   const latN = Math.max(0, Math.min(1, (lat - 60) / 30));
@@ -143,27 +152,193 @@ function fovFromSpeed(kn) {
   return Math.min(103, 97 + (kn - 20) * 0.6);
 }
 
+// ── 3D value noise (hash-based) ─────────────────────────────────────────────
+function hash3(ix, iy, iz) {
+  let h = ix * 374761393 + iy * 668265263 + iz * 1274126177;
+  h = (h ^ (h >> 13)) * 1103515245;
+  return ((h ^ (h >> 16)) >>> 0) / 4294967296;
+}
+function lerp(a, b, t) { return a + (b - a) * t; }
+function smoothstep(t) { return t * t * (3 - 2 * t); }
+
+function noise3D(x, y, z) {
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  const fx = smoothstep(x - ix), fy = smoothstep(y - iy), fz = smoothstep(z - iz);
+  return lerp(
+    lerp(
+      lerp(hash3(ix, iy, iz),     hash3(ix+1, iy, iz),     fx),
+      lerp(hash3(ix, iy+1, iz),   hash3(ix+1, iy+1, iz),   fx), fy),
+    lerp(
+      lerp(hash3(ix, iy, iz+1),   hash3(ix+1, iy, iz+1),   fx),
+      lerp(hash3(ix, iy+1, iz+1), hash3(ix+1, iy+1, iz+1), fx), fy),
+    fz);
+}
+
+// 다중 옥타브 fBm 노이즈 — 자연스러운 불규칙 표면 생성
+function fbm3D(x, y, z, octaves) {
+  let val = 0, amp = 1, freq = 1, total = 0;
+  for (let o = 0; o < octaves; o++) {
+    val += noise3D(x * freq, y * freq, z * freq) * amp;
+    total += amp;
+    amp *= 0.45;
+    freq *= 2.2;
+  }
+  return val / total;
+}
+
 // ── Iceberg geometry builder ─────────────────────────────────────────────────
 function makeIceGeo(typeName, w, h, d) {
-  const segs = typeName === 'growler' ? 6 : 9;
-  const layers = typeName === 'tabular' ? 2 : 5;
-  const g = new THREE.ConeGeometry(w * 0.52, h, segs, layers);
-  const p = g.attributes.position;
-
-  const xzAmp = Math.min(w * 0.22, 25);
-  const yAmp = Math.min(h * 0.18, 25);
-
-  for (let i = 0; i < p.count; i++) {
-    const y = p.getY(i);
-    const t = Math.max(0, Math.min(1, y / h + 0.5));
-    const bulge = Math.sin(t * Math.PI) * 0.8 + 0.2;
-    const xzNoise = 1 + (Math.random() - 0.5) * (xzAmp / w) * bulge;
-    p.setX(i, p.getX(i) * xzNoise * (d / w));
-    p.setZ(i, p.getZ(i) * xzNoise);
-    const yNoise = 1 + (Math.random() - 0.5) * (yAmp / h) * bulge;
-    p.setY(i, y * yNoise);
+  // 세그먼트 — 불규칙 표면을 표현하려면 충분한 해상도 필요
+  let wSegs, hSegs;
+  switch (typeName) {
+    case 'tabular': wSegs = 20; hSegs = 10; break;
+    case 'large':   wSegs = 18; hSegs = 14; break;
+    case 'growler': wSegs = 12; hSegs = 8;  break;
+    default:        wSegs = 16; hSegs = 12; break; // medium, small
   }
-  p.needsUpdate = true;
+
+  const g = new THREE.SphereGeometry(1, wSegs, hSegs);
+  const pos = g.attributes.position;
+
+  // 시드 기반 난수 — 빙하마다 고유한 오프셋으로 완전히 다른 형태
+  const rand = mulberry32(((w * 7.13 + h * 13.37 + d * 19.91) * 1000) | 0);
+
+  // ── 난수로 프로파일 파라미터 자체를 생성 (정형화 제거) ──
+  const peakT     = 0.15 + rand() * 0.30;        // 최대 폭 높이 (0.15~0.45)
+  const topTaper  = 0.3 + rand() * 0.5;           // 상단 좁아지는 정도 (0.3~0.8)
+  const topPow    = 1.0 + rand() * 1.5;           // 상단 커브 지수 (1.0~2.5)
+  const baseWidth = 0.4 + rand() * 0.5;           // 바닥 폭 비율 (0.4~0.9)
+  const asymX     = (rand() - 0.5) * 0.4;         // 좌우 비대칭 (-0.2~0.2)
+  const asymZ     = (rand() - 0.5) * 0.4;         // 전후 비대칭
+  const flatTop   = typeName === 'tabular' ? 0.7 + rand() * 0.25 : rand() * 0.15;
+  const warpAmt   = 0.08 + rand() * 0.20;         // 대규모 뒤틀림 강도
+  const noiseScale = 1.5 + rand() * 3.0;          // 노이즈 주파수
+  const noiseAmt  = 0.08 + rand() * 0.18;         // 노이즈 강도
+
+  // 빙하별 고유 3D 노이즈 오프셋 (같은 함수여도 완전 다른 결과)
+  const ox = rand() * 100, oy = rand() * 100, oz = rand() * 100;
+
+  // 랜덤 돌기/능선 최대 4개
+  const bumpCount = Math.floor(rand() * 4) + 1;
+  const bumps = [];
+  for (let b = 0; b < bumpCount; b++) {
+    bumps.push({
+      angle: rand() * Math.PI * 2,
+      tCenter: 0.3 + rand() * 0.5,
+      width: 0.15 + rand() * 0.3,
+      height: 0.05 + rand() * 0.20,
+    });
+  }
+
+  // 능선 (길게 이어지는 돌출)
+  const ridgeCount = Math.floor(rand() * 3);
+  const ridges = [];
+  for (let r = 0; r < ridgeCount; r++) {
+    ridges.push({
+      angle: rand() * Math.PI * 2,
+      spread: 0.2 + rand() * 0.5,
+      strength: 0.06 + rand() * 0.15,
+    });
+  }
+
+  for (let i = 0; i < pos.count; i++) {
+    let x = pos.getX(i);
+    let y = pos.getY(i);
+    let z = pos.getZ(i);
+
+    // t = 정규화 높이 [0=바닥, 1=꼭대기]
+    const t = y * 0.5 + 0.5;
+    // 정점의 수평 각도
+    const theta = Math.atan2(z, x);
+
+    // ── 1) 난수 기반 프로파일 (매 빙하마다 다른 실루엣) ──
+    let rProfile;
+    if (t < 0.05) {
+      rProfile = baseWidth * (t / 0.05); // 바닥 끝 수렴
+    } else if (t < peakT) {
+      // 바닥 → 최대폭 구간
+      const s = (t - 0.05) / (peakT - 0.05);
+      rProfile = baseWidth + (1.0 - baseWidth) * smoothstep(s);
+    } else if (flatTop > 0.3 && t > (1.0 - flatTop * 0.3)) {
+      // 평평한 상단 (tabular에서 강하게, 나머지는 약하게)
+      const edge = 1.0 - flatTop * 0.3;
+      const s = (t - edge) / (1.0 - edge);
+      rProfile = (1.0 - topTaper * Math.pow((edge - peakT) / (1.0 - peakT), topPow))
+                 * (1.0 - s * 0.15);
+    } else {
+      // 최대폭 → 상단 테이퍼
+      const s = (t - peakT) / (1.0 - peakT);
+      rProfile = 1.0 - topTaper * Math.pow(s, topPow);
+    }
+    rProfile = Math.max(0.02, rProfile);
+
+    // ── 2) 방향별 비대칭 (한쪽이 더 넓거나 좁음) ──
+    const asymFactor = 1.0 + asymX * Math.cos(theta) + asymZ * Math.sin(theta);
+
+    // ── 3) 대규모 뒤틀림 (저주파 변형) ──
+    const warp = fbm3D(
+      x * 2.0 + ox, y * 2.0 + oy, z * 2.0 + oz, 2
+    ) * 2.0 - 1.0;
+
+    // ── 4) 다중 옥타브 표면 노이즈 (미세한 불규칙) ──
+    const surfNoise = fbm3D(
+      x * noiseScale + ox + 50,
+      y * noiseScale + oy + 50,
+      z * noiseScale + oz + 50,
+      4
+    ) * 2.0 - 1.0;
+
+    // ── 5) 돌기 (bumps) ──
+    let bumpVal = 0;
+    for (const bump of bumps) {
+      let angleDiff = Math.abs(theta - bump.angle);
+      if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+      const angFalloff = Math.exp(-angleDiff * angleDiff * 4);
+      const tDiff = (t - bump.tCenter) / bump.width;
+      const tFalloff = Math.exp(-tDiff * tDiff * 2);
+      bumpVal += bump.height * angFalloff * tFalloff;
+    }
+
+    // ── 6) 능선 (ridges) ──
+    let ridgeVal = 0;
+    for (const ridge of ridges) {
+      let angleDiff = Math.abs(theta - ridge.angle);
+      if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+      const falloff = Math.exp(-angleDiff * angleDiff / (ridge.spread * ridge.spread));
+      ridgeVal += ridge.strength * falloff * (0.5 + 0.5 * Math.sin(t * Math.PI));
+    }
+
+    // ── 최종 반경 합산 ──
+    const rFinal = rProfile * asymFactor
+                   + warp * warpAmt
+                   + surfNoise * noiseAmt
+                   + bumpVal
+                   + ridgeVal;
+
+    // XZ 평면 적용
+    const r0 = Math.sqrt(x * x + z * z) || 0.001;
+    x = (x / r0) * Math.max(0.01, rFinal) * (w * 0.5);
+    z = (z / r0) * Math.max(0.01, rFinal) * (d * 0.5);
+
+    // Y 스케일링
+    y = y * h * 0.5;
+
+    // 바닥 평탄화
+    const flatY = -h * 0.38;
+    if (y < flatY) {
+      y = flatY + (y - flatY) * 0.1;
+    }
+
+    // Y 방향 노이즈 (표면 울퉁불퉁)
+    const yNoise = fbm3D(
+      x * 0.02 + ox + 200, y * 0.02 + oy + 200, z * 0.02 + oz + 200, 3
+    ) * 2.0 - 1.0;
+    y += yNoise * h * 0.06 * Math.sin(t * Math.PI);
+
+    pos.setXYZ(i, x, y, z);
+  }
+
+  pos.needsUpdate = true;
   g.computeVertexNormals();
   return g;
 }
@@ -318,18 +493,25 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
   const spawnIceberg = useCallback(
     (ox, oz, type) => {
       const { scene, tIcebergs, iceMat, discMat, ringMat } = ctx.current;
-      const w = rng(type.w[0], type.w[1]);
-      const h = rng(type.h[0], type.h[1]);
-      const d = rng(type.d[0], type.d[1]);
+      // 불규칙 크기/비율 — 타입 범위 내에서도 폭/높이/깊이 비율이 매번 다름
+      const wBase = rng(type.w[0], type.w[1]);
+      const hBase = rng(type.h[0], type.h[1]);
+      const dBase = rng(type.d[0], type.d[1]);
+      const sizeJitter = 0.7 + Math.random() * 0.6;  // 0.7~1.3 크기 변동
+      const ratioJitter = 0.6 + Math.random() * 0.8; // 0.6~1.4 종횡비 변동
+      const w = wBase * sizeJitter;
+      const h = hBase * sizeJitter * ratioJitter;
+      const d = dBase * sizeJitter * (0.5 + Math.random() * 1.0);
       const bR = Math.max(Math.max(w, d) * 0.45, 3);
 
       const geo = trackDisposable(makeIceGeo(type.name, w, h, d));
       const mesh = new THREE.Mesh(geo, iceMat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
       mesh.rotation.y = Math.random() * Math.PI * 2;
-      if (type.name !== 'tabular') {
-        mesh.rotation.z = (Math.random() - 0.5) * 0.07;
-        mesh.rotation.x = (Math.random() - 0.5) * 0.05;
-      }
+      // 모든 타입에 불규칙 기울기 (tabular 포함)
+      mesh.rotation.z = (Math.random() - 0.5) * 0.12;
+      mesh.rotation.x = (Math.random() - 0.5) * 0.10;
       placeOnWater(mesh, ox, oz);
 
       const grp = new THREE.Group();
@@ -421,8 +603,11 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
 
       const size = Math.max(berg.size || 5000, 500);
       const h = size * 0.15;
-      const geo = new THREE.ConeGeometry(size * 0.3 / 1.5, h, 8);
+      const bw = size * 0.3 / 1.5 * 2;
+      const bd = bw * 0.85;
+      const geo = makeIceGeo('medium', bw, h, bd);
       const mesh = new THREE.Mesh(geo, realBergMat);
+      mesh.castShadow = true;
       const grp = new THREE.Group();
       grp.add(mesh);
       grp.position.set(x, h / 2, z);
@@ -1153,8 +1338,18 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
     pmrem.dispose();
 
     // Shared iceberg materials (created once)
-    ctx.current.iceMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    ctx.current.realBergMat = new THREE.MeshBasicMaterial({ color: 0xFFCC00 });
+    ctx.current.iceMat = new THREE.MeshStandardMaterial({
+      color: 0xd8e8f0,
+      roughness: 0.65,
+      metalness: 0.02,
+      envMapIntensity: 0.6,
+    });
+    ctx.current.realBergMat = new THREE.MeshStandardMaterial({
+      color: 0xFFCC00,
+      roughness: 0.7,
+      metalness: 0.0,
+      envMapIntensity: 0.4,
+    });
     ctx.current.subMat = new THREE.MeshBasicMaterial({
       color: 0x224466,
       transparent: true,
