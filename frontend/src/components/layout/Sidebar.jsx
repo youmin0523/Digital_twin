@@ -20,6 +20,7 @@ const VIEW_MODES = [
 const WMS_LAYERS = [
   { id: 'sat', label: '위성 실사영상 (MODIS/VIIRS)' },
   { id: 'nsidcConc', label: 'NSIDC 해빙 농도' },
+  { id: 'gibsIce', label: '해빙 자연색 오버레이' },
   { id: 'copThick', label: 'Copernicus 해빙 두께' },
   { id: 'nsidcEdge', label: 'NSIDC 경계선 (Today)' },
   { id: 'esaSar', label: 'ESA Sentinel-1 위성' },

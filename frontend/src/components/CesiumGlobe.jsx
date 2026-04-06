@@ -324,17 +324,109 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
           }));
           gebco.show = false;
           layers.gebco = gebco;
-          layers.nsidcConc = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
-            url: '/nsidc-proxy/', layers: 'AMSRU2_Sea_Ice_Concentration_25km', parameters: { transparent: 'true', format: 'image/png' },
+          const nsidcConc = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
+            url: 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi',
+            layers: 'AMSR2_Sea_Ice_Concentration_12km_3Day',
+            parameters: { transparent: 'true', format: 'image/png', TIME: new Date(Date.now() - 4 * 86400000).toISOString().slice(0, 10) },
+            tileWidth: 256, tileHeight: 256, enablePickFeatures: false, credit: 'NASA GIBS',
+          }));
+          nsidcConc.show = false;
+          layers.nsidcConc = nsidcConc;
+        } catch (e) { console.warn('Layers error:', e); }
+
+        const gibsDate = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
+        const gibsUrl = 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi';
+        const gibsOpts = (lyName) => ({
+          url: gibsUrl, layers: lyName,
+          parameters: { transparent: 'true', format: 'image/png', TIME: gibsDate },
+          tileWidth: 512, tileHeight: 512, enablePickFeatures: false, credit: 'NASA GIBS',
+        });
+
+        // 위성 실사영상 (MODIS Terra + VIIRS SNPP) → viewer._satLayers
+        try {
+          const satLayers = [];
+          const modis = viewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapServiceImageryProvider(gibsOpts('MODIS_Terra_CorrectedReflectance_TrueColor')),
+          );
+          modis.show = false; satLayers.push(modis);
+          const viirs = viewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapServiceImageryProvider(gibsOpts('VIIRS_SNPP_CorrectedReflectance_TrueColor')),
+          );
+          viirs.show = false; satLayers.push(viirs);
+          viewer._satLayers = satLayers;
+        } catch (e) { console.warn('Satellite imagery layer error:', e); }
+
+        // Copernicus 해빙 두께 (SITHICK) — /cop-proxy/ → wmts.marine.copernicus.eu
+        try {
+          const copThick = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
+            url: '/cop-proxy/',
+            layers: 'ARCTIC_ANALYSISFORECAST_PHY_ICE_002_011/cmems_mod_arc_phy_anfc_6km_detided_P1D-m',
+            parameters: { transparent: 'true', format: 'image/png', TIME: gibsDate },
             tileWidth: 512, tileHeight: 512, enablePickFeatures: false,
           }));
-        } catch (e) { console.warn('Layers error:', e); }
+          copThick.alpha = 0.7; copThick.show = false;
+          layers.copThick = copThick;
+        } catch (e) { console.warn('Copernicus thick layer error:', e); }
+
+        // NSIDC 해빙 경계선 (GIBS Sea_Ice_Brightness_Temp)
+        try {
+          const nsidcEdge = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
+            url: 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi',
+            layers: 'AMSRU2_Sea_Ice_Brightness_Temp_6km_89H',
+            parameters: { transparent: 'true', format: 'image/png', TIME: gibsDate },
+            tileWidth: 512, tileHeight: 512, enablePickFeatures: false, credit: 'NASA GIBS',
+          }));
+          nsidcEdge.alpha = 0.7; nsidcEdge.show = false;
+          layers.nsidcEdge = nsidcEdge;
+        } catch (e) { console.warn('NSIDC edge layer error:', e); }
+
+        // ESA Sentinel-1 SAR — /sentinel-proxy/ → Copernicus Data Space
+        try {
+          const esaSar = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
+            url: '/sentinel-proxy/',
+            layers: 'SAR-URBAN',
+            parameters: { transparent: 'true', format: 'image/png', MAXCC: '40' },
+            tileWidth: 512, tileHeight: 512, enablePickFeatures: false,
+          }));
+          esaSar.alpha = 0.8; esaSar.show = false;
+          layers.esaSar = esaSar;
+        } catch (e) { console.warn('ESA SAR layer error:', e); }
+
+        // Sentinel-2 자연색 (TRUE_COLOR) — /sentinel-proxy/
+        try {
+          const s2True = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
+            url: '/sentinel-proxy/',
+            layers: 'TRUE-COLOR',
+            parameters: { transparent: 'true', format: 'image/png', MAXCC: '30' },
+            tileWidth: 512, tileHeight: 512, enablePickFeatures: false,
+          }));
+          s2True.alpha = 0.85; s2True.show = false;
+          layers.s2True = s2True;
+        } catch (e) { console.warn('S2 true color layer error:', e); }
+
+        // Sentinel-2 NDSI 해빙 탐지 — /sentinel-proxy/
+        try {
+          const s2Ndsi = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
+            url: '/sentinel-proxy/',
+            layers: 'INDEX-NDSI',
+            parameters: { transparent: 'true', format: 'image/png', MAXCC: '30' },
+            tileWidth: 512, tileHeight: 512, enablePickFeatures: false,
+          }));
+          s2Ndsi.alpha = 0.8; s2Ndsi.show = false;
+          layers.s2Ndsi = s2Ndsi;
+        } catch (e) { console.warn('S2 NDSI layer error:', e); }
         viewer._apiLayers = layers;
 
         drawRoute(viewer, currentRouteKey);
+
+        // ── 초기 카메라: 북극 중심 탑다운 (polar projection 느낌) ──
         viewer.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(129.04, 35.1, 13000000),
-          orientation: { heading: 0, pitch: Cesium.Math.toRadians(-50), roll: 0 },
+          destination: Cesium.Cartesian3.fromDegrees(60, 90, 18000000),
+          orientation: {
+            heading: 0,
+            pitch: Cesium.Math.toRadians(-90),
+            roll: 0,
+          },
           duration: 2,
         });
 

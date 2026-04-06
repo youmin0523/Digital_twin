@@ -90,32 +90,23 @@ function depthToRGB(d) {
   return [r / 255, g / 255, b / 255];
 }
 
-// 실사풍 해빙 팔레트 — 투명 바다 → 청회색 → 흰색
-const ICE_STOPS = [
-  { at: 0.00, r:  13, g:  79, b: 139 },  // 바다 (투명 영역)
-  { at: 0.10, r:  13, g:  79, b: 139 },  // 바다 (투명 영역)
-  { at: 0.30, r:  90, g: 130, b: 160 },  // 연한 청회색
-  { at: 0.50, r: 140, g: 180, b: 200 },  // 중간 청회색
-  { at: 0.70, r: 180, g: 210, b: 225 },  // 연한 하늘색
-  { at: 0.85, r: 210, g: 230, b: 240 },  // 밝은 빙백색
-  { at: 1.00, r: 240, g: 248, b: 255 },  // 거의 흰색
-];
-
-function iceToRGB(conc) {
-  const c = Math.max(0, Math.min(1, conc));
-  for (let i = 0; i < ICE_STOPS.length - 1; i++) {
-    const a = ICE_STOPS[i], b = ICE_STOPS[i + 1];
-    if (c <= b.at) {
-      const t = (b.at - a.at) > 0 ? (c - a.at) / (b.at - a.at) : 0;
-      return [
-        (a.r + (b.r - a.r) * t) / 255,
-        (a.g + (b.g - a.g) * t) / 255,
-        (a.b + (b.b - a.b) * t) / 255,
-      ];
-    }
+// 자연색 해빙 팔레트 — 위성사진 스타일 (흰색 얼음, 투명 바다)
+function naturalIceRGBA(conc) {
+  if (conc < 0.15) {
+    // 15% 미만 → 완전 투명 (아래 Cesium 위성영상 노출)
+    return [0, 0, 0, 0];
   }
-  const last = ICE_STOPS[ICE_STOPS.length - 1];
-  return [last.r / 255, last.g / 255, last.b / 255];
+  // 15%~100% → 반투명 회백색 → 불투명 순백
+  const t = (conc - 0.15) / 0.85;           // 0.0 ~ 1.0 정규화
+  const alpha = Math.round((0.4 + t * 0.6) * 255); // 102 ~ 255
+  const brightness = Math.round(200 + t * 55);      // 200 ~ 255
+  return [brightness, brightness, brightness, alpha];
+}
+
+// iceToRGB 호환 래퍼 (thickness/edge 모드 fallback용)
+function iceToRGB(conc) {
+  const [r, g, b] = naturalIceRGBA(Math.max(0, Math.min(1, conc)));
+  return [r / 255, g / 255, b / 255];
 }
 
 // 해빙 두께 색상 (Copernicus 팔레트: 남색→보라→연보라→흰)
@@ -471,7 +462,8 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
         color: 0x0d4f8b,
         specular: 0x4a8aaa,
         shininess: 80,
-        transparent: false,
+        transparent: true,
+        depthWrite: false,
         opacity: 1.0,
         vertexColors: true,
       }),
@@ -964,36 +956,31 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
         const vLon = shipLon + (localX * 1.5) / (metersPerDeg * cosLat);
         const vLat = shipLat - (localZ * 1.5) / metersPerDeg;
 
-        let rgb;
         const conc = sampleIceConcentrationFn ? sampleIceConcentrationFn(vLon, vLat) : 0;
-        if (colorMode === 'ice') {
-          rgb = iceToRGB(conc || 0);
-        } else if (colorMode === 'thickness') {
-          // 해빙 두께 추정: 농도 기반 (실데이터 없을 때 농도×5m으로 근사)
-          const thickM = (conc || 0) * 5.0;
-          rgb = thicknessToRGB(thickM);
-        } else if (colorMode === 'edge') {
-          rgb = edgeToRGB(conc || 0);
-        } else {
-          rgb = depthToRGB(estimateBathymetry(vLon, vLat));
-        }
-
-        // 0~10% 농도는 투명(바다 노출), 그 위는 농도에 비례한 알파
-        let alpha = 255;
-        if (colorMode === 'ice') {
-          const c = conc || 0;
-          if (c < 0.10) alpha = 0;
-          else if (c < 0.30) alpha = Math.round(76);
-          else if (c < 0.50) alpha = Math.round(128);
-          else if (c < 0.70) alpha = Math.round(178);
-          else if (c < 0.85) alpha = Math.round(216);
-          else alpha = Math.round(242);
-        }
         const idx = (ty * ICE_TEX_SIZE + tx) * 4;
-        data[idx]     = Math.round(rgb[0] * 255);
-        data[idx + 1] = Math.round(rgb[1] * 255);
-        data[idx + 2] = Math.round(rgb[2] * 255);
-        data[idx + 3] = alpha;
+
+        if (colorMode === 'ice') {
+          // 자연색 모드: naturalIceRGBA가 RGBA 직접 반환
+          const [r, g, b, a] = naturalIceRGBA(conc || 0);
+          data[idx]     = r;
+          data[idx + 1] = g;
+          data[idx + 2] = b;
+          data[idx + 3] = a;
+        } else {
+          let rgb;
+          if (colorMode === 'thickness') {
+            const thickM = (conc || 0) * 5.0;
+            rgb = thicknessToRGB(thickM);
+          } else if (colorMode === 'edge') {
+            rgb = edgeToRGB(conc || 0);
+          } else {
+            rgb = depthToRGB(estimateBathymetry(vLon, vLat));
+          }
+          data[idx]     = Math.round(rgb[0] * 255);
+          data[idx + 1] = Math.round(rgb[1] * 255);
+          data[idx + 2] = Math.round(rgb[2] * 255);
+          data[idx + 3] = 255;
+        }
       }
     }
 
