@@ -1,4 +1,5 @@
 import React from 'react';
+import { PORTS, DEPARTURE_PORTS, ARRIVAL_PORTS } from '../../data/ports';
 import './Sidebar.css';
 
 const ROUTE_META = [
@@ -55,6 +56,10 @@ export default function Sidebar({
   onSatToggle,
   iceDataSource,
   onMonthChange,
+  departurePort,
+  arrivalPort,
+  onDepartureChange,
+  onArrivalChange,
 }) {
   const handleSelectAll = () => {
     const allVisible = ROUTE_META.every(r => routeVisibility[r.key]);
@@ -74,6 +79,47 @@ export default function Sidebar({
 
   return (
     <aside className="dt-sidebar">
+      {/* ── 출발항 / 도착항 ── */}
+      <section className="dt-sidebar__section">
+        <label className="dt-sidebar__label">출발항</label>
+        <select
+          className="dt-sidebar__select"
+          value={departurePort || 'BUSAN'}
+          onChange={e => onDepartureChange(e.target.value)}
+        >
+          {DEPARTURE_PORTS.map(key => (
+            <option key={key} value={key}>{PORTS[key].name} ({PORTS[key].nameEn})</option>
+          ))}
+        </select>
+
+        <label className="dt-sidebar__label" style={{ marginTop: 6 }}>도착항</label>
+        <select
+          className="dt-sidebar__select"
+          value={arrivalPort || 'ROTTERDAM'}
+          onChange={e => onArrivalChange(e.target.value)}
+        >
+          {ARRIVAL_PORTS.map(key => (
+            <option key={key} value={key}>{PORTS[key].name} ({PORTS[key].nameEn})</option>
+          ))}
+        </select>
+
+        <button
+          className="dt-sidebar__link"
+          style={{ display: 'block', marginTop: 6, fontSize: 10 }}
+          onClick={() => {
+            const dp = departurePort || 'BUSAN';
+            const ap = arrivalPort || 'ROTTERDAM';
+            if (DEPARTURE_PORTS.includes(ap) && ARRIVAL_PORTS.includes(dp)) {
+              onDepartureChange(ap);
+              onArrivalChange(dp);
+            }
+          }}
+          title="출발항과 도착항을 서로 바꿉니다"
+        >
+          &#x21C5; 출발/도착 반전
+        </button>
+      </section>
+
       {/* ── 목표 항로 ── */}
       <section className="dt-sidebar__section">
         <label className="dt-sidebar__label">목표 항로</label>

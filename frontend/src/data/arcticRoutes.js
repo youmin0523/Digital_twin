@@ -257,4 +257,22 @@ export const ROUTES = {
   ],
 };
 
+// 경로별 기본 운항 일수 (기준 항속 15노트)
+export const ROUTE_DAYS = {
+  NSR: 14,
+  NWP: 16,
+  TSR: 13,
+  SUEZ: 22,
+  CAPE: 30,
+};
+
+// 기본값 (하위 호환용)
 export const TOTAL_SECONDS = 14 * 86400;
+
+/**
+ * 경로 키에 따른 총 시뮬레이션 시간(초) 반환
+ */
+export function getTotalSeconds(routeKey) {
+  const days = ROUTE_DAYS[routeKey] || 14;
+  return days * 86400;
+}

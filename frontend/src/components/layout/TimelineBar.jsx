@@ -22,14 +22,18 @@ export default function TimelineBar({
   timelineDay,
   onTimelineChange,
   currentRouteKey,
+  departureName,
+  arrivalName,
 }) {
   const totalDays = ROUTE_DAYS[currentRouteKey] || 14;
   const routeLabel = ROUTE_LABELS[currentRouteKey] || '북극항로';
   const pct = Math.min(100, (simProgress || 0) * 100);
+  const depName = departureName || '부산';
+  const arrName = arrivalName || '로테르담';
 
   return (
     <div className="timeline-bar">
-      <span className="timeline-bar__port">부산</span>
+      <span className="timeline-bar__port">{depName}</span>
       <div className="timeline-bar__track">
         <div className="timeline-bar__fill" style={{ width: pct + '%' }} />
         <div className="timeline-bar__cursor" style={{ left: pct + '%' }} />
@@ -37,16 +41,16 @@ export default function TimelineBar({
           type="range"
           className="timeline-bar__slider"
           min="0"
-          max="14"
+          max={totalDays}
           step="0.1"
           value={timelineDay}
           onChange={e => onTimelineChange(e.target.value)}
         />
       </div>
-      <span className="timeline-bar__port">로테르담</span>
+      <span className="timeline-bar__port">{arrName}</span>
       <span className="timeline-bar__day">Day {Math.floor(timelineDay)} / {totalDays}</span>
       <span className="timeline-bar__summary">
-        부산 → {routeLabel} → 로테르담 | {totalDays}일 운항
+        {depName} → {routeLabel} → {arrName} | {totalDays}일 운항
       </span>
     </div>
   );

@@ -16,6 +16,8 @@ export default function Minimap({
   heading,
   waypoints,
   onOpenTeleport,
+  departurePort,
+  arrivalPort,
 }) {
   const canvasRef = useRef(null);
   const [blink, setBlink] = useState(true);
@@ -114,18 +116,22 @@ export default function Minimap({
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // departure dot (Busan)
-    if (35.1 >= LAT_MIN) {
-      const p = latLonToMM(35.1, 129.0);
+    // departure dot
+    const depLat = departurePort?.lat ?? 35.1;
+    const depLon = departurePort?.lon ?? 129.0;
+    if (depLat >= LAT_MIN) {
+      const p = latLonToMM(depLat, depLon);
       ctx.beginPath();
       ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
       ctx.fillStyle = '#22c55e';
       ctx.fill();
     }
 
-    // arrival dot (Rotterdam)
-    if (51.9 >= LAT_MIN) {
-      const p = latLonToMM(51.9, 4.5);
+    // arrival dot
+    const arrLat = arrivalPort?.lat ?? 51.9;
+    const arrLon = arrivalPort?.lon ?? 4.5;
+    if (arrLat >= LAT_MIN) {
+      const p = latLonToMM(arrLat, arrLon);
       ctx.beginPath();
       ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
       ctx.fillStyle = '#60a5fa';

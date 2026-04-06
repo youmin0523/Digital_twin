@@ -28,6 +28,11 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen, Request
 
+try:
+    from copernicus_wave_fallback import fill_wave_heights as _cop_fill_waves
+except ImportError:
+    _cop_fill_waves = None
+
 
 def _ssl_context() -> ssl.SSLContext:
     """Return an SSL context using certifi CA bundle if available."""
@@ -438,6 +443,13 @@ def fetch_route_weather(route_key: str, waypoints: list[dict], dry_run: bool = F
             "visibility_km": vis,
         })
 
+    # Open-Meteo 소스 태깅 + Copernicus Arctic wave fallback
+    for wp in wp_results:
+        if wp["wave_height_m"] is not None:
+            wp["wave_source"] = "open-meteo"
+    if _cop_fill_waves is not None:
+        wp_results = _cop_fill_waves(wp_results)
+
     # 요약 출력
     summary = compute_route_summary(wp_results)
     print(f"    max_wave={summary['max_wave_height_m']}m  "
@@ -539,6 +551,12 @@ def run(dry_run: bool = False) -> int:
         "routes": routes,
         "route_summary": global_summary,  # 하위호환
     }
+
+    output["copernicus_wave_fallback"] = any(
+        wp.get("wave_source") == "copernicus"
+        for rd in routes.values()
+        for wp in rd.get("waypoints", [])
+    )
 
     print(f"\n[3/3] Saving: {out_file}")
     if not dry_run:

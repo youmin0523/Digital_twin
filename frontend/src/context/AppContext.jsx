@@ -13,6 +13,14 @@ const initialState = {
   // Route
   currentRouteKey: 'NSR',
 
+  // Ports (dynamic departure/arrival)
+  departurePort: 'BUSAN',
+  arrivalPort: 'ROTTERDAM',
+
+  // Dynamic waypoints (null = use default ROUTES[key])
+  generatedWaypoints: null,
+  isRerouting: false,
+
   // Camera
   currentMode: 'SATELLITE',
   prevMode: 'SATELLITE',
@@ -98,6 +106,18 @@ function reducer(state, action) {
     case 'SET_ROUTE':
       return { ...state, currentRouteKey: action.payload };
 
+    case 'SET_DEPARTURE_PORT':
+      return { ...state, departurePort: action.payload };
+
+    case 'SET_ARRIVAL_PORT':
+      return { ...state, arrivalPort: action.payload };
+
+    case 'SET_GENERATED_WAYPOINTS':
+      return { ...state, generatedWaypoints: action.payload };
+
+    case 'SET_REROUTING':
+      return { ...state, isRerouting: action.payload };
+
     case 'SET_MODE':
       return {
         ...state,
@@ -160,7 +180,12 @@ function reducer(state, action) {
       return { ...state, timelineDay: action.payload };
 
     case 'RESET':
-      return { ...initialState };
+      return {
+        ...initialState,
+        departurePort: state.departurePort,
+        arrivalPort: state.arrivalPort,
+        currentRouteKey: state.currentRouteKey,
+      };
 
     default:
       return state;
