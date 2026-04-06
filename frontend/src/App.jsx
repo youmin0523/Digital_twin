@@ -356,22 +356,22 @@ function AppInner() {
           cesiumRef.current.updateShipEntity(pos, hdgDeg, shipSpecsRef.current);
         }
 
-        // ── Cesium 카메라 추적 (SATELLITE 모드 전용 — WIDE는 북극 고정) ──
+        // ── Cesium 카메라 추적 (SATELLITE/WIDE 모드 전용) ──
         const viewer = viewerRef.current;
         const curMode = currentModeRef.current;
         if (
           viewer && !viewer.isDestroyed() &&
           !userCameraInteracting.current &&
-          curMode === 'SATELLITE'
+          (curMode === 'SATELLITE' || curMode === 'WIDE')
         ) {
           try {
             const camPos = viewer.camera.positionCartographic;
-            const currentAlt = camPos ? camPos.height : 120000;
+            const currentAlt = camPos ? camPos.height : (curMode === 'WIDE' ? 3000000 : 120000);
             viewer.camera.setView({
               destination: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, currentAlt),
               orientation: {
-                heading: 0,
-                pitch: Cesium.Math.toRadians(-90),
+                heading: viewer.camera.heading,
+                pitch: viewer.camera.pitch,
                 roll: 0,
               },
             });
@@ -618,7 +618,21 @@ function AppInner() {
   const handleViewerReady = useCallback((viewer) => {
     viewerRef.current = viewer;
     setCesiumViewerState(viewer);
-    // 초기 북극 탑다운 뷰 유지 (CesiumGlobe에서 이미 flyTo 수행)
+    // 초기 지구본 뷰(13,000km) 대신 선박 위치(부산)로 이동
+    const { lon, lat } = shipStateRef.current;
+    setTimeout(() => {
+      if (viewer && !viewer.isDestroyed()) {
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
+          orientation: {
+            heading: 0,
+            pitch: Cesium.Math.toRadians(-80),
+            roll: 0,
+          },
+          duration: 2.0,
+        });
+      }
+    }, 2500);
   }, []);
 
   // 시뮬레이션 제어
@@ -652,29 +666,17 @@ function AppInner() {
 
         const viewer = viewerRef.current;
         if (viewer && !viewer.isDestroyed()) {
-          if (mode === 'WIDE') {
-            // ── 광역 항로: 북극 중심 탑다운 (polar projection) ──
-            viewer.camera.flyTo({
-              destination: Cesium.Cartesian3.fromDegrees(60, 90, 18000000),
-              orientation: {
-                heading: 0,
-                pitch: Cesium.Math.toRadians(-90),
-                roll: 0,
-              },
-              duration: 1.0,
-            });
-          } else {
-            // ── 위성 조감: 선박 위치 위에서 직하 시점 ──
-            viewer.camera.flyTo({
-              destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
-              orientation: {
-                heading: 0,
-                pitch: Cesium.Math.toRadians(-90),
-                roll: 0,
-              },
-              duration: 1.0,
-            });
-          }
+          const alt = mode === 'WIDE' ? 3000000 : 120000;
+          const pitch = mode === 'WIDE' ? -60 : -80;
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
+            orientation: {
+              heading: 0,
+              pitch: Cesium.Math.toRadians(pitch),
+              roll: 0,
+            },
+            duration: 1.0,
+          });
         }
       }
     },
@@ -793,13 +795,21 @@ function AppInner() {
           if (isLive) {
             try {
               const bergData = await fetchIcebergs();
-              bergList = (bergData?.bergs || []).map((b) => ({
-                id: b.id,
-                lon: b.lon,
-                lat: b.lat,
-                length_m: b.length_m || 5000,
-                width_m: b.width_m || 2000,
-              }));
+              // 업데이트 시간 저장 (클릭 팝업에서 사용)
+              if (bergData?.updated_at && viewer) {
+                viewer._bergUpdatedAt = bergData.updated_at;
+              }
+              bergList = (bergData?.bergs || [])
+                .filter((b) => b.lat >= 0) // 북반구만
+                .map((b) => ({
+                  id: b.id,
+                  lon: b.lon,
+                  lat: b.lat,
+                  source: b.source || '',
+                  period: b.period || '',
+                  length_m: b.length_m || 5000,
+                  width_m: b.width_m || 2000,
+                }));
             } catch (e) {
               console.warn('[BergData] fetch 실패:', e.message);
             }
@@ -820,35 +830,78 @@ function AppInner() {
                 id: null,
                 lon: c.lon,
                 lat: c.lat,
+                source: 'archive',
                 length_m: 10000 + c.weight * 20000,
                 width_m: 5000 + c.weight * 10000,
               }));
           }
 
+          // ── PointPrimitiveCollection으로 렌더링 (700+ 빙산 성능 최적화) ──
+          // 기존 컬렉션 제거
+          if (viewer._bergPointCollection) {
+            viewer.scene.primitives.remove(viewer._bergPointCollection);
+            viewer._bergPointCollection = null;
+          }
+          const pointCollection = viewer.scene.primitives.add(
+            new Cesium.PointPrimitiveCollection()
+          );
+          viewer._bergPointCollection = pointCollection;
+
           for (const b of bergList) {
-            const ent = viewer.entities.add({
+            const isCopernicus = (b.source || '').includes('Copernicus');
+            const color = isCopernicus
+              ? Cesium.Color.ORANGE
+              : Cesium.Color.YELLOW;
+
+            pointCollection.add({
               position: Cesium.Cartesian3.fromDegrees(b.lon, b.lat, 0),
-              point: {
-                pixelSize: 10,
-                color: Cesium.Color.YELLOW,
-                outlineColor: Cesium.Color.ORANGERED,
-                outlineWidth: 2,
-              },
-              ...(b.id
-                ? {
-                    label: {
-                      text: b.id,
-                      font: '11px sans-serif',
-                      fillColor: Cesium.Color.YELLOW,
-                      outlineColor: Cesium.Color.BLACK,
-                      outlineWidth: 2,
-                      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                      pixelOffset: new Cesium.Cartesian2(0, -14),
-                    },
-                  }
-                : {}),
+              pixelSize: isCopernicus ? 7 : 10,
+              color,
+              outlineColor: isCopernicus
+                ? Cesium.Color.DARKORANGE
+                : Cesium.Color.ORANGERED,
+              outlineWidth: 2,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              id: b, // 클릭 시 데이터 접근용
             });
-            bergCesiumEntitiesRef.current.push(ent);
+
+            // NIC/IIP 빙산만 라벨 (Copernicus 723개 라벨은 성능 이슈)
+            if (b.id && !isCopernicus) {
+              const ent = viewer.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(b.lon, b.lat, 0),
+                label: {
+                  text: b.id,
+                  font: '11px sans-serif',
+                  fillColor: Cesium.Color.YELLOW,
+                  outlineColor: Cesium.Color.BLACK,
+                  outlineWidth: 2,
+                  style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                  pixelOffset: new Cesium.Cartesian2(0, -14),
+                  scaleByDistance: new Cesium.NearFarScalar(1e5, 1, 5e6, 0),
+                },
+              });
+              bergCesiumEntitiesRef.current.push(ent);
+            }
+          }
+
+          // 빙산 클릭 핸들러 (source/period 팝업)
+          if (!viewer._bergClickHandler) {
+            const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+            handler.setInputAction((click) => {
+              const picked = viewer.scene.pick(click.position);
+              if (picked?.primitive instanceof Cesium.PointPrimitive && picked.primitive.id) {
+                const b = picked.primitive.id;
+                const isCop = (b.source || '').includes('Copernicus');
+                const lines = [`🧊 ${b.id || 'Iceberg'}`];
+                lines.push(`📍 ${b.lat?.toFixed(4)}°N, ${b.lon?.toFixed(4)}°E`);
+                lines.push(`📡 ${b.source}`);
+                if (b.period) lines.push(`📅 ${b.period}`);
+                if (b.length_m) lines.push(`📏 ${(b.length_m/1000).toFixed(1)}km × ${(b.width_m/1000).toFixed(1)}km`);
+                if (viewer._bergUpdatedAt) lines.push(`🔄 Updated: ${viewer._bergUpdatedAt}`);
+                alert(lines.join('\n'));
+              }
+            }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+            viewer._bergClickHandler = handler;
           }
 
           // ThreeOverlay용: 항상 북극(lat>60) 고농도(≥0.8) 셀 사용 (NIC 데이터는 남반구라 불가)
@@ -1273,7 +1326,7 @@ function AppInner() {
             destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
             orientation: {
               heading: 0,
-              pitch: Cesium.Math.toRadians(-90),
+              pitch: Cesium.Math.toRadians(-80),
               roll: 0,
             },
             duration: 1.5,
@@ -1299,30 +1352,16 @@ function AppInner() {
   const handleRecenter = useCallback(() => {
     const viewer = viewerRef.current;
     if (viewer) {
-      const curMode = currentModeRef.current;
-      if (curMode === 'WIDE') {
-        // WIDE 모드: 북극 중심으로 리센터
-        viewer.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(60, 90, 18000000),
-          orientation: {
-            heading: 0,
-            pitch: Cesium.Math.toRadians(-90),
-            roll: 0,
-          },
-          duration: 1.0,
-        });
-      } else {
-        const { lon, lat } = state.shipState;
-        viewer.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
-          orientation: {
-            heading: 0,
-            pitch: Cesium.Math.toRadians(-90),
-            roll: 0,
-          },
-          duration: 1.0,
-        });
-      }
+      const { lon, lat } = state.shipState;
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
+        orientation: {
+          heading: 0,
+          pitch: Cesium.Math.toRadians(-80),
+          roll: 0,
+        },
+        duration: 1.0,
+      });
     }
   }, [state.shipState]);
 

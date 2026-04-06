@@ -1,6 +1,9 @@
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const { execFile } = require('child_process');
+const schedule = require('node-schedule');
 
 const iceRouter = require('./routes/ice');
 const icebergRouter = require('./routes/iceberg');
@@ -39,6 +42,29 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ── Iceberg pipeline scheduler ──────────────────────────────────
+const SCRIPT_PATH = path.join(__dirname, '..', 'scripts', 'update_icebergs.py');
+
+function runIcebergPipeline() {
+  console.log('[Scheduler] Running iceberg pipeline...');
+  const env = {
+    ...process.env,
+    COPERNICUSMARINE_SERVICE_USERNAME: process.env.COPERNICUS_MARINE_USER,
+    COPERNICUSMARINE_SERVICE_PASSWORD: process.env.COPERNICUS_MARINE_PASSWORD,
+  };
+  execFile('python', [SCRIPT_PATH], { env, timeout: 300000 }, (err, stdout, stderr) => {
+    if (err) console.error('[Scheduler] Pipeline error:', err.message);
+    if (stdout) console.log('[Scheduler]', stdout.trim());
+    if (stderr) console.error('[Scheduler] stderr:', stderr.trim());
+  });
+}
+
+// 매일 새벽 3시 UTC
+schedule.scheduleJob('0 3 * * *', runIcebergPipeline);
+// 서버 시작 30초 후 1회 실행
+setTimeout(runIcebergPipeline, 30000);
+
 app.listen(PORT, () => {
   console.log(`[Server] Arctic Digital Twin API running on http://localhost:${PORT}`);
+  console.log(`[Scheduler] Iceberg pipeline scheduled at 03:00 UTC daily`);
 });

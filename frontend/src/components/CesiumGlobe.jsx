@@ -419,14 +419,9 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
 
         drawRoute(viewer, currentRouteKey);
 
-        // ── 초기 카메라: 북극 중심 탑다운 (polar projection 느낌) ──
         viewer.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(60, 90, 18000000),
-          orientation: {
-            heading: 0,
-            pitch: Cesium.Math.toRadians(-90),
-            roll: 0,
-          },
+          destination: Cesium.Cartesian3.fromDegrees(129.04, 35.1, 13000000),
+          orientation: { heading: 0, pitch: Cesium.Math.toRadians(-50), roll: 0 },
           duration: 2,
         });
 
