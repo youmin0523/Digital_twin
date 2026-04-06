@@ -16,6 +16,7 @@ import LegendContainer from './components/hud/LegendContainer';
 import TeleportOverlay from './components/hud/TeleportOverlay';
 // //* [Modified Code] 우측 하단 레이더 UI 컴포넌트 임포트
 import Minimap from './components/hud/Minimap';
+import WeatherHud from './components/hud/WeatherHud';
 import Header from './components/layout/Header';
 import Sidebar from './components/layout/Sidebar';
 import SimulationControls from './components/layout/SimulationControls';
@@ -78,6 +79,7 @@ function AppInner() {
   const bergCesiumEntitiesRef = useRef([]); // Cesium 빙산 엔티티 목록
   const userCameraInteracting = useRef(false); // 사용자 카메라 조작 중 여부
   const cameraInteractTimer = useRef(null);  // 조작 후 추적 재개 딜레이
+  const [mouseGlobePos, setMouseGlobePos] = useState(null); // 마우스 위치 (출항 전 기상 조회용)
   const shipStateRef = useRef(state.shipState);
   const oceanOverlayModeRef = useRef('none'); // 모든 WMS 레이어 기본 OFF
   const cesiumIceLayerRef = useRef(null); // Cesium 캔버스 해빙 레이어 (gibsIce)
@@ -615,6 +617,26 @@ function AppInner() {
     handler.setInputAction(startInteract, Cesium.ScreenSpaceEventType.RIGHT_DOWN);
     handler.setInputAction(endInteract, Cesium.ScreenSpaceEventType.RIGHT_UP);
     handler.setInputAction(() => { startInteract(); endInteract(); }, Cesium.ScreenSpaceEventType.WHEEL);
+
+    // 마우스 위치 → 위경도 변환 (출항 전 기상 HUD용, 200ms 스로틀)
+    let lastMouseUpdate = 0;
+    handler.setInputAction((movement) => {
+      if (isSimulatingRef.current) return;
+      const now = Date.now();
+      if (now - lastMouseUpdate < 200) return;
+      lastMouseUpdate = now;
+      const cart = cesiumViewerState.camera.pickEllipsoid(
+        movement.endPosition, cesiumViewerState.scene.globe.ellipsoid,
+      );
+      if (cart) {
+        const carto = Cesium.Cartographic.fromCartesian(cart);
+        setMouseGlobePos({
+          lat: Cesium.Math.toDegrees(carto.latitude),
+          lon: Cesium.Math.toDegrees(carto.longitude),
+        });
+      }
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
     handleMonthChange('live');
     return () => {
       handler.destroy();
@@ -1245,11 +1267,16 @@ function AppInner() {
         // Step 3d
         latitude: formData.latitude ?? worstLat,
         commsType: formData.commsType || 'GEO',
-        // Step 4 — 실시간 기상 데이터 우선, 없으면 수동 입력값 사용
+        // Step 4 — 항로별 실시간 기상 데이터 우선, 없으면 수동 입력값 사용
         shipType: formData.shipType || 'General',
-        waveHeight: formData.waveHeight ?? weatherData?.route_summary?.max_wave_height_m ?? 0.0,
-        visibilityKm: formData.visibilityKm ?? weatherData?.route_summary?.min_visibility_km ?? 10.0,
+        waveHeight: formData.waveHeight
+          ?? weatherData?.routes?.[state.currentRouteKey]?.route_summary?.max_wave_height_m
+          ?? weatherData?.route_summary?.max_wave_height_m ?? 0.0,
+        visibilityKm: formData.visibilityKm
+          ?? weatherData?.routes?.[state.currentRouteKey]?.route_summary?.min_visibility_km
+          ?? weatherData?.route_summary?.min_visibility_km ?? 10.0,
         isTempBelowMinus10: formData.isColdRoute
+          ?? weatherData?.routes?.[state.currentRouteKey]?.route_summary?.is_temp_below_minus_10
           ?? weatherData?.route_summary?.is_temp_below_minus_10
           ?? false,
         iceClass: state.shipSpecs.iceClass || 'PC2',
@@ -1283,7 +1310,7 @@ function AppInner() {
         reason: finalReason,
       };
     },
-    [state.shipState, state.shipSpecs, state.currentRouteKey, showToast],
+    [state.shipState, state.shipSpecs, state.currentRouteKey, weatherData, showToast],
   );
 
   // 모달 확인 — 평가 실행 + 항로 불일치 감지
@@ -1479,6 +1506,14 @@ function AppInner() {
           <div id="polar-night-ind">극야 구간</div>
           <div id="banner" />
           <div id="gebco-depth-popup" />
+
+          {/* 해역 기상 HUD — 출항 전: 마우스 위치 / 출항 후: 선박 위치 */}
+          <WeatherHud
+            shipPos={state.isSimulating || state.simProgress > 0 ? state.shipState : (mouseGlobePos || state.shipState)}
+            weatherData={weatherData}
+            currentRouteKey={state.currentRouteKey}
+            isMouseMode={!state.isSimulating && state.simProgress === 0 && !!mouseGlobePos}
+          />
 
           {/* //* [Modified Code] 레이더(미니맵)을 메인 뷰포트 영역 내부 우측 하단에 부착하여 패널에 가려지지 않게 함 */}
           <Minimap

@@ -1,0 +1,13 @@
+2026-04-06 17:09:06,627 [INFO] ============================================================
+2026-04-06 17:09:06,628 [INFO] Arctic Iceberg Pipeline — Starting
+2026-04-06 17:09:06,633 [INFO] ============================================================
+2026-04-06 08:09:51,552 [INFO] Downloading cmems_obs-si_arc_phy_berg-point-mos-rcmln_nrt_l3_P1D_irr ...
+2026-04-06 08:09:51,553 [WARNING] 'force_download' has been deprecated.
+2026-04-06 08:09:56,230 [WARNING]   → Download failed for cmems_obs-si_arc_phy_berg-point-mos-rcmln_nrt_l3_P1D_irr: Learn how to recover your credentials at: https://help.marine.copernicus.eu/en/articles/4444552-i-forgot-my-username-or-my-password-what-should-i-do
+2026-04-06 08:09:56,232 [INFO] Downloading cmems_sat-si_arc_berg-point_nrt_ew_d ...
+2026-04-06 08:09:56,233 [WARNING] 'force_download' has been deprecated.
+2026-04-06 08:10:00,305 [WARNING]   → Download failed for cmems_sat-si_arc_berg-point_nrt_ew_d: Learn how to recover your credentials at: https://help.marine.copernicus.eu/en/articles/4444552-i-forgot-my-username-or-my-password-what-should-i-do
+2026-04-06 08:10:00,310 [INFO] Downloading cmems_sat-si_arc_berg-point_nrt_iw_d ...
+2026-04-06 08:10:00,311 [WARNING] 'force_download' has been deprecated.
+2026-04-06 08:10:04,711 [WARNING]   → Download failed for cmems_sat-si_arc_berg-point_nrt_iw_d: Learn how to recover your credentials at: https://help.marine.copernicus.eu/en/articles/4444552-i-forgot-my-username-or-my-password-what-should-i-do
+2026-04-06 08:10:04,716 [WARNING] No icebergs downloaded — keeping existing JSON file

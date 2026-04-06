@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
 """
-MET Norway Arctic Weather Fetcher
-==================================
-NSR(북극항로) 핵심 7개 구간의 실시간 기상 데이터를 수집합니다.
+Open-Meteo Global Maritime Weather Fetcher
+============================================
+5개 항로(NSR, NWP, TSR, SUEZ, CAPE)의 실시간 기상 데이터를 수집합니다.
 
-데이터 소스: MET Norway API (노르웨이 기상청, CC BY 4.0)
-  - Ocean Forecast API : 파고 (sea_surface_wave_significant_height)
-  - Location Forecast  : 기온 (air_temperature), 안개율 -> 가시거리 환산
-
-  가시거리 환산: visibility_km = max(0.1, 20.0 * (1 - fog_area_fraction))
-    fog=0.0 -> 20.0km | fog=0.5 -> 10.0km | fog=0.9 -> 2.0km
+데이터 소스: Open-Meteo API (무료, API 키 불필요)
+  - Marine API      : 유의파고 (wave_height, m)
+  - Forecast API    : 기온 (temperature_2m, °C), 가시거리 (visibility, m→km)
 
 사용법:
   python weather_fetcher.py              # 최신 데이터 수집
   python weather_fetcher.py --dry-run    # API 호출 없이 설정만 확인
-  python weather_fetcher.py --schedule   # 매일 03:30 UTC 자동 실행
+  python weather_fetcher.py --schedule   # 6시간마다 자동 실행
 
-출력: ../../data/arctic_weather_latest.json
+출력: ../../data/weather_latest.json
 """
 
 from __future__ import annotations
@@ -47,28 +44,294 @@ SSL_CTX = _ssl_context()
 # --- Configuration -----------------------------------------------------------
 OUTPUT_DIR = Path(__file__).parent.parent.parent / "data"
 
-WAYPOINTS: list[dict] = [
-    {"name": "Kola Bay",           "lat": 69.0,  "lon":  33.0},
-    {"name": "Novaya Zemlya",      "lat": 70.5,  "lon":  57.5},
-    {"name": "Kara Sea",           "lat": 73.5,  "lon":  80.0},
-    {"name": "Vilkitsky Strait",   "lat": 77.7,  "lon": 103.7},  # critical
-    {"name": "Laptev Sea",         "lat": 75.5,  "lon": 127.0},
-    {"name": "East Siberian Sea",  "lat": 73.5,  "lon": 162.0},
-    {"name": "Bering Strait",      "lat": 66.5,  "lon":-169.5},
-]
+MARINE_API = "https://marine-api.open-meteo.com/v1/marine"
+FORECAST_API = "https://api.open-meteo.com/v1/forecast"
+REQUEST_TIMEOUT = 30  # seconds
+CHUNK_SIZE = 50       # max waypoints per batch request
 
-OCEAN_API_BASE    = "https://api.met.no/weatherapi/oceanforecast/2.0/complete"
-FORECAST_API_BASE = "https://api.met.no/weatherapi/locationforecast/2.0/complete"
-USER_AGENT        = "ArcticDigitalTwin/1.0"
-REQUEST_TIMEOUT   = 15  # seconds
+DAILY_CALL_LIMIT = 9_000  # Open-Meteo 일 10,000회 제한 → 안전 마진 1,000 확보
+USAGE_FILE = OUTPUT_DIR / "weather_api_usage.json"
+
+# --- 5개 항로 웨이포인트 (arcticRoutes.js 기준) --------------------------------
+
+ROUTE_WAYPOINTS: dict[str, list[dict]] = {
+    "NSR": [
+        {"name": "부산항", "lat": 35.1, "lon": 129.04},
+        {"name": "대한해협 우회", "lat": 35.8, "lon": 130.8},
+        {"name": "동해 중앙", "lat": 37.5, "lon": 132.5},
+        {"name": "홋카이도 서해안", "lat": 43.0, "lon": 138.0},
+        {"name": "소야 해협 접근", "lat": 44.5, "lon": 140.5},
+        {"name": "소야 해협", "lat": 45.4, "lon": 141.2},
+        {"name": "소야 해협 통과", "lat": 45.65, "lon": 141.93},
+        {"name": "소야 동방 외해", "lat": 46.0, "lon": 144.0},
+        {"name": "오호츠크해", "lat": 47.0, "lon": 145.5},
+        {"name": "부솔 해협 접근", "lat": 48.0, "lon": 148.0},
+        {"name": "부솔 해협 (쿠릴 패주)", "lat": 46.5, "lon": 151.3},
+        {"name": "북태평양 진입", "lat": 46.0, "lon": 154.0},
+        {"name": "캄차카 반도 남방 외해", "lat": 48.5, "lon": 160.0},
+        {"name": "캄차카 동해안 남부", "lat": 51.5, "lon": 163.5},
+        {"name": "캄차카 동해안 중부", "lat": 53.5, "lon": 165.0},
+        {"name": "캄차카 동해안 북부", "lat": 56.0, "lon": 166.0},
+        {"name": "베링해 진입", "lat": 58.5, "lon": 167.0},
+        {"name": "베링해 중부", "lat": 60.0, "lon": 170.0},
+        {"name": "아나디르 만", "lat": 63.0, "lon": 175.0},
+        {"name": "날짜변경선", "lat": 64.5, "lon": 180.0},
+        {"name": "베링해협 접근", "lat": 65.0, "lon": -175.0},
+        {"name": "베링해협 서측", "lat": 65.5, "lon": -170.0},
+        {"name": "베링해협 통과", "lat": 66.5, "lon": -168.8},
+        {"name": "척치해 진입", "lat": 67.5, "lon": -168.0},
+        {"name": "척치해 외곽 북상", "lat": 70.5, "lon": -175.0},
+        {"name": "브랑겔 섬 서방 북상", "lat": 72.5, "lon": -179.5},
+        {"name": "브랑겔 섬 북방 통과", "lat": 72.8, "lon": 178.5},
+        {"name": "브랑겔 섬 완전 통과", "lat": 73.0, "lon": 175.0},
+        {"name": "동시베리아해 서진", "lat": 73.0, "lon": 168.0},
+        {"name": "동시베리아해 중부", "lat": 73.5, "lon": 160.0},
+        {"name": "뉴시베리아 제도 동방 외해", "lat": 73.5, "lon": 153.0},
+        {"name": "산니코프 해협 진입", "lat": 73.5, "lon": 148.5},
+        {"name": "산니코프 해협 통과", "lat": 73.8, "lon": 145.0},
+        {"name": "드미트리 랍테프 해협", "lat": 74.0, "lon": 142.0},
+        {"name": "랍테프해 진입", "lat": 74.5, "lon": 140.0},
+        {"name": "랍테프해 서부", "lat": 77.5, "lon": 130.0},
+        {"name": "타이미르 반도 우회", "lat": 77.5, "lon": 115.0},
+        {"name": "빌키츠키 접근", "lat": 77.8, "lon": 110.0},
+        {"name": "빌키츠키 통과", "lat": 77.92, "lon": 104.0},
+        {"name": "카라해 진입", "lat": 77.5, "lon": 98.0},
+        {"name": "카라해 중앙", "lat": 77.0, "lon": 80.0},
+        {"name": "노바야젬랴 섬 우회", "lat": 77.5, "lon": 69.0},
+        {"name": "바렌츠해 동부", "lat": 76.0, "lon": 60.0},
+        {"name": "바렌츠해 중앙", "lat": 73.0, "lon": 45.0},
+        {"name": "바렌츠해 서부", "lat": 73.5, "lon": 32.0},
+        {"name": "노스케이프 북방 외해", "lat": 73.0, "lon": 20.0},
+        {"name": "노르웨이해 북부", "lat": 72.0, "lon": 14.0},
+        {"name": "노르웨이해 중부", "lat": 69.0, "lon": 6.0},
+        {"name": "노르웨이해 남부", "lat": 64.0, "lon": 2.0},
+        {"name": "북해 입구", "lat": 60.0, "lon": 1.0},
+        {"name": "북해 중부", "lat": 57.0, "lon": 4.5},
+        {"name": "로테르담", "lat": 51.9, "lon": 4.5},
+    ],
+    "NWP": [
+        {"name": "부산항", "lat": 35.1, "lon": 129.04},
+        {"name": "대한해협 우회", "lat": 35.8, "lon": 130.8},
+        {"name": "홋카이도 외곽", "lat": 43.0, "lon": 138.0},
+        {"name": "소야 해협", "lat": 45.65, "lon": 141.93},
+        {"name": "소야 동방 외해", "lat": 46.0, "lon": 144.0},
+        {"name": "오호츠크해", "lat": 47.0, "lon": 145.5},
+        {"name": "부솔 해협 접근", "lat": 48.0, "lon": 148.0},
+        {"name": "부솔 해협", "lat": 46.5, "lon": 151.3},
+        {"name": "북태평양 진입", "lat": 46.0, "lon": 154.0},
+        {"name": "캄차카 반도 남방 외해", "lat": 48.5, "lon": 160.0},
+        {"name": "캄차카 동해안 남부", "lat": 51.5, "lon": 163.5},
+        {"name": "캄차카 동해안 중부", "lat": 53.5, "lon": 165.0},
+        {"name": "캄차카 동해안 북부", "lat": 56.0, "lon": 166.0},
+        {"name": "베링해 진입", "lat": 58.5, "lon": 167.0},
+        {"name": "날짜변경선", "lat": 64.5, "lon": 180.0},
+        {"name": "베링해 동부", "lat": 65.0, "lon": -173.0},
+        {"name": "베링해협 서측", "lat": 65.5, "lon": -170.0},
+        {"name": "베링해협 통과", "lat": 66.5, "lon": -168.8},
+        {"name": "척치-보퍼트", "lat": 69.0, "lon": -165.0},
+        {"name": "포인트배로 우회", "lat": 71.8, "lon": -156.0},
+        {"name": "보퍼트해 연안 우회", "lat": 72.0, "lon": -140.0},
+        {"name": "보퍼트해 북상", "lat": 73.5, "lon": -130.0},
+        {"name": "뱅크스 섬 북방 진입", "lat": 74.0, "lon": -124.5},
+        {"name": "맥클루어 해협 서부", "lat": 74.8, "lon": -119.0},
+        {"name": "맥클루어 해협 중앙", "lat": 75.0, "lon": -115.5},
+        {"name": "맥클루어 해협 동부", "lat": 74.8, "lon": -112.0},
+        {"name": "바이카운트멜빌 해협 서부", "lat": 74.7, "lon": -109.5},
+        {"name": "바이카운트멜빌 해협 중앙", "lat": 74.6, "lon": -106.0},
+        {"name": "바이카운트멜빌 해협 동부", "lat": 74.5, "lon": -102.5},
+        {"name": "배로우 해협 서부", "lat": 74.0, "lon": -97.0},
+        {"name": "배로우 해협 중앙", "lat": 74.0, "lon": -93.5},
+        {"name": "랭커스터 해협 서부", "lat": 74.0, "lon": -87.0},
+        {"name": "랭커스터 해협 중앙", "lat": 74.0, "lon": -84.0},
+        {"name": "배핀 만 입구", "lat": 73.3, "lon": -80.5},
+        {"name": "배핀 만 서부", "lat": 72.5, "lon": -75.0},
+        {"name": "배핀 만 내해", "lat": 70.0, "lon": -65.0},
+        {"name": "데이비스 해협", "lat": 65.0, "lon": -60.0},
+        {"name": "래브라도 해", "lat": 60.0, "lon": -50.0},
+        {"name": "대서양 중앙", "lat": 55.0, "lon": -30.0},
+        {"name": "영국 해협 서측", "lat": 50.0, "lon": -10.0},
+        {"name": "도버 해협", "lat": 51.0, "lon": 0.0},
+        {"name": "로테르담", "lat": 51.9, "lon": 4.5},
+    ],
+    "TSR": [
+        {"name": "부산항", "lat": 35.1, "lon": 129.04},
+        {"name": "대한해협 우회", "lat": 35.8, "lon": 130.8},
+        {"name": "소야 해협 통과", "lat": 45.65, "lon": 141.93},
+        {"name": "소야 동방 외해", "lat": 46.0, "lon": 144.0},
+        {"name": "오호츠크해", "lat": 47.0, "lon": 145.5},
+        {"name": "부솔 해협 접근", "lat": 48.0, "lon": 148.0},
+        {"name": "부솔 해협", "lat": 46.5, "lon": 151.3},
+        {"name": "북태평양 진입", "lat": 46.0, "lon": 154.0},
+        {"name": "캄차카 반도 남방 외해", "lat": 48.5, "lon": 160.0},
+        {"name": "캄차카 동해안 남부", "lat": 51.5, "lon": 163.5},
+        {"name": "캄차카 동해안 중부", "lat": 53.5, "lon": 165.0},
+        {"name": "캄차카 동해안 북부", "lat": 56.0, "lon": 166.0},
+        {"name": "베링해 진입", "lat": 58.5, "lon": 167.0},
+        {"name": "날짜변경선", "lat": 64.5, "lon": 180.0},
+        {"name": "베링해 동부", "lat": 65.0, "lon": -173.0},
+        {"name": "베링해협 서측", "lat": 65.5, "lon": -170.0},
+        {"name": "베링해협 통과", "lat": 66.5, "lon": -168.8},
+        {"name": "척치해 북방", "lat": 70.0, "lon": -168.0},
+        {"name": "북극해 심해", "lat": 80.0, "lon": 180.0},
+        {"name": "북극점 돌파", "lat": 89.9, "lon": 0.0},
+        {"name": "스발바르 북방", "lat": 80.0, "lon": 10.0},
+        {"name": "노르웨이해", "lat": 70.0, "lon": 10.0},
+        {"name": "북해", "lat": 62.0, "lon": 5.0},
+        {"name": "로테르담", "lat": 51.9, "lon": 4.5},
+    ],
+    "SUEZ": [
+        {"name": "부산항 출항", "lat": 35.10, "lon": 129.04},
+        {"name": "제주도 서방 통과", "lat": 33.50, "lon": 127.00},
+        {"name": "동중국해", "lat": 29.00, "lon": 124.00},
+        {"name": "대만 해협", "lat": 24.00, "lon": 121.50},
+        {"name": "루손 해협 서측 외해", "lat": 20.00, "lon": 118.00},
+        {"name": "남중국해 북부", "lat": 16.00, "lon": 114.00},
+        {"name": "남중국해 중부", "lat": 10.50, "lon": 110.00},
+        {"name": "남중국해 남부", "lat": 6.00, "lon": 107.50},
+        {"name": "말라카 해협 북단", "lat": 3.50, "lon": 105.50},
+        {"name": "말라카 해협 중앙", "lat": 1.80, "lon": 104.20},
+        {"name": "싱가포르 (말라카 해협 출구)", "lat": 1.30, "lon": 103.80},
+        {"name": "인도양 북서향", "lat": -1.00, "lon": 98.00},
+        {"name": "인도양 중앙부", "lat": 5.00, "lon": 90.00},
+        {"name": "스리랑카 남방 외해", "lat": 7.00, "lon": 80.00},
+        {"name": "아라비아해 동부", "lat": 10.00, "lon": 75.00},
+        {"name": "아라비아해 중앙", "lat": 12.00, "lon": 68.00},
+        {"name": "아라비아해 서부", "lat": 13.50, "lon": 62.00},
+        {"name": "아덴만 진입", "lat": 12.50, "lon": 55.00},
+        {"name": "아덴만 중앙", "lat": 12.00, "lon": 49.00},
+        {"name": "아덴만 서부 (예멘 외해)", "lat": 12.00, "lon": 45.50},
+        {"name": "바브엘만데브 해협 접근", "lat": 12.80, "lon": 44.00},
+        {"name": "바브엘만데브 해협 통과", "lat": 13.80, "lon": 43.00},
+        {"name": "홍해 남부", "lat": 15.50, "lon": 43.00},
+        {"name": "홍해 중앙", "lat": 18.50, "lon": 42.50},
+        {"name": "홍해 중부 북상", "lat": 21.50, "lon": 41.00},
+        {"name": "홍해 북부", "lat": 24.00, "lon": 38.50},
+        {"name": "홍해 최북단", "lat": 26.50, "lon": 36.80},
+        {"name": "수에즈만 남단", "lat": 28.50, "lon": 34.50},
+        {"name": "수에즈 운하 남단 (Suez)", "lat": 29.93, "lon": 32.55},
+        {"name": "그레이트 비터 호수", "lat": 30.42, "lon": 32.42},
+        {"name": "이스마일리아", "lat": 30.62, "lon": 32.27},
+        {"name": "수에즈 운하 북단 (Port Said)", "lat": 31.25, "lon": 32.33},
+        {"name": "지중해 진입 (동지중해)", "lat": 32.00, "lon": 32.50},
+        {"name": "동지중해 북부", "lat": 33.50, "lon": 30.00},
+        {"name": "크레타 섬 남방 통과", "lat": 34.80, "lon": 24.00},
+        {"name": "시칠리아 해협 접근", "lat": 35.50, "lon": 18.00},
+        {"name": "시칠리아 해협 통과", "lat": 37.00, "lon": 12.50},
+        {"name": "서지중해 동부", "lat": 38.00, "lon": 9.00},
+        {"name": "서지중해 중앙", "lat": 38.50, "lon": 4.50},
+        {"name": "알보란해", "lat": 37.00, "lon": -1.50},
+        {"name": "지브롤터 해협 통과", "lat": 35.90, "lon": -5.40},
+        {"name": "포르투갈 남서 외해", "lat": 38.50, "lon": -9.00},
+        {"name": "이베리아 반도 서안 북진", "lat": 43.50, "lon": -9.50},
+        {"name": "비스케이만 북동부", "lat": 47.00, "lon": -7.00},
+        {"name": "우에상 섬 (브르타뉴 외해)", "lat": 48.50, "lon": -5.50},
+        {"name": "영국 해협 서측", "lat": 50.00, "lon": -3.00},
+        {"name": "영국 해협 동측", "lat": 51.10, "lon": 1.50},
+        {"name": "로테르담 (목적항)", "lat": 51.90, "lon": 4.50},
+    ],
+    "CAPE": [
+        {"name": "부산항 출항", "lat": 35.10, "lon": 129.04},
+        {"name": "제주도 서방 통과", "lat": 33.50, "lon": 127.00},
+        {"name": "동중국해", "lat": 29.00, "lon": 124.00},
+        {"name": "대만 해협", "lat": 24.00, "lon": 121.50},
+        {"name": "루손 해협 서측 외해", "lat": 20.00, "lon": 118.00},
+        {"name": "남중국해 북부", "lat": 16.00, "lon": 114.00},
+        {"name": "남중국해 중부", "lat": 10.50, "lon": 110.00},
+        {"name": "남중국해 남부", "lat": 6.00, "lon": 107.50},
+        {"name": "말라카 해협 북단", "lat": 3.50, "lon": 105.50},
+        {"name": "말라카 해협 중앙", "lat": 1.80, "lon": 104.20},
+        {"name": "싱가포르 (말라카 해협 출구)", "lat": 1.30, "lon": 103.80},
+        {"name": "자바해 서측", "lat": -4.00, "lon": 107.00},
+        {"name": "순다 해협 통과 (자바-수마트라)", "lat": -6.20, "lon": 105.80},
+        {"name": "인도양 북동부 진입", "lat": -8.00, "lon": 103.00},
+        {"name": "인도양 북부 남하", "lat": -12.00, "lon": 97.00},
+        {"name": "인도양 중앙 서남향", "lat": -18.00, "lon": 90.00},
+        {"name": "인도양 중남부", "lat": -25.00, "lon": 80.00},
+        {"name": "인도양 남부", "lat": -29.00, "lon": 70.00},
+        {"name": "인도양 남서부 (마다가스카르 동방)", "lat": -33.00, "lon": 58.00},
+        {"name": "아굴하스 곶 동방 외해", "lat": -35.50, "lon": 40.00},
+        {"name": "희망봉 동방 접근", "lat": -36.00, "lon": 30.00},
+        {"name": "아굴하스 뱅크 통과", "lat": -35.50, "lon": 22.00},
+        {"name": "희망봉 (Cape of Good Hope)", "lat": -34.40, "lon": 18.50},
+        {"name": "케이프타운 북서방 통과", "lat": -33.00, "lon": 16.00},
+        {"name": "대서양 동부 남부 북상", "lat": -28.00, "lon": 12.00},
+        {"name": "나미비아 외해", "lat": -20.00, "lon": 8.00},
+        {"name": "앙골라 외해", "lat": -12.00, "lon": 5.00},
+        {"name": "콩고 외해", "lat": -4.00, "lon": 2.00},
+        {"name": "기니만 동부", "lat": 3.00, "lon": 0.00},
+        {"name": "기니만 북부", "lat": 8.00, "lon": -2.50},
+        {"name": "서아프리카 북상", "lat": 14.00, "lon": -8.00},
+        {"name": "서아프리카 서안", "lat": 21.00, "lon": -17.00},
+        {"name": "카나리아 제도 외해", "lat": 28.00, "lon": -18.00},
+        {"name": "모로코 서방 외해", "lat": 35.00, "lon": -15.50},
+        {"name": "포르투갈 남서 외해", "lat": 38.50, "lon": -10.50},
+        {"name": "이베리아 반도 서안 북진", "lat": 43.50, "lon": -9.50},
+        {"name": "비스케이만 북동부", "lat": 47.00, "lon": -7.00},
+        {"name": "우에상 섬 (브르타뉴 외해)", "lat": 48.50, "lon": -5.50},
+        {"name": "영국 해협 서측", "lat": 50.00, "lon": -3.00},
+        {"name": "영국 해협 동측", "lat": 51.10, "lon": 1.50},
+        {"name": "로테르담 (목적항)", "lat": 51.90, "lon": 4.50},
+    ],
+}
+
+
+# --- Daily API call counter --------------------------------------------------
+
+def _load_usage() -> dict:
+    """일일 API 호출 횟수 파일 로드. 날짜가 바뀌면 자동 리셋."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        with open(USAGE_FILE, "r", encoding="utf-8") as f:
+            usage = json.load(f)
+        if usage.get("date") != today:
+            return {"date": today, "calls": 0}
+        return usage
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"date": today, "calls": 0}
+
+
+def _save_usage(usage: dict) -> None:
+    """일일 API 호출 횟수 파일 저장."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    with open(USAGE_FILE, "w", encoding="utf-8") as f:
+        json.dump(usage, f)
+
+
+def _check_budget(needed: int) -> bool:
+    """needed 만큼의 API 호출이 일일 한도 내에서 가능한지 확인."""
+    usage = _load_usage()
+    remaining = DAILY_CALL_LIMIT - usage["calls"]
+    if needed > remaining:
+        print(f"  [LIMIT] 일일 API 호출 한도 도달: "
+              f"사용 {usage['calls']}/{DAILY_CALL_LIMIT}, 필요 {needed}, 잔여 {remaining}")
+        print(f"  [LIMIT] 이번 주기 건너뜀 — 기존 캐시 데이터 유지")
+        return False
+    return True
+
+
+def _record_calls(count: int) -> None:
+    """실제 수행한 API 호출 횟수를 기록."""
+    usage = _load_usage()
+    usage["calls"] += count
+    _save_usage(usage)
+    print(f"  [USAGE] 오늘 API 호출: {usage['calls']}/{DAILY_CALL_LIMIT}")
+
+
+def _estimate_calls() -> int:
+    """이번 실행에 필요한 예상 API 호출 횟수 계산."""
+    total = 0
+    for waypoints in ROUTE_WAYPOINTS.values():
+        n_chunks = (len(waypoints) + CHUNK_SIZE - 1) // CHUNK_SIZE
+        total += n_chunks * 2  # marine + forecast per chunk
+    return total
 
 
 # --- Helpers -----------------------------------------------------------------
 
-def _http_get(url: str) -> dict:
-    """HTTP GET with User-Agent header -> JSON dict (stdlib only)."""
+def _http_get(url: str) -> dict | list:
+    """HTTP GET -> parsed JSON (stdlib only)."""
     try:
-        req = Request(url, headers={"User-Agent": USER_AGENT})
+        req = Request(url, headers={"User-Agent": "ArcticDigitalTwin/2.0"})
         with urlopen(req, timeout=REQUEST_TIMEOUT, context=SSL_CTX) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except HTTPError as e:
@@ -77,124 +340,111 @@ def _http_get(url: str) -> dict:
         raise RuntimeError(f"URL Error: {e.reason}") from e
 
 
-def _find_current_entry(timeseries: list[dict]) -> dict:
-    """
-    MET Norway timeseries에서 현재 UTC 시각 이후 첫 항목을 반환.
-    형식: "2026-04-06T12:00:00Z"
-    """
-    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
-    for entry in timeseries:
-        if entry.get("time", "") >= now_str:
-            return entry
-    return timeseries[-1]  # fallback: last entry
+def _chunked(lst: list, n: int):
+    """Yield successive chunks of size n from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
 
 
-# --- API calls ---------------------------------------------------------------
+# --- Open-Meteo Batch API calls ---------------------------------------------
 
-def fetch_wave_height(lat: float, lon: float) -> float | None:
-    """MET Norway Ocean Forecast에서 유의파고(m) 조회."""
-    url = f"{OCEAN_API_BASE}?lat={lat}&lon={lon}"
+def fetch_marine_batch(waypoints: list[dict]) -> list[float | None]:
+    """Open-Meteo Marine API에서 유의파고(m)를 배치 조회."""
+    lats = ",".join(str(wp["lat"]) for wp in waypoints)
+    lons = ",".join(str(wp["lon"]) for wp in waypoints)
+    url = f"{MARINE_API}?latitude={lats}&longitude={lons}&current=wave_height"
+
     data = _http_get(url)
+    # 단일 좌표: dict 반환 / 다중 좌표: list 반환
+    if isinstance(data, dict):
+        data = [data]
 
-    timeseries = data.get("properties", {}).get("timeseries", [])
-    if not timeseries:
-        return None
+    results: list[float | None] = []
+    for entry in data:
+        val = entry.get("current", {}).get("wave_height")
+        results.append(round(float(val), 2) if val is not None else None)
 
-    entry = _find_current_entry(timeseries)
-    val = (
-        entry
-        .get("data", {})
-        .get("instant", {})
-        .get("details", {})
-        .get("sea_surface_wave_significant_height")
-    )
-    return round(float(val), 2) if val is not None else None
+    return results
 
 
-def fetch_forecast(lat: float, lon: float) -> tuple[float | None, float | None]:
-    """MET Norway Location Forecast에서 기온(°C), 가시거리(km) 조회."""
-    url = f"{FORECAST_API_BASE}?lat={lat}&lon={lon}"
+def fetch_forecast_batch(waypoints: list[dict]) -> list[tuple[float | None, float | None]]:
+    """Open-Meteo Forecast API에서 기온(°C)과 가시거리(km)를 배치 조회."""
+    lats = ",".join(str(wp["lat"]) for wp in waypoints)
+    lons = ",".join(str(wp["lon"]) for wp in waypoints)
+    url = f"{FORECAST_API}?latitude={lats}&longitude={lons}&current=temperature_2m,visibility"
+
     data = _http_get(url)
+    if isinstance(data, dict):
+        data = [data]
 
-    timeseries = data.get("properties", {}).get("timeseries", [])
-    if not timeseries:
-        return None, None
+    results: list[tuple[float | None, float | None]] = []
+    for entry in data:
+        current = entry.get("current", {})
+        temp_raw = current.get("temperature_2m")
+        vis_raw = current.get("visibility")
 
-    entry = _find_current_entry(timeseries)
-    details = entry.get("data", {}).get("instant", {}).get("details", {})
+        temp_c = round(float(temp_raw), 1) if temp_raw is not None else None
+        # Open-Meteo visibility: meters -> km
+        vis_km = round(float(vis_raw) / 1000.0, 2) if vis_raw is not None else None
 
-    temp_raw = details.get("air_temperature")
-    fog_raw  = details.get("fog_area_fraction")
+        results.append((temp_c, vis_km))
 
-    temp_c = round(float(temp_raw), 1) if temp_raw is not None else None
-
-    vis_km = None
-    if fog_raw is not None:
-        fog_fraction = float(fog_raw) / 100.0  # MET Norway: 0-100 percentage
-        vis_km = round(max(0.1, 20.0 * (1.0 - fog_fraction)), 2)
-
-    return temp_c, vis_km
+    return results
 
 
-# --- Main collection logic ---------------------------------------------------
+# --- Route-level processing --------------------------------------------------
 
-def fetch_all_waypoints(dry_run: bool = False) -> list[dict]:
-    """7개 기준점 순회하며 기상 데이터 수집."""
-    results = []
+def fetch_route_weather(route_key: str, waypoints: list[dict], dry_run: bool = False) -> dict:
+    """단일 항로의 전체 웨이포인트 기상 데이터 수집."""
+    print(f"\n  [{route_key}] {len(waypoints)} waypoints")
 
-    for wp in WAYPOINTS:
-        name = wp["name"]
-        lat  = wp["lat"]
-        lon  = wp["lon"]
+    if dry_run:
+        wp_results = [
+            {"name": wp["name"], "lat": wp["lat"], "lon": wp["lon"],
+             "wave_height_m": None, "temperature_c": None, "visibility_km": None}
+            for wp in waypoints
+        ]
+        return {"waypoints": wp_results, "route_summary": compute_route_summary(wp_results)}
 
-        print(f"  [{name}] lat={lat}, lon={lon} ...", end=" ", flush=True)
-
-        if dry_run:
-            print("(dry-run skipped)")
-            results.append({
-                "name": name, "lat": lat, "lon": lon,
-                "wave_height_m": None,
-                "temperature_c": None,
-                "visibility_km": None,
-            })
-            continue
-
-        wave       = None
-        temp       = None
-        vis        = None
-        wave_error = None
-        cast_error = None
-
+    # 배치 marine API (청킹)
+    wave_data: list[float | None] = []
+    for chunk in _chunked(waypoints, CHUNK_SIZE):
         try:
-            wave = fetch_wave_height(lat, lon)
+            wave_data.extend(fetch_marine_batch(chunk))
         except RuntimeError as e:
-            wave_error = str(e)
+            print(f"    [WARN] Marine API: {e}")
+            wave_data.extend([None] * len(chunk))
 
+    # 배치 forecast API (청킹)
+    forecast_data: list[tuple[float | None, float | None]] = []
+    for chunk in _chunked(waypoints, CHUNK_SIZE):
         try:
-            temp, vis = fetch_forecast(lat, lon)
+            forecast_data.extend(fetch_forecast_batch(chunk))
         except RuntimeError as e:
-            cast_error = str(e)
+            print(f"    [WARN] Forecast API: {e}")
+            forecast_data.extend([(None, None)] * len(chunk))
 
-        parts = []
-        if wave is not None: parts.append(f"wave={wave}m")
-        if temp is not None: parts.append(f"temp={temp}C")
-        if vis  is not None: parts.append(f"vis={vis}km")
-        print(", ".join(parts) if parts else "no data")
-        if wave_error: print(f"    [WARN] Ocean Forecast: {wave_error}")
-        if cast_error: print(f"    [WARN] Location Forecast: {cast_error}")
-
-        results.append({
-            "name":          name,
-            "lat":           lat,
-            "lon":           lon,
+    # 웨이포인트별 결합
+    wp_results = []
+    for i, wp in enumerate(waypoints):
+        wave = wave_data[i] if i < len(wave_data) else None
+        temp, vis = forecast_data[i] if i < len(forecast_data) else (None, None)
+        wp_results.append({
+            "name": wp["name"],
+            "lat": wp["lat"],
+            "lon": wp["lon"],
             "wave_height_m": wave,
             "temperature_c": temp,
             "visibility_km": vis,
         })
 
-        time.sleep(0.5)  # MET Norway: polite interval between calls
+    # 요약 출력
+    summary = compute_route_summary(wp_results)
+    print(f"    max_wave={summary['max_wave_height_m']}m  "
+          f"min_temp={summary['min_temperature_c']}C  "
+          f"min_vis={summary['min_visibility_km']}km")
 
-    return results
+    return {"waypoints": wp_results, "route_summary": summary}
 
 
 def compute_route_summary(waypoints: list[dict]) -> dict:
@@ -205,49 +455,96 @@ def compute_route_summary(waypoints: list[dict]) -> dict:
 
     max_wave = round(max(waves), 2) if waves else None
     min_temp = round(min(temps), 1) if temps else None
-    min_vis  = round(min(visib), 2) if visib else None
+    min_vis = round(min(visib), 2) if visib else None
 
     return {
-        "max_wave_height_m":      max_wave,
-        "min_temperature_c":      min_temp,
-        "min_visibility_km":      min_vis,
+        "max_wave_height_m": max_wave,
+        "min_temperature_c": min_temp,
+        "min_visibility_km": min_vis,
         "is_temp_below_minus_10": (min_temp < -10.0) if min_temp is not None else False,
     }
 
 
+def compute_global_summary(routes: dict) -> dict:
+    """전체 항로 최악값 집계 (하위호환용)."""
+    all_waves = []
+    all_temps = []
+    all_visib = []
+    for route_data in routes.values():
+        s = route_data.get("route_summary", {})
+        if s.get("max_wave_height_m") is not None:
+            all_waves.append(s["max_wave_height_m"])
+        if s.get("min_temperature_c") is not None:
+            all_temps.append(s["min_temperature_c"])
+        if s.get("min_visibility_km") is not None:
+            all_visib.append(s["min_visibility_km"])
+
+    max_wave = round(max(all_waves), 2) if all_waves else None
+    min_temp = round(min(all_temps), 1) if all_temps else None
+    min_vis = round(min(all_visib), 2) if all_visib else None
+
+    return {
+        "max_wave_height_m": max_wave,
+        "min_temperature_c": min_temp,
+        "min_visibility_km": min_vis,
+        "is_temp_below_minus_10": (min_temp < -10.0) if min_temp is not None else False,
+    }
+
+
+# --- Main --------------------------------------------------------------------
+
 def run(dry_run: bool = False) -> int:
     """메인 실행. 성공 시 0, 실패 시 1 반환."""
-    print(f"\n{'='*60}")
-    print("  MET Norway Arctic Weather Fetcher")
+    print(f"\n{'=' * 60}")
+    print("  Open-Meteo Global Maritime Weather Fetcher")
+    print(f"  Routes: {', '.join(ROUTE_WAYPOINTS.keys())}")
+    print(f"  Total waypoints: {sum(len(v) for v in ROUTE_WAYPOINTS.values())}")
     print(f"  Dry-run: {dry_run}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_file = OUTPUT_DIR / "arctic_weather_latest.json"
+    out_file = OUTPUT_DIR / "weather_latest.json"
 
-    print("\n[1/3] NSR waypoint weather collection...")
-    waypoints = fetch_all_waypoints(dry_run=dry_run)
+    # 일일 API 호출 예산 확인
+    estimated = _estimate_calls()
+    print(f"\n  Estimated API calls this cycle: {estimated}")
+    if not dry_run and not _check_budget(estimated):
+        return 0  # 한도 도달 시 기존 캐시 유지, 정상 종료
 
-    print("\n[2/3] Route worst-case aggregation...")
-    summary = compute_route_summary(waypoints)
-    print(f"  max wave   : {summary['max_wave_height_m']}m")
-    print(f"  min temp   : {summary['min_temperature_c']}C")
-    print(f"  min vis    : {summary['min_visibility_km']}km")
-    print(f"  below -10C : {summary['is_temp_below_minus_10']}")
+    print("\n[1/3] Fetching weather for all routes...")
+    actual_calls = 0
+    routes: dict[str, dict] = {}
+    for route_key, waypoints in ROUTE_WAYPOINTS.items():
+        routes[route_key] = fetch_route_weather(route_key, waypoints, dry_run=dry_run)
+        if not dry_run:
+            n_chunks = (len(waypoints) + CHUNK_SIZE - 1) // CHUNK_SIZE
+            actual_calls += n_chunks * 2
+            time.sleep(0.3)  # polite interval between routes
+
+    # 호출 횟수 기록
+    if not dry_run:
+        _record_calls(actual_calls)
+
+    print("\n[2/3] Global worst-case aggregation...")
+    global_summary = compute_global_summary(routes)
+    print(f"  max wave   : {global_summary['max_wave_height_m']}m")
+    print(f"  min temp   : {global_summary['min_temperature_c']}C")
+    print(f"  min vis    : {global_summary['min_visibility_km']}km")
+    print(f"  below -10C : {global_summary['is_temp_below_minus_10']}")
 
     output = {
-        "fetched_at":    datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "source":        "MET Norway (Ocean Forecast 2.0 + Location Forecast 2.0)",
-        "dry_run":       dry_run,
-        "waypoints":     waypoints,
-        "route_summary": summary,
+        "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": "Open-Meteo (Marine API + Weather Forecast API)",
+        "dry_run": dry_run,
+        "routes": routes,
+        "route_summary": global_summary,  # 하위호환
     }
 
     print(f"\n[3/3] Saving: {out_file}")
     if not dry_run:
         with open(out_file, "w", encoding="utf-8") as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
-        print("  [OK] arctic_weather_latest.json saved")
+        print("  [OK] weather_latest.json saved")
     else:
         print("  (dry-run: file write skipped)")
 
@@ -258,7 +555,7 @@ def run(dry_run: bool = False) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="MET Norway Arctic Weather Fetcher for NSR Digital Twin"
+        description="Open-Meteo Global Maritime Weather Fetcher"
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -266,7 +563,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--schedule", action="store_true",
-        help="매일 03:30 UTC 자동 실행 모드 (무한 루프)"
+        help="6시간마다 자동 실행 모드 (무한 루프)"
     )
     args = parser.parse_args()
 
@@ -276,10 +573,10 @@ def main() -> None:
 
         def _scheduled_run():
             run(dry_run=False)
-            scheduler.enter(86400, 1, _scheduled_run)
+            scheduler.enter(21600, 1, _scheduled_run)  # 6시간 = 21600초
 
-        print("[Scheduler] 매일 03:30 UTC 기상 데이터 수집 예약됨")
-        print("[Scheduler] 즉시 1회 실행 후 24시간마다 반복...")
+        print("[Scheduler] 6시간 주기 기상 데이터 수집 예약됨")
+        print("[Scheduler] 즉시 1회 실행 후 6시간마다 반복...")
         scheduler.enter(0, 1, _scheduled_run)
         scheduler.run()
     else:

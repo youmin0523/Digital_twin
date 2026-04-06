@@ -67,8 +67,8 @@ const WEATHER_SCRIPT_PATH = path.join(
 );
 
 function runWeatherPipeline() {
-  console.log('[Scheduler] Running weather pipeline (Open-Meteo)...');
-  execFile('python', [WEATHER_SCRIPT_PATH], { timeout: 120000 }, (err, stdout, stderr) => {
+  console.log('[Scheduler] Running weather pipeline (Open-Meteo, all routes)...');
+  execFile('python', [WEATHER_SCRIPT_PATH], { timeout: 180000 }, (err, stdout, stderr) => {
     if (err) console.error('[Scheduler] Weather pipeline error:', err.message);
     if (stdout) console.log('[Weather]', stdout.trim().slice(-500));
     if (stderr) console.error('[Weather] stderr:', stderr.trim().slice(-200));
@@ -77,8 +77,8 @@ function runWeatherPipeline() {
 
 // 매일 새벽 3시 UTC (빙산 파이프라인)
 schedule.scheduleJob('0 3 * * *', runIcebergPipeline);
-// 매일 03:30 UTC (기상 파이프라인 — 빙산 수집 30분 후)
-schedule.scheduleJob('30 3 * * *', runWeatherPipeline);
+// 6시간마다 기상 파이프라인 (Open-Meteo 전 항로)
+schedule.scheduleJob('30 */6 * * *', runWeatherPipeline);
 
 // 서버 시작 30초 후 빙산 파이프라인 1회 실행
 setTimeout(runIcebergPipeline, 30000);
