@@ -49,15 +49,41 @@ async function getIceData(type, month) {
   return data;
 }
 
-// 빙산 데이터
+// 빙산 데이터 (NIC/IIP — 남극 필터링)
 async function getIcebergData() {
   const cacheKey = 'icebergs_latest';
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
   const data = await readJsonFile(path.join(DATA_DIR, 'realBergData_latest.json'));
+  if (data && data.bergs) {
+    // 남극 빙산(lat < 0) 필터링
+    data.bergs = data.bergs.filter(b => b.lat >= 0);
+    data.berg_count = data.bergs.length;
+  }
   if (data) setCache(cacheKey, data);
   return data;
 }
 
-module.exports = { getIceData, getIcebergData };
+// Copernicus SAR 빙산 데이터 (파일 변경 감지로 자동 갱신)
+const COP_FILE = path.join(DATA_DIR, 'copernicus_icebergs.json');
+let copDataCache = null;
+let copFileMtime = 0;
+
+async function getCopernicusIcebergData() {
+  try {
+    const stat = await fs.promises.stat(COP_FILE);
+    const mtime = stat.mtimeMs;
+    // 파일이 변경되었거나 캐시 없으면 다시 읽기
+    if (!copDataCache || mtime > copFileMtime) {
+      copDataCache = await readJsonFile(COP_FILE);
+      copFileMtime = mtime;
+      if (copDataCache) console.log(`[DataStore] copernicus_icebergs.json reloaded (${copDataCache.count || '?'} icebergs)`);
+    }
+  } catch {
+    // 파일 없으면 null
+  }
+  return copDataCache;
+}
+
+module.exports = { getIceData, getIcebergData, getCopernicusIcebergData };
