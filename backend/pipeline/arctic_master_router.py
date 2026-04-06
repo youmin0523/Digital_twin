@@ -273,7 +273,7 @@ POLAR_CODE_MIN_TEMP_MARGIN = 10.0
 
 class ShipData(TypedDict, total=False):
     # ── Physical particulars ──────────────────────────────────────────────
-    ship_type: str  # e.g. "Bulk Carrier", "LNG Tanker"
+    ship_type: str  # e.g. "Container Ship", "LNG Carrier", "Icebreaker", "General"
     draft: float  # Maximum operating draft (m)
     beam: float  # Moulded breadth (m)
 
@@ -291,6 +291,16 @@ class ShipData(TypedDict, total=False):
     # ── Administrative & geopolitical ────────────────────────────────────
     is_sanctioned_country: bool  # Flag state under Russia sanctions regime
     has_nsra_permit: bool  # NSRA advance permit obtained
+    fuel_type: str  # 'HFO', 'LNG', 'MGO', 'VLSFO'
+    has_hfo_exemption: bool  # IMO 북극해 HFO 면제 인증 보유 여부
+
+    # ── Navigation & communications ───────────────────────────────────────
+    latitude: float  # Maximum operating latitude (°N) on planned route
+    comms_type: str  # 'GEO' (geostationary) or 'LEO' (low Earth orbit)
+
+    # ── Weather / sea-state ───────────────────────────────────────────────
+    wave_height: float  # Significant wave height (m)
+    visibility_km: float  # Visibility (km)
 
     # ── Ice chart data (fed into RIO calculator) ──────────────────────────
     ice_conditions: list[IceCondition]
@@ -360,6 +370,20 @@ def evaluate_routing(ship_data: ShipData) -> RoutingResult:
                 "[Step 1b] 극지해역 운항 매뉴얼(PWOM: Polar Water Operational Manual)이 "
                 "선내에 비치되어 있지 않습니다. IMO Polar Code 및 KR 이행 가이드 2장에 "
                 "따라 PWOM은 극지 항해의 필수 문서입니다. 수에즈 우회를 권고합니다."
+            ),
+            rio_score=None,
+        )
+
+    fuel_type = ship_data.get("fuel_type", "MGO")
+    has_hfo_exemption = ship_data.get("has_hfo_exemption", False)
+    if fuel_type == "HFO" and not has_hfo_exemption:
+        return RoutingResult(
+            status=REROUTE_SUEZ,
+            reason=(
+                "[Step 1c] 선박이 HFO(중질유·Heavy Fuel Oil)를 사용·적재하고 있으며 "
+                "IMO 북극해 HFO 사용 및 적재 금지 규정(MARPOL Annex I 개정) 면제 인증을 "
+                "보유하지 않습니다. 북극 생태계 보호를 위한 해당 규정에 따라 "
+                "NSR 항행이 불가합니다. 수에즈 운하 우회를 권고합니다."
             ),
             rio_score=None,
         )
@@ -447,7 +471,74 @@ def evaluate_routing(ship_data: ShipData) -> RoutingResult:
             rio_score=None,
         )
 
-    # ── STEP 4: POLARIS RIO Evaluation ──────────────────────────────────
+    latitude = ship_data.get("latitude", 70.0)
+    comms_type = ship_data.get("comms_type", "GEO")
+    if latitude >= 75.0 and comms_type != "LEO":
+        return RoutingResult(
+            status=REROUTE_SUEZ,
+            reason=(
+                f"[Step 3d] 계획 항로의 최고 위도({latitude:.1f}°N)가 북위 75도 이상입니다. "
+                "이 고위도에서는 정지궤도(GEO) 위성의 앙각이 너무 낮아 통신 불가 구간이 "
+                "발생합니다. IMO Polar Code 및 KR 이행 가이드에 따라 "
+                "Iridium/Starlink 등 LEO(저궤도) 통신 장비가 필수입니다. "
+                f"현재 장비: {comms_type}. 수에즈 우회를 권고합니다."
+            ),
+            rio_score=None,
+        )
+
+    # ── STEP 4: 선종별 특화 기상 필터 ────────────────────────────────────
+
+    ship_type = ship_data.get("ship_type", "General")
+    wave_height = ship_data.get("wave_height", 0.0)
+    visibility_km = ship_data.get("visibility_km", 10.0)
+    weather_warning = ""
+
+    if ship_type == "Container Ship":
+        if wave_height > 4.0:
+            return RoutingResult(
+                status=REROUTE_SUEZ,
+                reason=(
+                    f"[Step 4a] 컨테이너선 한계 파고 초과: 현재 유의 파고 {wave_height:.1f}m > "
+                    "허용 한계 4.0m. 갑판 적재 컨테이너 유실(Cargo Loss) 및 "
+                    "구조물 손상 위험으로 NSR 항행 불가. 수에즈 우회를 권고합니다."
+                ),
+                rio_score=None,
+            )
+        if is_cold and wave_height > 2.5:
+            return RoutingResult(
+                status=REROUTE_SUEZ,
+                reason=(
+                    f"[Step 4b] 컨테이너선 착빙(Vessel Icing) 위험: 기온 -10°C 미만 환경에서 "
+                    f"유의 파고 {wave_height:.1f}m > 2.5m. 선체·갑판·크레인에 치명적 착빙 "
+                    "형성이 예상됩니다. 복원력 상실 및 구조물 파손 위험으로 "
+                    "수에즈 우회를 권고합니다."
+                ),
+                rio_score=None,
+            )
+
+    elif ship_type == "LNG Carrier":
+        if wave_height > 6.0:
+            weather_warning += (
+                f"[LNG선 경고: 파고 {wave_height:.1f}m > 6.0m — "
+                "슬로싱(Sloshing) 및 BOG(기화 가스) 증가. 감속·가스 관리 주의 운항 요망] "
+            )
+
+    elif ship_type == "Icebreaker":
+        if wave_height > 8.0:
+            weather_warning += (
+                f"[쇄빙선 경고: 파고 {wave_height:.1f}m > 8.0m — "
+                "황천 해역 호송 임무 제한. 독립 항행으로 전환 및 임무 재조정 요망] "
+            )
+
+    if visibility_km < 1.0:
+        weather_warning += (
+            f"[가시거리 경고: {visibility_km:.1f}km 미만 — "
+            "해무(Sea Fog)/극야(Polar Night) 조건. 속도 50% 이상 감속 및 연속 레이더 감시 필수] "
+        )
+
+    weather_warning = weather_warning.strip()
+
+    # ── STEP 5: POLARIS RIO Evaluation ──────────────────────────────────
 
     ice_class = ship_data.get("ice_class", "None")
     ice_conditions = ship_data.get("ice_conditions", [])
@@ -455,38 +546,37 @@ def evaluate_routing(ship_data: ShipData) -> RoutingResult:
     rio_score = calculate_rio(ice_class, ice_conditions)
 
     if rio_score >= 0:
-        return RoutingResult(
-            status=NSR_APPROVED,
-            reason=(
-                f"[Step 4a] POLARIS RIO 점수: {rio_score:+.2f}. "
-                "모든 행정·물리·안전 기준을 충족하며 빙해역 위험 지수가 양수(≥0)입니다. "
-                "현재 빙상 조건에서 NSR 정상 통과(NSR_APPROVED)가 승인됩니다."
-            ),
-            rio_score=rio_score,
+        base_reason = (
+            f"[Step 5a] POLARIS RIO 점수: {rio_score:+.2f}. "
+            "모든 행정·물리·안전 기준을 충족하며 빙해역 위험 지수가 양수(≥0)입니다. "
+            "현재 빙상 조건에서 NSR 정상 통과(NSR_APPROVED)가 승인됩니다."
         )
+        if weather_warning:
+            base_reason += f" | {weather_warning}"
+            return RoutingResult(status=NSR_RESTRICTED, reason=base_reason, rio_score=rio_score)
+        return RoutingResult(status=NSR_APPROVED, reason=base_reason, rio_score=rio_score)
 
     if rio_score >= -10:
-        return RoutingResult(
-            status=NSR_RESTRICTED,
-            reason=(
-                f"[Step 4b] POLARIS RIO 점수: {rio_score:+.2f} (경계: -10 ≤ RIO < 0). "
-                "고위험 빙해역으로 분류됩니다. 조건부 통과 — "
-                "쇄빙선 에스코트 필수, 권고 속도(Recommended Speed) 준수, "
-                "24시간 빙상 감시 체계 유지 필요. NSR_RESTRICTED 상태로 운항 허가."
-            ),
-            rio_score=rio_score,
+        base_reason = (
+            f"[Step 5b] POLARIS RIO 점수: {rio_score:+.2f} (경계: -10 ≤ RIO < 0). "
+            "고위험 빙해역으로 분류됩니다. 조건부 통과 — "
+            "쇄빙선 에스코트 필수, 권고 속도(Recommended Speed) 준수, "
+            "24시간 빙상 감시 체계 유지 필요. NSR_RESTRICTED 상태로 운항 허가."
         )
+        if weather_warning:
+            base_reason += f" | {weather_warning}"
+        return RoutingResult(status=NSR_RESTRICTED, reason=base_reason, rio_score=rio_score)
 
     # rio_score < -10
     return RoutingResult(
         status=REROUTE_SUEZ,
         reason=(
-            f"[Step 4c] POLARIS RIO 점수: {rio_score:+.2f} (기준: RIO < -10). "
+            f"[Step 5c] POLARIS RIO 점수: {rio_score:+.2f} (기준: RIO < -10). "
             "현재 빙상 조건이 POLARIS '특별 고려 대상 해역(Special Consideration Area)'에 "
-            "해당합니다. 선박 내빙 등급({ice_class})의 설계 한계를 초과하는 빙하·다년생 빙·"
+            f"해당합니다. 선박 내빙 등급({ice_class})의 설계 한계를 초과하는 빙하·다년생 빙·"
             "압퇴빙이 해역을 지배하고 있어 안전한 항해 계획 수립이 불가합니다. "
             "수에즈 운하를 통한 우회를 권고합니다."
-        ).format(ice_class=ice_class),
+        ),
         rio_score=rio_score,
     )
 
@@ -500,7 +590,9 @@ def _separator(title: str) -> None:
     width = 72
     print()
     print("=" * width)
-    print(f"  {title}")
+    # ASCII-safe output for Windows terminals (cp949)
+    safe_title = title.encode("ascii", errors="replace").decode("ascii")
+    print(f"  {safe_title}")
     print("=" * width)
 
 
@@ -512,7 +604,7 @@ def _print_result(result: RoutingResult) -> None:
         print("  RIO SCORE : N/A (blocked before POLARIS step)")
     print(f"  REASON    :")
     # Word-wrap reason at 68 chars
-    reason = result["reason"]
+    reason = result["reason"].encode("ascii", errors="replace").decode("ascii")
     words = reason.split(" ")
     line = "    "
     for word in words:
@@ -527,11 +619,13 @@ def _print_result(result: RoutingResult) -> None:
 
 def run_tests() -> None:
     """
-    Execute the three mandatory validation test cases.
+    Execute validation test cases.
 
     Case 1 — Perfect vessel → NSR_APPROVED  (RIO ≥ 1.7)
     Case 2 — Survival days < 5 → REROUTE_SUEZ
     Case 3 — Extreme ice (RIO ≈ −12) → REROUTE_SUEZ
+    Case 4 — Container ship, cold + wave 3m → REROUTE_SUEZ (Vessel Icing)
+    Case 5 — Low visibility (0.5 km) → NSR_RESTRICTED (speed penalty)
     """
 
     # ─────────────────────────────────────────────────────────────────────
@@ -573,7 +667,7 @@ def run_tests() -> None:
     assert (
         result1["rio_score"] is not None and result1["rio_score"] >= 1.7
     ), f"Case 1 FAILED: expected RIO ≥ 1.7, got {result1['rio_score']}"
-    print("\n  ✔  PASS — NSR_APPROVED, RIO =", result1["rio_score"])
+    print("\n  [PASS] NSR_APPROVED, RIO =", result1["rio_score"])
 
     # ─────────────────────────────────────────────────────────────────────
     # Case 2: Survival days 3 days (< minimum 5) → REROUTE_SUEZ
@@ -610,7 +704,7 @@ def run_tests() -> None:
     assert (
         result2["rio_score"] is None
     ), "Case 2 FAILED: expected rio_score = None (blocked at Step 3a)"
-    print("\n  ✔  PASS — REROUTE_SUEZ (생존 일수 미달)")
+    print("\n  [PASS] REROUTE_SUEZ (Step 3a)")
 
     # ─────────────────────────────────────────────────────────────────────
     # Case 3: PC5 vessel, dense glacier ice → RIO = -12.0 → REROUTE_SUEZ
@@ -651,9 +745,93 @@ def run_tests() -> None:
     assert (
         result3["rio_score"] is not None and result3["rio_score"] < -10
     ), f"Case 3 FAILED: expected RIO < -10, got {result3['rio_score']}"
-    print("\n  ✔  PASS — REROUTE_SUEZ, RIO =", result3["rio_score"])
+    print("\n  [PASS] REROUTE_SUEZ, RIO =", result3["rio_score"])
 
-    _separator("ALL 3 TEST CASES PASSED")
+    # ─────────────────────────────────────────────────────────────────────
+    # Case 4: Container ship, temp < -10°C, wave 3.0m → REROUTE_SUEZ (착빙)
+    # ─────────────────────────────────────────────────────────────────────
+    _separator("TEST CASE 4 — 컨테이너선 착빙 위험 (REROUTE_SUEZ 기대)")
+
+    case4: ShipData = {
+        "ship_type": "Container Ship",
+        "draft": 10.0,
+        "beam": 32.0,
+        "ice_class": "PC5",
+        "has_pwom": True,
+        "max_rescue_days_capacity": 7,
+        "is_temp_below_minus_10": True,   # ← 영하 기온
+        "design_temp_margin": 12.0,
+        "has_winterization": True,
+        "has_zero_discharge": True,
+        "has_polar_comms": True,
+        "has_ice_navigator": True,
+        "is_sanctioned_country": False,
+        "has_nsra_permit": True,
+        "fuel_type": "MGO",
+        "has_hfo_exemption": False,
+        "latitude": 72.0,
+        "comms_type": "GEO",
+        "wave_height": 3.0,               # ← 파고 3.0m > 착빙 한계 2.5m
+        "visibility_km": 5.0,
+        "ice_conditions": [
+            {"type": "Open Water", "concentration_tenths": 0.8},
+            {"type": "Grey Ice", "concentration_tenths": 0.2},
+        ],
+    }
+
+    result4 = evaluate_routing(case4)
+    _print_result(result4)
+
+    assert (
+        result4["status"] == REROUTE_SUEZ
+    ), f"Case 4 FAILED: expected REROUTE_SUEZ, got {result4['status']}"
+    assert result4["rio_score"] is None, "Case 4 FAILED: expected rio_score = None (blocked at Step 4b)"
+    print("\n  [PASS] REROUTE_SUEZ (Step 4b - Vessel Icing)")
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Case 5: Good vessel, low visibility 0.5km → NSR_RESTRICTED (감속 페널티)
+    # RIO = 2.0 (≥ 0) but visibility warning → status forced to NSR_RESTRICTED
+    # ─────────────────────────────────────────────────────────────────────
+    _separator("TEST CASE 5 — 가시거리 0.5km 감속 페널티 (NSR_RESTRICTED 기대)")
+
+    case5: ShipData = {
+        "ship_type": "LNG Carrier",
+        "draft": 11.0,
+        "beam": 30.0,
+        "ice_class": "PC3",
+        "has_pwom": True,
+        "max_rescue_days_capacity": 10,
+        "is_temp_below_minus_10": True,
+        "design_temp_margin": 15.0,
+        "has_winterization": True,
+        "has_zero_discharge": True,
+        "has_polar_comms": True,
+        "has_ice_navigator": True,
+        "is_sanctioned_country": False,
+        "has_nsra_permit": True,
+        "fuel_type": "LNG",
+        "has_hfo_exemption": False,
+        "latitude": 73.0,
+        "comms_type": "GEO",
+        "wave_height": 1.5,
+        "visibility_km": 0.5,             # ← 가시거리 1km 미만
+        "ice_conditions": [
+            {"type": "Open Water", "concentration_tenths": 0.8},
+            {"type": "Grey Ice", "concentration_tenths": 0.2},
+        ],
+    }
+
+    result5 = evaluate_routing(case5)
+    _print_result(result5)
+
+    assert (
+        result5["status"] == NSR_RESTRICTED
+    ), f"Case 5 FAILED: expected NSR_RESTRICTED, got {result5['status']}"
+    assert result5["rio_score"] is not None and result5["rio_score"] >= 0, \
+        f"Case 5 FAILED: expected RIO ≥ 0 (good ice), got {result5['rio_score']}"
+    print("\n  [PASS] NSR_RESTRICTED (Step 4 visibility penalty, RIO =", result5["rio_score"], ")")
+
+    _separator("ALL 5 TEST CASES PASSED")
 
 
 if __name__ == "__main__":

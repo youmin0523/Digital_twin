@@ -26,7 +26,7 @@ import RouteChangeAlert from './components/layout/RouteChangeAlert';
 import { ROUTES, TOTAL_SECONDS } from './data/arcticRoutes';
 import { SHIP_PRESETS } from './data/vesselPresets';
 import useManualControl from './hooks/useManualControl';
-import { fetchIceConcentration, fetchIcebergs } from './services/api';
+import { fetchIceConcentration, fetchIcebergs, fetchWeather } from './services/api';
 import {
   buildTimings,
   routePos,
@@ -583,6 +583,14 @@ function AppInner() {
   const [showSpecsModal, setShowSpecsModal] = useState(false);
   const [pendingPolarParams, setPendingPolarParams] = useState(null);
   const [routeAlert, setRouteAlert] = useState(null);
+
+  // Open-Meteo 실시간 기상 데이터 (파고·기온·가시거리)
+  const [weatherData, setWeatherData] = useState(null);
+  useEffect(() => {
+    fetchWeather()
+      .then(setWeatherData)
+      .catch(() => {}); // 데이터 없으면 수동 입력 fallback
+  }, []);
 
   // Cesium viewer 준비되면 LIVE 빙산 데이터 로딩 + 카메라 상호작용 감지
   useEffect(() => {
@@ -1223,15 +1231,27 @@ function AppInner() {
         isSanctionedCountry: formData.isSanctioned || false,
         hasNsraPermit: formData.hasNsra !== false,
         hasPwom: formData.hasPwom !== false,
+        // Step 1c
+        fuelType: formData.fuelType || 'MGO',
+        hasHfoExemption: formData.hasHfoExemption || false,
         draft: formData.draft || state.shipSpecs.draft || 8.5,
         beam: state.shipSpecs.width || 30,
         maxRescueDays: formData.rescueDays || 7,
-        isTempBelowMinus10: formData.isColdRoute || false,
         designTempMargin: formData.tempMargin || 12,
         hasWinterization: formData.hasWinter !== false,
         hasZeroDischarge: formData.hasZeroDis !== false,
         hasPolarComms: formData.hasComms !== false,
         hasIceNavigator: formData.hasNavigator !== false,
+        // Step 3d
+        latitude: formData.latitude ?? worstLat,
+        commsType: formData.commsType || 'GEO',
+        // Step 4 — 실시간 기상 데이터 우선, 없으면 수동 입력값 사용
+        shipType: formData.shipType || 'General',
+        waveHeight: formData.waveHeight ?? weatherData?.route_summary?.max_wave_height_m ?? 0.0,
+        visibilityKm: formData.visibilityKm ?? weatherData?.route_summary?.min_visibility_km ?? 10.0,
+        isTempBelowMinus10: formData.isColdRoute
+          ?? weatherData?.route_summary?.is_temp_below_minus_10
+          ?? false,
         iceClass: state.shipSpecs.iceClass || 'PC2',
         iceConditions,
       });

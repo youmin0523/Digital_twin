@@ -86,4 +86,14 @@ async function getCopernicusIcebergData() {
   return copDataCache;
 }
 
-module.exports = { getIceData, getIcebergData, getCopernicusIcebergData };
+// 기상 데이터 (Open-Meteo — weather_fetcher.py 수집)
+async function getWeatherData() {
+  const cacheKey = 'weather_latest';
+  const cached = getCached(cacheKey);
+  if (cached) return cached;
+  const data = await readJsonFile(path.join(DATA_DIR, 'arctic_weather_latest.json'));
+  if (data) setCache(cacheKey, data);
+  return data;
+}
+
+module.exports = { getIceData, getIcebergData, getCopernicusIcebergData, getWeatherData };
