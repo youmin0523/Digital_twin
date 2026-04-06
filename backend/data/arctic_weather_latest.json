@@ -1,0 +1,69 @@
+{
+  "fetched_at": "2026-04-06T07:34:13Z",
+  "source": "MET Norway (Ocean Forecast 2.0 + Location Forecast 2.0)",
+  "dry_run": false,
+  "waypoints": [
+    {
+      "name": "Kola Bay",
+      "lat": 69.0,
+      "lon": 33.0,
+      "wave_height_m": null,
+      "temperature_c": 1.0,
+      "visibility_km": 20.0
+    },
+    {
+      "name": "Novaya Zemlya",
+      "lat": 70.5,
+      "lon": 57.5,
+      "wave_height_m": null,
+      "temperature_c": -7.2,
+      "visibility_km": 20.0
+    },
+    {
+      "name": "Kara Sea",
+      "lat": 73.5,
+      "lon": 80.0,
+      "wave_height_m": null,
+      "temperature_c": -14.6,
+      "visibility_km": 20.0
+    },
+    {
+      "name": "Vilkitsky Strait",
+      "lat": 77.7,
+      "lon": 103.7,
+      "wave_height_m": null,
+      "temperature_c": -13.1,
+      "visibility_km": 15.46
+    },
+    {
+      "name": "Laptev Sea",
+      "lat": 75.5,
+      "lon": 127.0,
+      "wave_height_m": null,
+      "temperature_c": -16.4,
+      "visibility_km": 10.62
+    },
+    {
+      "name": "East Siberian Sea",
+      "lat": 73.5,
+      "lon": 162.0,
+      "wave_height_m": null,
+      "temperature_c": -10.8,
+      "visibility_km": 20.0
+    },
+    {
+      "name": "Bering Strait",
+      "lat": 66.5,
+      "lon": -169.5,
+      "wave_height_m": null,
+      "temperature_c": -14.1,
+      "visibility_km": 0.1
+    }
+  ],
+  "route_summary": {
+    "max_wave_height_m": null,
+    "min_temperature_c": -16.4,
+    "min_visibility_km": 0.1,
+    "is_temp_below_minus_10": true
+  }
+}

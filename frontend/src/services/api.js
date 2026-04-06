@@ -54,8 +54,19 @@ export async function evaluateRoute(route, vessel, month) {
 }
 
 /**
+ * Fetch real-time NSR weather data (파고·기온·가시거리).
+ * Populated by weather_fetcher.py via Open-Meteo API.
+ * @returns {Promise<Object>} Weather data { fetched_at, waypoints, route_summary }
+ */
+export async function fetchWeather() {
+  const res = await fetch(`${API_BASE}/weather/latest`);
+  if (!res.ok) throw new Error(`fetchWeather failed: ${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+/**
  * Trigger the data-ingestion pipeline on the backend.
- * @param {string} task - Pipeline task name ('all', 'ice', 'icebergs', etc.)
+ * @param {string} task - Pipeline task name ('all', 'ice', 'icebergs', 'weather', etc.)
  * @returns {Promise<Object>} Pipeline status response
  */
 export async function triggerPipeline(task = 'all') {

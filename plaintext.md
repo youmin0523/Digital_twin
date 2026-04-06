@@ -1,74 +1,217 @@
-전 세계 모든 종류의 선박을 포괄하여 북극항로(NSR) 통과 가능 여부를 판별하고, 최적의 우회로를 안내하는 'Master Routing Algorithm'을 Python(또는 Node.js) 코드로 작성해 줘.
-특히 한국선급(KR)의 Polar Code 이행 가이드에 따른 안전 기준과 POLARIS 방법론을 완벽히 반영해야 하며, 외부에서 위험 지수(RIO)를 입력받는 대신 빙상 데이터(Ice Chart)를 기반으로 내부에서 직접 RIO 점수를 계산하는 모듈을 포함해야 해.
+# 북극항로(NSR) 마스터 라우팅 알고리즘 통합 명세서
 
-아래의 상세 요구사항과 비즈니스 로직을 바탕으로 코드를 구현해 줘.
+본 문서는 디지털 트윈 기반 북극항로 가상 검증 플랫폼의 핵심인 '운항 가능 여부 판별 및 우회 경로 산출 알고리즘'의 명세와 Python 소스 코드를 정의합니다. 한국선급(KR) Polar Code 기준, POLARIS 방법론, 그리고 상용 항해에 필요한 실무 기상/규제 필터를 모두 포함합니다.
 
-1. POLARIS RIO(Risk Index Outcome) 산출 모듈
+---
 
-- 수식: RIO = Sum(각 얼음 종류별 농도(10분위수, 0.1~1.0) \* 해당 얼음 종류 및 선박 내빙 등급에 따른 RIV 값)
-- RIV(Risk Index Value) 매핑 테이블: 코드 내에 내빙 등급(Ice Class)과 빙질(Ice Type)에 따른 RIV 룩업 테이블(Dictionary/Object)을 하드코딩으로 구축해 줘. (예: PC5 등급 기준 Thin First-Year Ice의 RIV는 2, Medium First-Year Ice의 RIV는 1. 이 외의 등급과 빙질에 대해서도 가상의 예시 데이터를 넣어 구조를 완성할 것)
-- 입력값: 선박의 `ice_class`와 `ice_conditions`.
-  (ice_conditions 예시: [{'type': 'Thin First-Year', 'concentration_tenths': 0.7}, {'type': 'Medium First-Year', 'concentration_tenths': 0.3}] 형태의 배열)
-- 출력값: 이 모듈에서 계산된 최종 `rio_score`를 아래 라우팅 알고리즘의 판단 변수로 사용.
+## 1. 알고리즘 판단 로직 (Decision Tree)
 
-2. 전체 라우팅 알고리즘 입력 데이터 (Input Parameters)
-   [물리적 제원]
+본 알고리즘은 다음 5단계의 순차적 필터링을 거쳐 선박의 북극항로 통과 여부를 결정합니다.
 
-- ship_type (string): 선종
-- draft (float): 흘수 (단위: m)
-- beam (float): 선폭 (단위: m)
+1. **지정학 및 환경 규제 필터:** 대러 제재, NSRA 사전 허가, PWOM 비치 여부, **HFO(중질유) 사용 금지 규정** 검증
+2. **물리적 크기 필터:** 북극항로 수심 한계(흘수 12.5m) 및 쇄빙선 수로 한계(선폭 35m) 검증
+3. **Polar Code 생존 및 통신 필터:** 생존 보장 시간(5일), 설계 온도 여유치, 필수 설비 4종, **고위도(북위 75도 이상) 진입 시 LEO(저궤도) 통신망** 검증
+4. **선종별 특화 기상 필터:** - 컨테이너선: 파고 한계점 및 기온 강하에 따른 치명적 선체 착빙(Icing) 한계점 검증
+   - LNG선/쇄빙선: 파고 경고 및 BOG(기화 가스) 최소화를 위한 주의 운항 판별
+   - 공통: 가시거리 1km 미만 시 감속 페널티 부여
+5. **POLARIS 빙해역 위험 지수(RIO) 평가:** 자체 모듈을 통해 빙상 데이터를 RIO 점수로 환산하여 최종 승인 여부 결정
 
-[Polar Code 안전 및 장비 요건]
+---
 
-- ice_class (string): 선박의 내빙 등급 ('None', 'PC5', 'PC7' 등)
-- has_pwom (boolean): 극지해역 운항 매뉴얼(PWOM) 비치 여부
-- max_rescue_days_capacity (integer): 생존 장비 유지 가능 시간 (일 단위)
-- is_temp_below_minus_10 (boolean): 운항 해역의 일일 평균 최저기온이 -10도 미만인지 여부
-- design_temp_margin (float): 최저기온 대비 선박 설계 온도의 여유치 (도 단위)
-- has_winterization (boolean): 방한 설비 장착 여부
-- has_zero_discharge (boolean): 폐기물 무배출 탱크 보유 여부
-- has_polar_comms (boolean): 극지 통신 장비 보유 여부
-- has_ice_navigator (boolean): 극지 항해사 탑승 여부
+## 2. Master Routing Algorithm (Python Source Code)
 
-[행정 및 환경 데이터]
+```python
+def calculate_rio(ice_class, ice_conditions):
+    """
+    1. POLARIS 방법론에 따른 RIO(Risk Index Outcome) 산출 모듈
+    수식: RIO = Sum(각 얼음 종류별 농도(10분위수) * 해당 RIV 값)
+    """
 
-- is_sanctioned_country (boolean): 대러시아 제재 동참 국적 여부
-- has_nsra_permit (boolean): 러시아 당국 사전 운항 허가 여부
-- ice_conditions (array): 위 RIO 계산 모듈에 들어갈 빙상 데이터 배열
+    # RIV(Risk Index Value) 룩업 테이블 (내빙 등급 및 빙질별 가상 예시 포함)
+    riv_table = {
+        'PC5': {
+            'Thin First-Year': 2,
+            'Medium First-Year': 1,
+            'Thick First-Year': 0,
+            'Old Ice': -1
+        },
+        'PC7': {
+            'Thin First-Year': 1,
+            'Medium First-Year': -1,
+            'Thick First-Year': -2,
+            'Old Ice': -3
+        },
+        'None': {
+            'Thin First-Year': -1,
+            'Medium First-Year': -2,
+            'Thick First-Year': -3,
+            'Old Ice': -4
+        }
+    }
 
-3. 출력 데이터 (Output)
+    # 선박의 내빙 등급이 테이블에 없으면 가장 보수적인 'None' 등급 적용
+    target_rivs = riv_table.get(ice_class, riv_table['None'])
+    rio_score = 0.0
 
-- status (string): 'NSR_APPROVED' (정상 통과) / 'NSR_RESTRICTED' (제한적 통과/감속 필요) / 'REROUTE_SUEZ' (수에즈 우회) / 'REROUTE_CAPE' (희망봉 우회)
-- reason (string): 결정 사유 상세 설명
+    for ice in ice_conditions:
+        ice_type = ice.get('type')
+        # 농도 값(0.1~1.0)에 10을 곱하여 1~10분위수 정수로 환산
+        concentration = int(ice.get('concentration_tenths', 0.0) * 10)
 
-4. 판단 로직 (Decision Tree - 순차적 검증)
-   [Step 1: 지정학 및 행정 필터]
+        # 테이블에 없는 빙질이 들어올 경우 강제 위험 처리(-3)
+        riv_value = target_rivs.get(ice_type, -3)
 
-- is_sanctioned_country == True -> REROUTE_CAPE (사유: 제재 위반 리스크로 희망봉 우회)
-- has_nsra_permit == False OR has_pwom == False -> REROUTE_SUEZ (사유: NSRA 허가 또는 PWOM 문서 미비)
+        # RIO 누적 계산
+        rio_score += concentration * riv_value
 
-[Step 2: 물리적 크기 필터]
+    return float(rio_score)
 
-- draft > 12.5 -> REROUTE_SUEZ (사유: 북극항로 수심 제한 12.5m 초과)
-- beam > 35.0 -> REROUTE_SUEZ (사유: 선폭 과다로 쇄빙선 수로 통과 불가)
 
-[Step 3: Polar Code 생존/설비 기준 필터]
+def evaluate_routing(ship_data):
+    """
+    2. 전체 라우팅 판단 로직 (Decision Tree - 순차적 검증)
+    """
 
-- max_rescue_days_capacity < 5 -> REROUTE_SUEZ (사유: 최소 생존 보장 시간 5일 미달)
-- is_temp_below_minus_10 == True AND design_temp_margin < 10 -> REROUTE_SUEZ (사유: 극지 설계 온도 10도 여유분 미확보)
-- has_winterization == False OR has_zero_discharge == False OR has_polar_comms == False OR has_ice_navigator == False -> REROUTE_SUEZ (사유: Polar Code 필수 설비 및 인력 미달)
+    # --- Step 1: 지정학 및 행정/환경 규제 필터 ---
+    if ship_data.get('is_sanctioned_country', False):
+        return {'status': 'REROUTE_CAPE', 'reason': '제재 위반 리스크로 희망봉 우회'}
+    if not ship_data.get('has_nsra_permit', False) or not ship_data.get('has_pwom', False):
+        return {'status': 'REROUTE_SUEZ', 'reason': 'NSRA 당국 사전 허가 미취득 또는 PWOM 문서 미비'}
 
-[Step 4: POLARIS 빙해역 위험 지수(RIO) 평가]
-위 1번 모듈에서 계산된 `rio_score`를 기반으로 최종 판별:
+    fuel_type = ship_data.get('fuel_type', 'MGO')
+    has_hfo_exemption = ship_data.get('has_hfo_exemption', False)
+    if fuel_type == 'HFO' and not has_hfo_exemption:
+        return {'status': 'REROUTE_SUEZ', 'reason': 'IMO 북극해 HFO(중질유) 사용 및 적재 금지 규정 위반'}
 
-- rio_score >= 0 -> NSR_APPROVED (사유: POLARIS 기준 정상 운항 가능)
-- -10 <= rio_score < 0 -> NSR_RESTRICTED (사유: 고위험 해역. 권고 속도 준수 및 추가 에스코트 조건부 통과)
-- rio_score < -10 -> REROUTE_SUEZ (사유: POLARIS 기준 특별 고려 대상 해역으로 항해 계획 수립 불가)
+    # --- Step 2: 물리적 크기 필터 ---
+    if ship_data.get('draft', 0.0) > 12.5:
+        return {'status': 'REROUTE_SUEZ', 'reason': '북극항로 수심 제한(12.5m) 초과'}
+    if ship_data.get('beam', 0.0) > 35.0:
+        return {'status': 'REROUTE_SUEZ', 'reason': '선폭 과다(35m 초과)로 단독/에스코트 통과 불가'}
 
-5. 코드 구조 및 테스트
+    # --- Step 3: Polar Code 생존/설비/통신 기준 필터 ---
+    if ship_data.get('max_rescue_days_capacity', 0) < 5:
+        return {'status': 'REROUTE_SUEZ', 'reason': '최소 생존 보장 시간(5일) 미달'}
 
-- `calculate_rio(ice_class, ice_conditions)` 함수와 `evaluate_routing(ship_data)` 함수를 분리하여 모듈화해 줘.
-- 아래 3가지 케이스에 대한 검증 테스트 코드를 반드시 포함해 줘:
-  1. RIO 점수가 1.7 이상 나와 정상 통과(NSR_APPROVED)하는 완벽한 선박 케이스
-  2. 생존 일수(3일) 미달로 우회(REROUTE_SUEZ)하는 케이스
-  3. 얼음 농도가 너무 짙어 RIO 점수가 -12가 나와 우회(REROUTE_SUEZ)하는 케이스
+    is_temp_below = ship_data.get('is_temp_below_minus_10', False)
+    if is_temp_below and ship_data.get('design_temp_margin', 0.0) < 10:
+        return {'status': 'REROUTE_SUEZ', 'reason': '극지 설계 온도 10도 여유분 미확보'}
+
+    required_equipments = [
+        ship_data.get('has_winterization', False),
+        ship_data.get('has_zero_discharge', False),
+        ship_data.get('has_polar_comms', False),
+        ship_data.get('has_ice_navigator', False)
+    ]
+    if not all(required_equipments):
+        return {'status': 'REROUTE_SUEZ', 'reason': 'Polar Code 필수 설비 및 인력 미달'}
+
+    latitude = ship_data.get('latitude', 70.0)
+    comms_type = ship_data.get('comms_type', 'GEO')
+    if latitude >= 75.0 and comms_type != 'LEO':
+        return {'status': 'REROUTE_SUEZ', 'reason': '북위 75도 이상 고위도 진입 시 LEO(저궤도) 통신 장비 필수 (현재 GEO 보유)'}
+
+    # --- Step 4: 선종 및 특수 기상 필터 ---
+    ship_type = ship_data.get('ship_type', 'General')
+    wave_height = ship_data.get('wave_height', 0.0)
+    visibility_km = ship_data.get('visibility_km', 10.0)
+    weather_warning = ""
+
+    if ship_type == 'Container Ship':
+        if wave_height > 4.0:
+            return {'status': 'REROUTE_SUEZ', 'reason': f'컨테이너선 한계 파고({wave_height}m) 초과. 화물 유실 위험'}
+        if is_temp_below and wave_height > 2.5:
+            return {'status': 'REROUTE_SUEZ', 'reason': '컨테이너선 기상 경고: 영하 기온 및 높은 파고로 인한 치명적 선체 착빙(Vessel Icing) 예상'}
+
+    elif ship_type == 'LNG Carrier' and wave_height > 6.0:
+        weather_warning += '[LNG선 경고: BOG 최소화를 위한 감속] '
+
+    elif ship_type == 'Icebreaker' and wave_height > 8.0:
+        weather_warning += '[쇄빙선 경고: 황천 해역 호송 임무 주의] '
+
+    if visibility_km < 1.0:
+        weather_warning += f'[가시거리 경고: {visibility_km}km. 해무/극야로 인한 속도 50% 감속 요망] '
+
+    weather_warning = weather_warning.strip()
+
+    # --- Step 5: POLARIS 빙해역 위험 지수(RIO) 평가 ---
+    ice_class = ship_data.get('ice_class', 'None')
+    ice_conditions = ship_data.get('ice_conditions', [])
+    rio_score = calculate_rio(ice_class, ice_conditions)
+
+    if rio_score < -10:
+        return {'status': 'REROUTE_SUEZ', 'reason': f'POLARIS RIO 심각한 위험({rio_score}점). 특별 고려 대상 해역으로 항해 불가'}
+    elif -10 <= rio_score < 0:
+        base_reason = f'POLARIS 고위험 해역({rio_score}점). 에스코트 필수.'
+        if weather_warning: base_reason += f' | {weather_warning}'
+        return {'status': 'NSR_RESTRICTED', 'reason': base_reason}
+    else: # rio_score >= 0
+        status = 'NSR_RESTRICTED' if weather_warning else 'NSR_APPROVED'
+        reason = f'POLARIS 정상({rio_score}점). {weather_warning}'.strip()
+        return {'status': status, 'reason': reason}
+
+
+# ==========================================
+# 3. 테스트 및 검증 코드 (Test Cases)
+# ==========================================
+if __name__ == "__main__":
+
+    # 뼈대가 되는 기본 선박 제원 (에러가 없는 완벽한 상태)
+    base_ship_data = {
+        'ship_type': 'LNG Carrier', 'draft': 11.0, 'beam': 30.0,
+        'latitude': 76.0, 'comms_type': 'LEO', 'fuel_type': 'LNG',
+        'wave_height': 1.5, 'visibility_km': 10.0,
+        'ice_class': 'PC5', 'has_pwom': True, 'max_rescue_days_capacity': 10,
+        'is_temp_below_minus_10': True, 'design_temp_margin': 15,
+        'has_winterization': True, 'has_zero_discharge': True,
+        'has_polar_comms': True, 'has_ice_navigator': True,
+        'is_sanctioned_country': False, 'has_nsra_permit': True
+    }
+
+    # Case 1: 완벽한 선박 케이스 (RIO 점수 17점 -> NSR_APPROVED)
+    case_1 = base_ship_data.copy()
+    case_1['ice_conditions'] = [
+        {'type': 'Thin First-Year', 'concentration_tenths': 0.7}, # 7 * 2 = 14
+        {'type': 'Medium First-Year', 'concentration_tenths': 0.3} # 3 * 1 = 3 -> Total = 17.0
+    ]
+
+    # Case 2: 생존 일수(3일) 미달로 우회하는 케이스 (REROUTE_SUEZ)
+    case_2 = base_ship_data.copy()
+    case_2['max_rescue_days_capacity'] = 3
+    case_2['ice_conditions'] = case_1['ice_conditions']
+
+    # Case 3: 얼음 농도가 너무 짙어 RIO 점수가 -12가 나오는 케이스 (REROUTE_SUEZ)
+    case_3 = base_ship_data.copy()
+    case_3['ice_class'] = 'PC7'
+    case_3['ice_conditions'] = [
+        {'type': 'Thick First-Year', 'concentration_tenths': 0.6}, # 6 * (-2) = -12
+        {'type': 'Medium First-Year', 'concentration_tenths': 0.0} # Total = -12.0
+    ]
+
+    # Case 4: 컨테이너선 파고 및 착빙 위험 (REROUTE_SUEZ)
+    case_4 = base_ship_data.copy()
+    case_4['ship_type'] = 'Container Ship'
+    case_4['wave_height'] = 3.0
+    case_4['ice_conditions'] = case_1['ice_conditions']
+
+    # Case 5: 가시거리 제한 페널티 부여 (NSR_RESTRICTED)
+    case_5 = base_ship_data.copy()
+    case_5['visibility_km'] = 0.5
+    case_5['ice_conditions'] = case_1['ice_conditions']
+
+    # 실행 결과 출력
+    print("--- 1. 정상 통과 (NSR_APPROVED) ---")
+    print(evaluate_routing(case_1))
+
+    print("\n--- 2. 생존 일수 미달 (REROUTE_SUEZ) ---")
+    print(evaluate_routing(case_2))
+
+    print("\n--- 3. 빙상 위험 RIO -12 (REROUTE_SUEZ) ---")
+    print(evaluate_routing(case_3))
+
+    print("\n--- 4. 컨테이너 착빙 위험 (REROUTE_SUEZ) ---")
+    print(evaluate_routing(case_4))
+
+    print("\n--- 5. 가시거리 페널티 (NSR_RESTRICTED) ---")
+    print(evaluate_routing(case_5))
+```

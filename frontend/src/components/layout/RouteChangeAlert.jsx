@@ -12,12 +12,17 @@ const ROUTE_NAMES = {
 const STEP_LABELS = {
   '1a': '지정학·행정 (제재국가)',
   '1b': '행정 서류 미비 (NSRA/PWOM)',
+  '1c': 'IMO 북극해 HFO 연료 금지',
   '2a': '물리적 크기 초과 (흘수)',
   '2b': '물리적 크기 초과 (선폭)',
   '3a': 'Polar Code 생존 설비 미달',
   '3b': 'Polar Code 온도 설계 미달',
   '3c': 'Polar Code 설비·인력 미비',
-  '4c': 'POLARIS RIO 항해 불가',
+  '3d': 'Polar Code 고위도 LEO 통신 미비',
+  '4a': '선종별 기상 — 컨테이너선 파고 한계 초과',
+  '4b': '선종별 기상 — 컨테이너선 착빙(Icing) 위험',
+  '5b': 'POLARIS RIO 고위험 조건부 통과',
+  '5c': 'POLARIS RIO 항해 불가',
 };
 
 export default function RouteChangeAlert({

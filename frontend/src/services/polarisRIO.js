@@ -69,13 +69,17 @@ export function deriveIceConditions(lon, lat, sampleIceConcentration) {
 }
 
 /**
- * 4-step sequential routing decision tree.
+ * 5-step sequential routing decision tree.
  * Returns { status, reason, rioScore }.
  *
  * @param {Object} shipData - Ship evaluation input:
  *   isSanctionedCountry, hasNsraPermit, hasPwom,
- *   draft, beam, maxRescueDays, isTempBelowMinus10, designTempMargin,
+ *   fuelType, hasHfoExemption,
+ *   draft, beam,
+ *   maxRescueDays, isTempBelowMinus10, designTempMargin,
  *   hasWinterization, hasZeroDischarge, hasPolarComms, hasIceNavigator,
+ *   latitude, commsType,
+ *   shipType, waveHeight, visibilityKm,
  *   iceClass, iceConditions
  * @returns {Object} { status: string, reason: string, rioScore: number|null }
  */
@@ -85,7 +89,7 @@ export function evaluateRouting(shipData) {
   const MIN_RESCUE_DAYS = 5;
   const MIN_TEMP_MARGIN = 10.0;
 
-  // Step 1: 지정학·행정 필터
+  // ── Step 1: 지정학·행정·환경 규제 필터 ─────────────────────────────
   if (shipData.isSanctionedCountry) {
     return {
       status: 'REROUTE_CAPE',
@@ -107,8 +111,17 @@ export function evaluateRouting(shipData) {
       rioScore: null
     };
   }
+  const fuelType = shipData.fuelType || 'MGO';
+  const hasHfoExemption = shipData.hasHfoExemption || false;
+  if (fuelType === 'HFO' && !hasHfoExemption) {
+    return {
+      status: 'REROUTE_SUEZ',
+      reason: '[Step 1c] HFO(중질유) 사용·적재 선박으로 IMO 북극해 HFO 금지 규정(MARPOL Annex I) 위반. 면제 인증 미보유 → 수에즈 우회.',
+      rioScore: null
+    };
+  }
 
-  // Step 2: 물리적 크기 필터
+  // ── Step 2: 물리적 크기 필터 ─────────────────────────────────────
   if (shipData.draft > NSR_MAX_DRAFT) {
     return {
       status: 'REROUTE_SUEZ',
@@ -124,7 +137,7 @@ export function evaluateRouting(shipData) {
     };
   }
 
-  // Step 3: Polar Code 생존·설비 기준
+  // ── Step 3: Polar Code 생존·설비·통신 기준 ───────────────────────
   if (shipData.maxRescueDays < MIN_RESCUE_DAYS) {
     return {
       status: 'REROUTE_SUEZ',
@@ -151,26 +164,72 @@ export function evaluateRouting(shipData) {
       rioScore: null
     };
   }
-
-  // Step 4: POLARIS RIO 평가
-  const rio = calculateRIO(shipData.iceClass, shipData.iceConditions);
-  if (rio >= 0) {
+  const latitude = shipData.latitude ?? 70.0;
+  const commsType = shipData.commsType || 'GEO';
+  if (latitude >= 75.0 && commsType !== 'LEO') {
     return {
-      status: 'NSR_APPROVED',
-      reason: `[Step 4a] POLARIS RIO ${rio >= 0 ? '+' : ''}${rio.toFixed(2)}. 모든 기준 충족, 현재 빙상 조건에서 NSR 정상 통과 승인.`,
-      rioScore: rio
+      status: 'REROUTE_SUEZ',
+      reason: `[Step 3d] 항로 최고 위도 ${latitude.toFixed(1)}°N ≥ 75° — GEO 위성 앙각 부족으로 통신 불가 구간 발생. Iridium/Starlink 등 LEO 통신 필수 (현재: ${commsType}) → 수에즈 우회.`,
+      rioScore: null
     };
   }
+
+  // ── Step 4: 선종별 특화 기상 필터 ────────────────────────────────
+  const shipType = shipData.shipType || 'General';
+  const waveHeight = shipData.waveHeight ?? 0.0;
+  const visibilityKm = shipData.visibilityKm ?? 10.0;
+  let weatherWarning = '';
+
+  if (shipType === 'Container Ship') {
+    if (waveHeight > 4.0) {
+      return {
+        status: 'REROUTE_SUEZ',
+        reason: `[Step 4a] 컨테이너선 한계 파고 초과: 유의 파고 ${waveHeight.toFixed(1)}m > 4.0m. 갑판 적재 컨테이너 유실(Cargo Loss) 및 구조 손상 위험 → 수에즈 우회.`,
+        rioScore: null
+      };
+    }
+    if (shipData.isTempBelowMinus10 && waveHeight > 2.5) {
+      return {
+        status: 'REROUTE_SUEZ',
+        reason: `[Step 4b] 컨테이너선 착빙(Vessel Icing) 위험: 기온 -10°C 미만 + 파고 ${waveHeight.toFixed(1)}m > 2.5m. 치명적 선체 착빙 예상, 복원력 상실 위험 → 수에즈 우회.`,
+        rioScore: null
+      };
+    }
+  } else if (shipType === 'LNG Carrier') {
+    if (waveHeight > 6.0) {
+      weatherWarning += `[LNG선 경고: 파고 ${waveHeight.toFixed(1)}m > 6.0m — 슬로싱·BOG 증가. 감속·가스 관리 주의 운항] `;
+    }
+  } else if (shipType === 'Icebreaker') {
+    if (waveHeight > 8.0) {
+      weatherWarning += `[쇄빙선 경고: 파고 ${waveHeight.toFixed(1)}m > 8.0m — 황천 해역 호송 임무 제한. 독립 항행 전환 검토] `;
+    }
+  }
+  if (visibilityKm < 1.0) {
+    weatherWarning += `[가시거리 경고: ${visibilityKm.toFixed(1)}km 미만 — 해무/극야 조건. 속도 50% 이상 감속 및 연속 레이더 감시 필수] `;
+  }
+  weatherWarning = weatherWarning.trim();
+
+  // ── Step 5: POLARIS RIO 평가 ─────────────────────────────────────
+  const rio = calculateRIO(shipData.iceClass, shipData.iceConditions);
+
+  if (rio >= 0) {
+    const baseReason = `[Step 5a] POLARIS RIO +${rio.toFixed(2)}. 모든 기준 충족, 현재 빙상 조건에서 NSR 정상 통과 승인.`;
+    if (weatherWarning) {
+      return { status: 'NSR_RESTRICTED', reason: `${baseReason} | ${weatherWarning}`, rioScore: rio };
+    }
+    return { status: 'NSR_APPROVED', reason: baseReason, rioScore: rio };
+  }
   if (rio >= -10) {
+    const baseReason = `[Step 5b] RIO ${rio.toFixed(2)} (경계: -10≤RIO<0). 고위험 빙해역 — 쇄빙선 에스코트 필수, 권고 속도 준수, 24h 빙상 감시 조건부 통과.`;
     return {
       status: 'NSR_RESTRICTED',
-      reason: `[Step 4b] RIO ${rio.toFixed(2)} (경계: -10≤RIO<0). 고위험 빙해역 — 쇄빙선 에스코트 필수, 권고 속도 준수, 24h 빙상 감시 조건부 통과.`,
+      reason: weatherWarning ? `${baseReason} | ${weatherWarning}` : baseReason,
       rioScore: rio
     };
   }
   return {
     status: 'REROUTE_SUEZ',
-    reason: `[Step 4c] RIO ${rio.toFixed(2)} < -10. POLARIS 특별 고려 대상 해역(빙하·다년생 빙 지배). 선박 설계 한계 초과, 안전 항해 계획 불가 → 수에즈 우회.`,
+    reason: `[Step 5c] RIO ${rio.toFixed(2)} < -10. POLARIS 특별 고려 대상 해역(빙하·다년생 빙 지배). 선박 설계 한계 초과, 안전 항해 계획 불가 → 수에즈 우회.`,
     rioScore: rio
   };
 }

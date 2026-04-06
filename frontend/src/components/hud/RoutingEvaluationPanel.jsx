@@ -22,11 +22,29 @@ export default function RoutingEvaluationPanel({
   onEvaluate,
   evaluationResult,
   currentRoute,
+  weatherData,   // Open-Meteo 실시간 기상 데이터 (선택)
 }) {
   const [draft, setDraft] = useState(8.5);
   const [rescueDays, setRescueDays] = useState(7);
   const [tempMargin, setTempMargin] = useState(12);
   const [checks, setChecks] = useState(DEFAULT_CHECKS);
+
+  // ── 신규: 연료·규제 (Step 1c) ──────────────────────────────────
+  const [fuelType, setFuelType] = useState('MGO');
+  const [hasHfoExemption, setHasHfoExemption] = useState(false);
+
+  // ── 신규: 통신·위도 (Step 3d) ──────────────────────────────────
+  const [latitude, setLatitude] = useState(72.0);
+  const [commsType, setCommsType] = useState('GEO');
+
+  // ── 신규: 기상 조건 (Step 4) — 실시간 데이터로 초기값 채움 ──────
+  const [shipType, setShipType] = useState('General');
+  const [waveHeight, setWaveHeight] = useState(
+    weatherData?.route_summary?.max_wave_height_m ?? 1.5
+  );
+  const [visibilityKm, setVisibilityKm] = useState(
+    weatherData?.route_summary?.min_visibility_km ?? 10.0
+  );
 
   const result = evaluationResult || {};
   const statusInfo = STATUS_LABELS[result.status] || { cls: '', text: '-- \uBBF8\uD3C9\uAC00 --' };
@@ -50,6 +68,16 @@ export default function RoutingEvaluationPanel({
       hasNavigator: checks.navigator,
       isSanctioned: checks.sanctioned,
       isColdRoute: checks.coldRoute,
+      // Step 1c
+      fuelType,
+      hasHfoExemption,
+      // Step 3d
+      latitude,
+      commsType,
+      // Step 4
+      shipType,
+      waveHeight,
+      visibilityKm,
     });
   };
 
@@ -86,6 +114,21 @@ export default function RoutingEvaluationPanel({
   return (
     <div className="hud" id="hud-routing" style={{ border: '1px solid rgba(96, 165, 250, 0.2)', minWidth: '300px' }}>
       <div className="hud-title">📋 NSR 항로 적합성 및 POLARIS 평가</div>
+
+      {/* 기상 데이터 상태 뱃지 */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '6px',
+        padding: '4px 8px', borderRadius: '6px', marginBottom: '8px', fontSize: '10px',
+        background: weatherData
+          ? 'rgba(52,211,153,0.1)' : 'rgba(251,191,36,0.1)',
+        border: `1px solid ${weatherData ? 'rgba(52,211,153,0.3)' : 'rgba(251,191,36,0.3)'}`,
+        color: weatherData ? '#34d399' : '#fbbf24',
+      }}>
+        <span>{weatherData ? '🟢' : '🟡'}</span>
+        {weatherData
+          ? `실시간 기상 반영 (${weatherData.fetched_at?.slice(0, 16).replace('T', ' ')} UTC)`
+          : '수동 입력 모드 — 기상 데이터 로딩 중'}
+      </div>
 
       <div id="routing-status-badge" className={statusInfo.cls} style={{ 
         padding: '10px', 
@@ -203,6 +246,109 @@ export default function RoutingEvaluationPanel({
             onChange={(e) => setTempMargin(parseFloat(e.target.value) || 0)}
           />
           <span style={{ color: '#4a6a8a', fontSize: '11px' }}>°C</span>
+        </div>
+      </div>
+
+      {/* --- 연료 및 환경 규제 (Step 1c) --- */}
+      <div className="routing-section-title" style={{ color: '#fb923c' }}>연료 및 환경 규제</div>
+      <div className="routing-input-group" style={{ marginBottom: '6px' }}>
+        <label style={{ fontSize: '11px' }}>연료 종류</label>
+        <select
+          value={fuelType}
+          onChange={(e) => setFuelType(e.target.value)}
+          style={{ borderRadius: '4px', fontSize: '11px', padding: '2px 4px', background: 'rgba(15,23,42,0.8)', color: '#f8fafc', border: '1px solid rgba(255,255,255,0.15)' }}
+        >
+          <option value="MGO">MGO (선박유)</option>
+          <option value="VLSFO">VLSFO (초저유황유)</option>
+          <option value="LNG">LNG (액화천연가스)</option>
+          <option value="HFO">HFO (중질유)</option>
+        </select>
+      </div>
+      {fuelType === 'HFO' && (
+        <div className="routing-checks" style={{ gap: '6px', marginBottom: '8px' }}>
+          <label style={{ cursor: 'pointer', gap: '8px', color: hasHfoExemption ? '#34d399' : '#f87171', fontSize: '11px' }}>
+            <input
+              type="checkbox"
+              checked={hasHfoExemption}
+              style={{ accentColor: '#34d399' }}
+              onChange={() => setHasHfoExemption((v) => !v)}
+            />
+            IMO HFO 면제 인증 보유
+          </label>
+        </div>
+      )}
+
+      {/* --- 통신 및 위도 (Step 3d) --- */}
+      <div className="routing-section-title" style={{ color: '#a78bfa' }}>통신 및 운항 위도</div>
+      <div className="routing-input-group" style={{ marginBottom: '6px' }}>
+        <label style={{ fontSize: '11px' }}>항로 최고 위도</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <input
+            type="number"
+            value={latitude}
+            step="0.5"
+            min="60"
+            max="90"
+            style={{ width: '60px', borderRadius: '4px', textAlign: 'center' }}
+            onChange={(e) => setLatitude(parseFloat(e.target.value) || 70)}
+          />
+          <span style={{ color: '#4a6a8a', fontSize: '11px' }}>°N</span>
+        </div>
+      </div>
+      <div className="routing-input-group" style={{ marginBottom: '12px' }}>
+        <label style={{ fontSize: '11px' }}>통신 장비</label>
+        <select
+          value={commsType}
+          onChange={(e) => setCommsType(e.target.value)}
+          style={{ borderRadius: '4px', fontSize: '11px', padding: '2px 4px', background: 'rgba(15,23,42,0.8)', color: latitude >= 75 && commsType !== 'LEO' ? '#f87171' : '#f8fafc', border: '1px solid rgba(255,255,255,0.15)' }}
+        >
+          <option value="GEO">GEO (정지궤도)</option>
+          <option value="LEO">LEO (저궤도 / Iridium·Starlink)</option>
+        </select>
+      </div>
+
+      {/* --- 기상 조건 (Step 4) --- */}
+      <div className="routing-section-title" style={{ color: '#38bdf8' }}>선종 및 기상 조건</div>
+      <div className="routing-input-group" style={{ marginBottom: '6px' }}>
+        <label style={{ fontSize: '11px' }}>선종</label>
+        <select
+          value={shipType}
+          onChange={(e) => setShipType(e.target.value)}
+          style={{ borderRadius: '4px', fontSize: '11px', padding: '2px 4px', background: 'rgba(15,23,42,0.8)', color: '#f8fafc', border: '1px solid rgba(255,255,255,0.15)' }}
+        >
+          <option value="General">일반선 (General)</option>
+          <option value="Container Ship">컨테이너선</option>
+          <option value="LNG Carrier">LNG선</option>
+          <option value="Icebreaker">쇄빙선</option>
+          <option value="Bulk Carrier">벌크선</option>
+        </select>
+      </div>
+      <div className="routing-input-group" style={{ marginBottom: '6px' }}>
+        <label style={{ fontSize: '11px' }}>유의 파고</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <input
+            type="number"
+            value={waveHeight}
+            step="0.5"
+            min="0"
+            style={{ width: '60px', borderRadius: '4px', textAlign: 'center' }}
+            onChange={(e) => setWaveHeight(parseFloat(e.target.value) || 0)}
+          />
+          <span style={{ color: '#4a6a8a', fontSize: '11px' }}>m</span>
+        </div>
+      </div>
+      <div className="routing-input-group" style={{ marginBottom: '12px' }}>
+        <label style={{ fontSize: '11px' }}>가시거리</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <input
+            type="number"
+            value={visibilityKm}
+            step="0.5"
+            min="0"
+            style={{ width: '60px', borderRadius: '4px', textAlign: 'center', color: visibilityKm < 1.0 ? '#f87171' : undefined }}
+            onChange={(e) => setVisibilityKm(parseFloat(e.target.value) || 0)}
+          />
+          <span style={{ color: '#4a6a8a', fontSize: '11px' }}>km</span>
         </div>
       </div>
 
