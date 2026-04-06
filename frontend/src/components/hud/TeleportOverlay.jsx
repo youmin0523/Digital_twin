@@ -57,29 +57,7 @@ export default function TeleportOverlay({
     };
   }, []);
 
-  const [mapImage, setMapImage] = useState(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
-
-  /* ---------- preload map image ---------- */
-  useEffect(() => {
-    let isMounted = true;
-    const img = new Image();
-    img.src = '/world_map.png?v=' + Date.now();
-    img.onload = () => {
-      if (!isMounted) return;
-      console.log('Map image loaded successfully');
-      setMapImage(img);
-      setMapLoaded(true);
-    };
-    img.onerror = () => {
-      if (!isMounted) return;
-      console.error('Failed to load map image at /world_map.png');
-      setMapLoaded(true);
-    };
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const [mapLoaded, setMapLoaded] = useState(true);
 
   /* redraw logic */
   useEffect(() => {
@@ -202,7 +180,6 @@ export default function TeleportOverlay({
     heading,
     teleportPresets,
     toPixel,
-    mapImage,
     mapLoaded,
   ]);
 

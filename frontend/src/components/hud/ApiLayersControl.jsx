@@ -2,6 +2,7 @@ import React from 'react';
 
 const LAYERS = [
   { id: 'layer-nsidc-conc', stateKey: 'nsidcConc', label: 'NSIDC 해빙 농도',       title: '북극해 해빙의 면적 대비 얼음의 비율(%)을 실시간 시각화합니다.' },
+  { id: 'layer-gibs-ice',   stateKey: 'gibsIce',   label: '해빙 자연색 오버레이', title: 'Copernicus/NSIDC 데이터 기반 자연색 해빙 오버레이 (흰색 얼음 / 투명 바다)' },
   { id: 'layer-cop-thick',  stateKey: 'copThick',  label: 'Copernicus 해빙 두께',    title: 'Copernicus 모델 기반의 해빙 두께 예측값을 시각화합니다.' },
   { id: 'layer-nsidc-edge', stateKey: 'nsidcEdge', label: 'NSIDC 경계선 (Today)',       title: '위성 밝기온도 데이터 기반으로 오늘의 해빙 경계선을 표시합니다.' },
   { id: 'layer-esa-sar',    stateKey: 'esaSar',    label: 'ESA Sentinel-1 위성',             title: 'ESA 주관 센티널-1 위성의 합성개구레이더(SAR) 영상을 제공합니다.' },

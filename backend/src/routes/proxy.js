@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const fetch = require('node-fetch');
-
 const TRANSPARENT_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
   'base64'
@@ -17,6 +16,7 @@ async function proxyTile(targetUrl, res) {
     if (!response.ok) {
       res.set('Content-Type', 'image/png');
       res.set('Access-Control-Allow-Origin', '*');
+      res.set('Cache-Control', 'no-cache, no-store');
       return res.send(TRANSPARENT_PNG);
     }
 
@@ -29,40 +29,34 @@ async function proxyTile(targetUrl, res) {
   } catch (err) {
     res.set('Content-Type', 'image/png');
     res.set('Access-Control-Allow-Origin', '*');
+    res.set('Cache-Control', 'no-cache, no-store');
     res.send(TRANSPARENT_PNG);
   }
 }
 
 // ── 기존 arctic-hybrid.html 호환 경로 ──────────────────────────
-// GET /nsidc-proxy/?SERVICE=WMS&... → NASA GIBS WMS
 router.get('/', (req, res, next) => {
-  // 이 라우터는 /proxy 아래에 마운트되므로 여기서는 /nsidc, /copernicus만 처리
   next();
 });
 
-// GET /proxy/nsidc?url=... (새 React 프론트용)
 router.get('/nsidc', async (req, res) => {
   const targetUrl = req.query.url;
-  if (!targetUrl) {
-    return res.status(400).json({ error: 'url parameter required' });
-  }
+  if (!targetUrl) return res.status(400).json({ error: 'url parameter required' });
   await proxyTile(targetUrl, res);
 });
 
-// GET /proxy/copernicus?url=... (새 React 프론트용)
 router.get('/copernicus', async (req, res) => {
   const targetUrl = req.query.url;
-  if (!targetUrl) {
-    return res.status(400).json({ error: 'url parameter required' });
-  }
+  if (!targetUrl) return res.status(400).json({ error: 'url parameter required' });
   await proxyTile(targetUrl, res);
 });
 
 module.exports = router;
 
-// ── 기존 HTML 호환 라우트 (index.js에서 별도 마운트) ────────────
+// ── NSIDC 프록시: 단순 패스스루 ────────────
 module.exports.legacyNsidcProxy = async (req, res) => {
-  const qs = require('url').parse(req.url).query || '';
+  let qs = require('url').parse(req.url).query || '';
+  qs = qs.replace(/&?_cb=[^&]*/gi, '').replace(/^&/, '');
   const targetUrl = 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?' + qs;
   await proxyTile(targetUrl, res);
 };

@@ -80,6 +80,8 @@ function AppInner() {
   const cameraInteractTimer = useRef(null);  // 조작 후 추적 재개 딜레이
   const shipStateRef = useRef(state.shipState);
   const oceanOverlayModeRef = useRef('none'); // 모든 WMS 레이어 기본 OFF
+  const cesiumIceLayerRef = useRef(null); // Cesium 캔버스 해빙 레이어 (gibsIce)
+  const nsidcConcCanvasRef = useRef(null); // Cesium 캔버스 해빙 농도 레이어 (nsidcConc)
 
   useEffect(() => {
     isSimulatingRef.current = state.isSimulating;
@@ -354,23 +356,22 @@ function AppInner() {
           cesiumRef.current.updateShipEntity(pos, hdgDeg, shipSpecsRef.current);
         }
 
-        // ── Cesium 카메라 추적 (SATELLITE/WIDE 모드 전용) ──
+        // ── Cesium 카메라 추적 (SATELLITE 모드 전용 — WIDE는 북극 고정) ──
         const viewer = viewerRef.current;
         const curMode = currentModeRef.current;
         if (
           viewer && !viewer.isDestroyed() &&
           !userCameraInteracting.current &&
-          (curMode === 'SATELLITE' || curMode === 'WIDE')
+          curMode === 'SATELLITE'
         ) {
           try {
-            // 현재 카메라 고도를 유지하면서 선박 위치만 따라감
             const camPos = viewer.camera.positionCartographic;
-            const currentAlt = camPos ? camPos.height : (curMode === 'WIDE' ? 3000000 : 120000);
+            const currentAlt = camPos ? camPos.height : 120000;
             viewer.camera.setView({
               destination: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, currentAlt),
               orientation: {
-                heading: viewer.camera.heading,
-                pitch: viewer.camera.pitch,
+                heading: 0,
+                pitch: Cesium.Math.toRadians(-90),
                 roll: 0,
               },
             });
@@ -556,6 +557,7 @@ function AppInner() {
     gebcoBathy: false,
     s2True: false,
     s2Ndsi: false,
+    gibsIce: false,
   });
   const [gebcoOpacity, setGebcoOpacity] = useState(75);
 
@@ -616,21 +618,7 @@ function AppInner() {
   const handleViewerReady = useCallback((viewer) => {
     viewerRef.current = viewer;
     setCesiumViewerState(viewer);
-    // 초기 지구본 뷰(13,000km) 대신 선박 위치(부산)로 이동
-    const { lon, lat } = shipStateRef.current;
-    setTimeout(() => {
-      if (viewer && !viewer.isDestroyed()) {
-        viewer.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
-          orientation: {
-            heading: 0,
-            pitch: Cesium.Math.toRadians(-80),
-            roll: 0,
-          },
-          duration: 2.0,
-        });
-      }
-    }, 2500); // 초기 flyTo 애니메이션(2초) 완료 후 실행
+    // 초기 북극 탑다운 뷰 유지 (CesiumGlobe에서 이미 flyTo 수행)
   }, []);
 
   // 시뮬레이션 제어
@@ -664,17 +652,29 @@ function AppInner() {
 
         const viewer = viewerRef.current;
         if (viewer && !viewer.isDestroyed()) {
-          const alt = mode === 'WIDE' ? 3000000 : 120000;
-          const pitch = mode === 'WIDE' ? -60 : -80;
-          viewer.camera.flyTo({
-            destination: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
-            orientation: {
-              heading: 0,
-              pitch: Cesium.Math.toRadians(pitch),
-              roll: 0,
-            },
-            duration: 1.0,
-          });
+          if (mode === 'WIDE') {
+            // ── 광역 항로: 북극 중심 탑다운 (polar projection) ──
+            viewer.camera.flyTo({
+              destination: Cesium.Cartesian3.fromDegrees(60, 90, 18000000),
+              orientation: {
+                heading: 0,
+                pitch: Cesium.Math.toRadians(-90),
+                roll: 0,
+              },
+              duration: 1.0,
+            });
+          } else {
+            // ── 위성 조감: 선박 위치 위에서 직하 시점 ──
+            viewer.camera.flyTo({
+              destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
+              orientation: {
+                heading: 0,
+                pitch: Cesium.Math.toRadians(-90),
+                roll: 0,
+              },
+              duration: 1.0,
+            });
+          }
         }
       }
     },
@@ -944,18 +944,124 @@ function AppInner() {
         s2True: 's2True',
         s2Ndsi: 's2Ndsi',
       };
-      const cesiumLayer = viewer._apiLayers[layerMap[layerKey]];
-      if (cesiumLayer) {
-        cesiumLayer.show = checked;
+      // ── nsidcConc: GIBS WMS 해빙 농도 (자연스러운 렌더링) ──
+      if (layerKey === 'nsidcConc') {
+        const wmsLayer = viewer._apiLayers?.nsidcConc;
+        if (wmsLayer) wmsLayer.show = false;
+
         if (checked) {
+          if (nsidcConcCanvasRef.current) {
+            try { viewer.imageryLayers.remove(nsidcConcCanvasRef.current); } catch (_) {}
+            nsidcConcCanvasRef.current = null;
+          }
           try {
-            viewer.imageryLayers.raiseToTop(cesiumLayer);
-          } catch (_) {}
+            const provider = new Cesium.WebMapServiceImageryProvider({
+              url: '/nsidc-proxy/',
+              layers: 'AMSRU2_Sea_Ice_Concentration_25km',
+              parameters: { transparent: 'true', format: 'image/png' },
+              tileWidth: 256, tileHeight: 256,
+              enablePickFeatures: false,
+            });
+            const ly = viewer.imageryLayers.addImageryProvider(provider);
+            ly.alpha = 0.8;
+            nsidcConcCanvasRef.current = ly;
+            viewer.imageryLayers.raiseToTop(ly);
+          } catch (e) { console.warn('[nsidcConc] 실패:', e); }
+        } else {
+          if (nsidcConcCanvasRef.current) {
+            try { viewer.imageryLayers.remove(nsidcConcCanvasRef.current); } catch (_) {}
+            nsidcConcCanvasRef.current = null;
+          }
+        }
+      }
+
+      // 기타 WMS 레이어 토글
+      const cesiumLayerKey = layerMap[layerKey];
+      if (cesiumLayerKey && layerKey !== 'nsidcConc') {
+        const cesiumLayer = viewer._apiLayers[cesiumLayerKey];
+        if (cesiumLayer) {
+          cesiumLayer.show = checked;
+          if (checked) {
+            try {
+              viewer.imageryLayers.raiseToTop(cesiumLayer);
+            } catch (_) {}
+          }
+        }
+      }
+
+      // gibsIce → 해빙 자연색 모드: NASA GIBS 해빙 + 베이스 무채색
+      if (layerKey === 'gibsIce') {
+        const baseLayer = viewer.imageryLayers.get(0);
+
+        if (checked) {
+          // ── 베이스 레이어: 무채색 (땅=밝은 회색, 바다=어두운색) ──
+          if (baseLayer) {
+            baseLayer.saturation = 0.0;
+            baseLayer.brightness = 0.7;
+            baseLayer.contrast = 0.9;
+          }
+          viewer.scene.globe.enableLighting = false;
+          viewer.scene.atmosphere.show = false;
+          viewer.scene.fog.enabled = false;
+          viewer.scene.globe.showGroundAtmosphere = false;
+          viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#1a2535');
+
+          // ── 기존 gibsIce 레이어 제거 ──
+          if (cesiumIceLayerRef.current) {
+            try { viewer.imageryLayers.remove(cesiumIceLayerRef.current); } catch (_) {}
+            cesiumIceLayerRef.current = null;
+          }
+
+          // ── NASA GIBS MODIS 해빙 레이어 (흰색 스타일) ──
+          const gibsDate = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
+          try {
+            const iceProvider = new Cesium.WebMapServiceImageryProvider({
+              url: 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi',
+              layers: 'MODIS_Terra_Sea_Ice',
+              parameters: { transparent: 'true', format: 'image/png', TIME: gibsDate },
+              tileWidth: 512, tileHeight: 512,
+              enablePickFeatures: false, credit: 'NASA GIBS',
+            });
+            const iceLayer = viewer.imageryLayers.addImageryProvider(iceProvider);
+            iceLayer.alpha = 0.9;
+            iceLayer.brightness = 2.0;
+            iceLayer.saturation = 0.0;
+            iceLayer.contrast = 1.3;
+            cesiumIceLayerRef.current = iceLayer;
+            viewer.imageryLayers.raiseToTop(iceLayer);
+          } catch (e) {
+            console.warn('[gibsIce] GIBS layer 실패:', e);
+          }
+        } else {
+          // ── 복원 ──
+          if (baseLayer) {
+            baseLayer.saturation = 1.0;
+            baseLayer.brightness = 1.0;
+            baseLayer.contrast = 1.0;
+          }
+          viewer.scene.globe.enableLighting = true;
+          viewer.scene.atmosphere.show = true;
+          viewer.scene.fog.enabled = true;
+          viewer.scene.globe.showGroundAtmosphere = true;
+
+          if (cesiumIceLayerRef.current) {
+            try { viewer.imageryLayers.remove(cesiumIceLayerRef.current); } catch (_) {}
+            cesiumIceLayerRef.current = null;
+          }
+          // nsidcEdge 폴백 복원
+          const edgeFb = viewer._apiLayers?.nsidcEdge;
+          if (edgeFb) {
+            edgeFb.show = layerStates.nsidcEdge || false;
+            edgeFb.alpha = 0.7;
+            edgeFb.brightness = 1.0;
+            edgeFb.saturation = 1.0;
+          }
         }
       }
 
       // WMS 레이어 토글 → BRIDGE/FOLLOW 바다 색상 모드 결정
       const oceanLayers = {
+        gibsIce: 'ice',
         nsidcConc: 'ice',
         copThick: 'thickness',
         nsidcEdge: 'edge',
@@ -966,10 +1072,8 @@ function AppInner() {
 
         let overlayMode;
         if (checked) {
-          // 켠 레이어를 즉시 적용
           overlayMode = oceanLayers[layerKey];
         } else {
-          // 끈 경우 → 남아있는 활성 레이어 중 하나 선택
           const newStates = { ...layerStates, [layerKey]: false };
           overlayMode = 'none';
           for (const [key, mode] of Object.entries(oceanLayers)) {
@@ -1169,7 +1273,7 @@ function AppInner() {
             destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
             orientation: {
               heading: 0,
-              pitch: Cesium.Math.toRadians(-80),
+              pitch: Cesium.Math.toRadians(-90),
               roll: 0,
             },
             duration: 1.5,
@@ -1195,16 +1299,30 @@ function AppInner() {
   const handleRecenter = useCallback(() => {
     const viewer = viewerRef.current;
     if (viewer) {
-      const { lon, lat } = state.shipState;
-      viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
-        orientation: {
-          heading: 0,
-          pitch: Cesium.Math.toRadians(-80),
-          roll: 0,
-        },
-        duration: 1.0,
-      });
+      const curMode = currentModeRef.current;
+      if (curMode === 'WIDE') {
+        // WIDE 모드: 북극 중심으로 리센터
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(60, 90, 18000000),
+          orientation: {
+            heading: 0,
+            pitch: Cesium.Math.toRadians(-90),
+            roll: 0,
+          },
+          duration: 1.0,
+        });
+      } else {
+        const { lon, lat } = state.shipState;
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
+          orientation: {
+            heading: 0,
+            pitch: Cesium.Math.toRadians(-90),
+            roll: 0,
+          },
+          duration: 1.0,
+        });
+      }
     }
   }, [state.shipState]);
 
