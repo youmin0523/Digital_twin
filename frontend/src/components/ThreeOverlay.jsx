@@ -337,7 +337,7 @@ function makeIceGeo(typeName, w, h, d) {
 // =============================================================================
 // ThreeOverlay Component
 // =============================================================================
-const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, specs, mode }, ref) {
+const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, specs, mode, baseRef }, ref) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
 
@@ -583,13 +583,15 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
 
     if (!bergs || bergs.length === 0) return;
 
-    const mPerDegLon = 111319.491 * Math.cos(35.1 * Math.PI / 180);
+    const bRefLat = baseRef?.lat ?? 35.1;
+    const bRefLon = baseRef?.lon ?? 129.0;
+    const mPerDegLon = 111319.491 * Math.cos(bRefLat * Math.PI / 180);
     const VISIBLE_RANGE = 50000; // 50km
-    
-    // //* [Modified Code] 실시간 빙산의 로컬 좌표 변환 시, 선박 위치(shipLat/Lon) 기준이 아닌 고정 월드 축(35.1, 129.0) 사용으로 물리 오차 제거
+
+    // 실시간 빙산의 로컬 좌표 변환: 출발항 기준 고정 월드 축 사용
     for (const berg of bergs) {
-      const x = (berg.lon - 129.0) * mPerDegLon / 1.5;
-      const z = -(berg.lat - 35.1) * METERS_PER_DEGREE_LAT / 1.5;
+      const x = (berg.lon - bRefLon) * mPerDegLon / 1.5;
+      const z = -(berg.lat - bRefLat) * METERS_PER_DEGREE_LAT / 1.5;
       const dist = Math.sqrt(Math.pow(x - ctx.current.shipGroup3?.position.x || x, 2) + Math.pow(z - ctx.current.shipGroup3?.position.z || z, 2));
       if (dist > VISIBLE_RANGE) continue;
 
@@ -1369,7 +1371,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
     buildIcebergs();
     buildShip(specs.type);
     buildFoam();
-    buildLandMasses(35.1, 129.0); // Initial reference: Busan
+    buildLandMasses(baseRef?.lat ?? 35.1, baseRef?.lon ?? 129.0);
 
     // Resize handler
     const handleResize = () => {

@@ -86,13 +86,20 @@ async function getCopernicusIcebergData() {
   return copDataCache;
 }
 
-// 기상 데이터 (Open-Meteo — weather_fetcher.py 수집)
+// 기상 데이터 (Open-Meteo — weather_fetcher.py 수집, 5개 항로)
+// 6시간마다 갱신되므로 캐시 TTL을 30분으로 설정
+const WEATHER_CACHE_TTL = 30 * 60 * 1000;
+
 async function getWeatherData() {
   const cacheKey = 'weather_latest';
-  const cached = getCached(cacheKey);
-  if (cached) return cached;
-  const data = await readJsonFile(path.join(DATA_DIR, 'arctic_weather_latest.json'));
-  if (data) setCache(cacheKey, data);
+  const entry = cache.get(cacheKey);
+  if (entry && Date.now() - entry.timestamp < WEATHER_CACHE_TTL) {
+    return entry.data;
+  }
+  cache.delete(cacheKey);
+  let data = await readJsonFile(path.join(DATA_DIR, 'weather_latest.json'));
+  if (!data) data = await readJsonFile(path.join(DATA_DIR, 'arctic_weather_latest.json'));
+  if (data) cache.set(cacheKey, { data, timestamp: Date.now() });
   return data;
 }
 

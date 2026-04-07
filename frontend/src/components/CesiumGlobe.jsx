@@ -188,7 +188,7 @@ function createShipIcon(type = 'icebreaker') {
 // ═══════════════════════════════════════════════════════════════
 
 const CesiumGlobe = forwardRef(function CesiumGlobe(
-  { currentRouteKey = 'NSR', onViewerReady },
+  { currentRouteKey = 'NSR', onViewerReady, activeWaypoints },
   ref,
 ) {
   const containerRef = useRef(null);
@@ -198,9 +198,9 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
   const shipEntityRef = useRef(null);
   const lastShipType = useRef(null);
 
-  const drawRoute = useCallback((viewer, routeKey) => {
+  const drawRoute = useCallback((viewer, routeKey, overrideWaypoints) => {
     if (!viewer || viewer.isDestroyed()) return;
-    const waypoints = ROUTES[routeKey];
+    const waypoints = overrideWaypoints || ROUTES[routeKey];
     if (!waypoints || waypoints.length === 0) return;
 
     if (routeLineRef.current) viewer.entities.remove(routeLineRef.current);
@@ -417,10 +417,12 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
         } catch (e) { console.warn('S2 NDSI layer error:', e); }
         viewer._apiLayers = layers;
 
-        drawRoute(viewer, currentRouteKey);
+        drawRoute(viewer, currentRouteKey, activeWaypoints);
 
+        const initWps = activeWaypoints || ROUTES[currentRouteKey] || ROUTES.NSR;
+        const startPt = initWps[0] || { lon: 129.04, lat: 35.1 };
         viewer.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(129.04, 35.1, 13000000),
+          destination: Cesium.Cartesian3.fromDegrees(startPt.lon, startPt.lat, 13000000),
           orientation: { heading: 0, pitch: Cesium.Math.toRadians(-50), roll: 0 },
           duration: 2,
         });
@@ -434,8 +436,8 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
   }, []);
 
   useEffect(() => {
-    if (viewerRef.current && !viewerRef.current.isDestroyed()) drawRoute(viewerRef.current, currentRouteKey);
-  }, [currentRouteKey, drawRoute]);
+    if (viewerRef.current && !viewerRef.current.isDestroyed()) drawRoute(viewerRef.current, currentRouteKey, activeWaypoints);
+  }, [currentRouteKey, activeWaypoints, drawRoute]);
 
   return <div id="cesium-wrap" ref={containerRef} />;
 });

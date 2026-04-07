@@ -16,6 +16,7 @@ import LegendContainer from './components/hud/LegendContainer';
 import TeleportOverlay from './components/hud/TeleportOverlay';
 // //* [Modified Code] 우측 하단 레이더 UI 컴포넌트 임포트
 import Minimap from './components/hud/Minimap';
+import WeatherHud from './components/hud/WeatherHud';
 import Header from './components/layout/Header';
 import Sidebar from './components/layout/Sidebar';
 import SimulationControls from './components/layout/SimulationControls';
@@ -23,7 +24,8 @@ import TimelineBar from './components/layout/TimelineBar';
 import BottomPanel from './components/layout/BottomPanel';
 import ShipSpecsSummaryModal from './components/layout/ShipSpecsSummaryModal';
 import RouteChangeAlert from './components/layout/RouteChangeAlert';
-import { ROUTES, TOTAL_SECONDS } from './data/arcticRoutes';
+import { ROUTES, TOTAL_SECONDS, getTotalSeconds, ROUTE_DAYS } from './data/arcticRoutes';
+import { PORTS } from './data/ports';
 import { SHIP_PRESETS } from './data/vesselPresets';
 import useManualControl from './hooks/useManualControl';
 import { fetchIceConcentration, fetchIcebergs, fetchWeather } from './services/api';
@@ -35,6 +37,8 @@ import {
   getSeaState,
 } from './services/shipSimulator';
 import { evaluateRouting, deriveIceConditions } from './services/polarisRIO';
+import { generateRoute } from './services/routeGenerator';
+import { checkRouteAhead, rerouteAroundIceberg } from './services/icebergAvoidance';
 
 function AppInner() {
   const state = useAppState();
@@ -78,6 +82,7 @@ function AppInner() {
   const bergCesiumEntitiesRef = useRef([]); // Cesium 빙산 엔티티 목록
   const userCameraInteracting = useRef(false); // 사용자 카메라 조작 중 여부
   const cameraInteractTimer = useRef(null);  // 조작 후 추적 재개 딜레이
+  const [mouseGlobePos, setMouseGlobePos] = useState(null); // 마우스 위치 (출항 전 기상 조회용)
   const shipStateRef = useRef(state.shipState);
   const oceanOverlayModeRef = useRef('none'); // 모든 WMS 레이어 기본 OFF
   const cesiumIceLayerRef = useRef(null); // Cesium 캔버스 해빙 레이어 (gibsIce)
@@ -130,9 +135,9 @@ function AppInner() {
     let speedText = '0.0 kn';
     let throttleText = '정지';
     if (state.isSimulating && !state.manualMode) {
-      const wps = ROUTES[state.currentRouteKey] || ROUTES.NSR;
-      const distKm = calculateRouteDistanceKM(wps);
-      const speedKmH = (distKm / TOTAL_SECONDS) * state.multiplier * 3600;
+      const distKm = calculateRouteDistanceKM(activeWaypoints);
+      const totalSec = getTotalSeconds(state.currentRouteKey);
+      const speedKmH = (distKm / totalSec) * state.multiplier * 3600;
       const kn = (speedKmH / 1.852).toFixed(1);
       speedText = kn + ' kn';
       throttleText = '자동 ×' + Math.round(state.multiplier / 20);
@@ -222,15 +227,95 @@ function AppInner() {
     shipSpecsRef.current = state.shipSpecs;
   }, [state.shipSpecs]);
 
-  // ── 타임드 웨이포인트 (항로 변경 시 재계산) ────────────────────
+  // ── 타임드 웨이포인트 (항로/항구 변경 시 재계산) ─────────────────
+  const activeWaypoints = useMemo(() => {
+    return state.generatedWaypoints || ROUTES[state.currentRouteKey] || ROUTES.NSR;
+  }, [state.currentRouteKey, state.generatedWaypoints]);
+
   const timedWaypoints = useMemo(() => {
-    const wps = ROUTES[state.currentRouteKey] || ROUTES.NSR;
-    return buildTimings(wps);
-  }, [state.currentRouteKey]);
+    return buildTimings(activeWaypoints);
+  }, [activeWaypoints]);
+  const activeWpRef = useRef(activeWaypoints);
+  useEffect(() => {
+    activeWpRef.current = activeWaypoints;
+  }, [activeWaypoints]);
+
   const timedWpRef = useRef(timedWaypoints);
   useEffect(() => {
     timedWpRef.current = timedWaypoints;
   }, [timedWaypoints]);
+
+  // ── 항구/경로 변경 시 동적 경로 생성 ──────────────────────────
+  useEffect(() => {
+    // 기본 부산-로테르담이 아닌 경우에만 동적 경로 생성
+    if (state.departurePort === 'BUSAN' && state.arrivalPort === 'ROTTERDAM') {
+      if (state.generatedWaypoints) {
+        dispatch({ type: 'SET_GENERATED_WAYPOINTS', payload: null });
+      }
+      return;
+    }
+
+    const depPort = PORTS[state.departurePort];
+    const arrPort = PORTS[state.arrivalPort];
+    if (!depPort || !arrPort) return;
+
+    let cancelled = false;
+    (async () => {
+      dispatch({ type: 'SET_REROUTING', payload: true });
+      try {
+        const wps = await generateRoute(
+          depPort, arrPort, state.currentRouteKey,
+          state.cachedIceData, realBergsRef.current
+        );
+        if (!cancelled && wps && wps.length > 1) {
+          dispatch({ type: 'SET_GENERATED_WAYPOINTS', payload: wps });
+          showToast(`${depPort.name} → ${arrPort.name} 경로 생성 완료`);
+        }
+      } catch (e) {
+        console.error('[App] 동적 경로 생성 실패:', e);
+      } finally {
+        if (!cancelled) dispatch({ type: 'SET_REROUTING', payload: false });
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [state.departurePort, state.arrivalPort, state.currentRouteKey]);
+
+  // ── 시뮬레이션 중 빙산 회피 체크 (10초 간격) ──────────────────
+  useEffect(() => {
+    if (!state.isSimulating || state.manualMode) return;
+    if (realBergsRef.current.length === 0) return;
+
+    const interval = setInterval(async () => {
+      const wps = activeWaypoints;
+      const progress = state.simProgress;
+      const currentSeg = Math.floor(progress * (wps.length - 1));
+
+      const { blocked, dangerIdx } = checkRouteAhead(
+        wps, currentSeg, realBergsRef.current, 10, 15
+      );
+
+      if (blocked && state.cachedIceData) {
+        showToast('빙산 감지! 우회 경로 계산 중...', 5000);
+        dispatch({ type: 'SET_REROUTING', payload: true });
+        try {
+          const { rerouted, newWaypoints } = await rerouteAroundIceberg(
+            wps, dangerIdx, state.cachedIceData, realBergsRef.current
+          );
+          if (rerouted) {
+            dispatch({ type: 'SET_GENERATED_WAYPOINTS', payload: newWaypoints });
+            showToast('빙산 우회 경로 적용 완료');
+          }
+        } catch (e) {
+          console.error('[App] 빙산 우회 실패:', e);
+        } finally {
+          dispatch({ type: 'SET_REROUTING', payload: false });
+        }
+      }
+    }, 10000); // 10초마다
+
+    return () => clearInterval(interval);
+  }, [state.isSimulating, state.manualMode, state.simProgress]);
 
   // ── 메인 애니메이션 루프 ──────────────────────────────────────
   useEffect(() => {
@@ -250,10 +335,11 @@ function AppInner() {
       if (isSimulatingRef.current && !manualModeRef.current) {
         const mult = multiplierRef.current;
         simElapsedRef.current += dt * mult;
-        const progress = Math.min(simElapsedRef.current / TOTAL_SECONDS, 1);
-
         const routeKey = currentRouteKeyRef.current;
-        const wps = ROUTES[routeKey] || ROUTES.NSR;
+        const routeTotalSec = getTotalSeconds(routeKey);
+        const progress = Math.min(simElapsedRef.current / routeTotalSec, 1);
+
+        const wps = activeWpRef.current;
         const TWP = timedWpRef.current;
 
         const pos = routePos(progress, TWP, wps);
@@ -269,7 +355,8 @@ function AppInner() {
         });
 
         // 타임라인 일수 동기화
-        const dayValue = Math.min(14, Math.floor(progress * 14));
+        const routeDays = ROUTE_DAYS[routeKey] || 14;
+        const dayValue = Math.min(routeDays, Math.floor(progress * routeDays));
         dispatch({ type: 'SET_TIMELINE', payload: dayValue });
 
         // HUD 업데이트 (10프레임마다, 성능 최적화)
@@ -277,7 +364,7 @@ function AppInner() {
         if (lastHudUpdate >= 10) {
           lastHudUpdate = 0;
           const distKm = calculateRouteDistanceKM(wps);
-          const speedKmH = (distKm / TOTAL_SECONDS) * mult * 3600;
+          const speedKmH = (distKm / routeTotalSec) * mult * 3600;
           const speedKnots = (speedKmH / 1.852).toFixed(1);
           const sea = getSeaState(pos.lat);
 
@@ -389,12 +476,13 @@ function AppInner() {
         if (curMode === 'BRIDGE' || curMode === 'FOLLOW') {
           const three = threeRef.current;
           if (three?.shipPivot) {
-            // //* [Modified Code] 관동 기반 이동을 제거하고, Base Reference(부산) 기준 위/경도 직사영 사용 (렌더링 동기화)
+            // Base Reference: 출발항 기준 위/경도 직사영 사용 (렌더링 동기화)
+            const depPort = PORTS[state.departurePort] || PORTS.BUSAN;
             const METERS_PER_DEGREE_LAT = 111132.954;
-            const mPerDegLon = 111319.491 * Math.cos((35.1 * Math.PI) / 180);
-            three.shipPivot.position.x = ((pos.lon - 129.0) * mPerDegLon) / 1.5;
+            const mPerDegLon = 111319.491 * Math.cos((depPort.lat * Math.PI) / 180);
+            three.shipPivot.position.x = ((pos.lon - depPort.lon) * mPerDegLon) / 1.5;
             three.shipPivot.position.z =
-              (-(pos.lat - 35.1) * METERS_PER_DEGREE_LAT) / 1.5;
+              (-(pos.lat - depPort.lat) * METERS_PER_DEGREE_LAT) / 1.5;
             // 선박 흔들림 (roll/pitch/heave)
             if (three.updateShipMotion) three.updateShipMotion(dt, pos.lat);
           }
@@ -443,18 +531,19 @@ function AppInner() {
         if (three && three.shipPivot) {
           three.shipPivot.rotation.y = -manualHeading;
 
-          // //* [Modified Code] 수동 이동 시 Three.js 좌표 평면을 기준으로 전역 위도/경도를 역산출해 동기화 (레이어/배경 일치용)
+          // 수동 이동 시 Three.js 좌표 평면을 기준으로 전역 위도/경도를 역산출해 동기화
           three.shipPivot.position.x +=
             Math.sin(manualHeading) * manualSpeed * dt * moveScale;
           three.shipPivot.position.z -=
             Math.cos(manualHeading) * manualSpeed * dt * moveScale;
 
+          const depPortM = PORTS[state.departurePort] || PORTS.BUSAN;
           const METERS_PER_DEGREE_LAT = 111132.954;
-          const mPerDegLon = 111319.491 * Math.cos((35.1 * Math.PI) / 180);
+          const mPerDegLon = 111319.491 * Math.cos((depPortM.lat * Math.PI) / 180);
           const newLon =
-            129.0 + (three.shipPivot.position.x * 1.5) / mPerDegLon;
+            depPortM.lon + (three.shipPivot.position.x * 1.5) / mPerDegLon;
           const newLat =
-            35.1 - (three.shipPivot.position.z * 1.5) / METERS_PER_DEGREE_LAT;
+            depPortM.lat - (three.shipPivot.position.z * 1.5) / METERS_PER_DEGREE_LAT;
 
           dispatch({
             type: 'SET_SHIP_STATE',
@@ -615,6 +704,26 @@ function AppInner() {
     handler.setInputAction(startInteract, Cesium.ScreenSpaceEventType.RIGHT_DOWN);
     handler.setInputAction(endInteract, Cesium.ScreenSpaceEventType.RIGHT_UP);
     handler.setInputAction(() => { startInteract(); endInteract(); }, Cesium.ScreenSpaceEventType.WHEEL);
+
+    // 마우스 위치 → 위경도 변환 (출항 전 기상 HUD용, 200ms 스로틀)
+    let lastMouseUpdate = 0;
+    handler.setInputAction((movement) => {
+      if (isSimulatingRef.current) return;
+      const now = Date.now();
+      if (now - lastMouseUpdate < 200) return;
+      lastMouseUpdate = now;
+      const cart = cesiumViewerState.camera.pickEllipsoid(
+        movement.endPosition, cesiumViewerState.scene.globe.ellipsoid,
+      );
+      if (cart) {
+        const carto = Cesium.Cartographic.fromCartesian(cart);
+        setMouseGlobePos({
+          lat: Cesium.Math.toDegrees(carto.latitude),
+          lon: Cesium.Math.toDegrees(carto.longitude),
+        });
+      }
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
     handleMonthChange('live');
     return () => {
       handler.destroy();
@@ -647,11 +756,11 @@ function AppInner() {
   const handleStart = useCallback(() => {
     if (!state.isSimulating) {
       // 시작 시 simElapsed를 현재 progress 기반으로 복원
-      simElapsedRef.current = state.simProgress * TOTAL_SECONDS;
+      simElapsedRef.current = state.simProgress * getTotalSeconds(state.currentRouteKey);
       dispatch({ type: 'SET_ELAPSED', payload: simElapsedRef.current });
     }
     dispatch({ type: 'SET_SIMULATING', payload: !state.isSimulating });
-  }, [state.isSimulating, state.simProgress, dispatch]);
+  }, [state.isSimulating, state.simProgress, state.currentRouteKey, dispatch]);
 
   const handleReset = useCallback(() => {
     simElapsedRef.current = 0;
@@ -708,13 +817,14 @@ function AppInner() {
       const day = Number(value);
       dispatch({ type: 'SET_TIMELINE', payload: day });
       // 타임라인 슬라이더를 드래그하면 시뮬레이션 위치도 이동
-      const newProgress = Math.min(1, day / 14);
-      const newElapsed = newProgress * TOTAL_SECONDS;
+      const totalDays = ROUTE_DAYS[state.currentRouteKey] || 14;
+      const newProgress = Math.min(1, day / totalDays);
+      const newElapsed = newProgress * getTotalSeconds(state.currentRouteKey);
       simElapsedRef.current = newElapsed;
       dispatch({ type: 'SET_PROGRESS', payload: newProgress });
       dispatch({ type: 'SET_ELAPSED', payload: newElapsed });
       // 선박 위치 즉시 업데이트
-      const wps = ROUTES[state.currentRouteKey] || ROUTES.NSR;
+      const wps = activeWaypoints;
       const TWP = timedWaypoints;
       const pos = routePos(newProgress, TWP, wps);
       const hdg = routeHeading(newProgress, TWP, wps);
@@ -734,6 +844,7 @@ function AppInner() {
   const handleRouteChange = useCallback(
     (routeKey) => {
       dispatch({ type: 'SET_ROUTE', payload: routeKey });
+      dispatch({ type: 'SET_GENERATED_WAYPOINTS', payload: null }); // 경로 변경 시 리셋
     },
     [dispatch],
   );
@@ -948,9 +1059,13 @@ function AppInner() {
         iceGridCacheRef.current = grid;
 
         // HUD 데이터 소스 라벨 업데이트
+        const rawDate = iceData?.date || '';
+        const fmtDate = rawDate.length === 8
+          ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
+          : rawDate;
         const source =
           month === 'live'
-            ? `실시간 (${iceData?.date || ''})`
+            ? `실시간 (${fmtDate})`
             : `아카이브 ${month}`;
         dispatch({
           type: 'SET_ICE_DATA',
@@ -1211,7 +1326,7 @@ function AppInner() {
       };
 
       // 항로 전체 구간 샘플링 — 최악 구간(최고 농도) 기준으로 평가
-      const currentWps = ROUTES[state.currentRouteKey] || ROUTES.NSR;
+      const currentWps = activeWaypoints;
       let worstLat = state.shipState.lat;
       let worstLon = state.shipState.lon;
       let worstConc = 0;
@@ -1245,11 +1360,16 @@ function AppInner() {
         // Step 3d
         latitude: formData.latitude ?? worstLat,
         commsType: formData.commsType || 'GEO',
-        // Step 4 — 실시간 기상 데이터 우선, 없으면 수동 입력값 사용
+        // Step 4 — 항로별 실시간 기상 데이터 우선, 없으면 수동 입력값 사용
         shipType: formData.shipType || 'General',
-        waveHeight: formData.waveHeight ?? weatherData?.route_summary?.max_wave_height_m ?? 0.0,
-        visibilityKm: formData.visibilityKm ?? weatherData?.route_summary?.min_visibility_km ?? 10.0,
+        waveHeight: formData.waveHeight
+          ?? weatherData?.routes?.[state.currentRouteKey]?.route_summary?.max_wave_height_m
+          ?? weatherData?.route_summary?.max_wave_height_m ?? 0.0,
+        visibilityKm: formData.visibilityKm
+          ?? weatherData?.routes?.[state.currentRouteKey]?.route_summary?.min_visibility_km
+          ?? weatherData?.route_summary?.min_visibility_km ?? 10.0,
         isTempBelowMinus10: formData.isColdRoute
+          ?? weatherData?.routes?.[state.currentRouteKey]?.route_summary?.is_temp_below_minus_10
           ?? weatherData?.route_summary?.is_temp_below_minus_10
           ?? false,
         iceClass: state.shipSpecs.iceClass || 'PC2',
@@ -1283,7 +1403,7 @@ function AppInner() {
         reason: finalReason,
       };
     },
-    [state.shipState, state.shipSpecs, state.currentRouteKey, showToast],
+    [state.shipState, state.shipSpecs, state.currentRouteKey, weatherData, showToast],
   );
 
   // 모달 확인 — 평가 실행 + 항로 불일치 감지
@@ -1385,7 +1505,7 @@ function AppInner() {
     }
   }, [state.shipState]);
 
-  const waypoints = ROUTES[state.currentRouteKey] || ROUTES.NSR;
+  const waypoints = activeWaypoints;
 
   return (
     <div className="dt-app">
@@ -1409,6 +1529,10 @@ function AppInner() {
           onSatToggle={handleSatToggle}
           iceDataSource={state.iceDataSource}
           onMonthChange={handleMonthChange}
+          departurePort={state.departurePort}
+          arrivalPort={state.arrivalPort}
+          onDepartureChange={(v) => dispatch({ type: 'SET_DEPARTURE_PORT', payload: v })}
+          onArrivalChange={(v) => dispatch({ type: 'SET_ARRIVAL_PORT', payload: v })}
         />
 
         <div className="dt-viewport">
@@ -1417,6 +1541,7 @@ function AppInner() {
             ref={cesiumRef}
             currentRouteKey={state.currentRouteKey}
             onViewerReady={handleViewerReady}
+            activeWaypoints={activeWaypoints}
           />
           <ThreeOverlay
             ref={threeRef}
@@ -1426,6 +1551,7 @@ function AppInner() {
             shipState={state.shipState}
             specs={state.shipSpecs}
             mode={state.currentMode}
+            baseRef={PORTS[state.departurePort] || PORTS.BUSAN}
           />
           <DeckOverlay
             ref={deckRef}
@@ -1462,6 +1588,8 @@ function AppInner() {
             timelineDay={state.timelineDay}
             onTimelineChange={handleTimelineChange}
             currentRouteKey={state.currentRouteKey}
+            departureName={(PORTS[state.departurePort] || PORTS.BUSAN).name}
+            arrivalName={(PORTS[state.arrivalPort] || PORTS.ROTTERDAM).name}
           />
 
           {/* WMS Legends (bottom-left overlay, above timeline) */}
@@ -1480,6 +1608,14 @@ function AppInner() {
           <div id="banner" />
           <div id="gebco-depth-popup" />
 
+          {/* 해역 기상 HUD — 출항 전: 마우스 위치 / 출항 후: 선박 위치 */}
+          <WeatherHud
+            shipPos={state.isSimulating || state.simProgress > 0 ? state.shipState : (mouseGlobePos || state.shipState)}
+            weatherData={weatherData}
+            currentRouteKey={state.currentRouteKey}
+            isMouseMode={!state.isSimulating && state.simProgress === 0 && !!mouseGlobePos}
+          />
+
           {/* //* [Modified Code] 레이더(미니맵)을 메인 뷰포트 영역 내부 우측 하단에 부착하여 패널에 가려지지 않게 함 */}
           <Minimap
             shipPos={state.shipState}
@@ -1487,6 +1623,8 @@ function AppInner() {
             heading={state.shipState.heading}
             waypoints={waypoints}
             onOpenTeleport={() => setTeleportOpen(true)}
+            departurePort={PORTS[state.departurePort] || PORTS.BUSAN}
+            arrivalPort={PORTS[state.arrivalPort] || PORTS.ROTTERDAM}
           />
         </div>
       </div>

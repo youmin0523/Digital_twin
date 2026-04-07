@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { PORTS, ALL_PORTS } from '../../data/ports';
 import './Sidebar.css';
 
 const ROUTE_META = [
@@ -29,16 +30,6 @@ const WMS_LAYERS = [
   { id: 's2Ndsi', label: 'Sentinel-2 NDSI (해빙 탐지)' },
 ];
 
-const ARCHIVE_OPTIONS = [
-  { value: 'live', label: 'LIVE (최신 데이터)' },
-  { value: '2026-03-24', label: '2026-03-24' },
-  { value: '2026-03-23', label: '2026-03-23' },
-  { value: '2026-03-20', label: '2026-03-20' },
-  { value: '2026-03-15', label: '2026-03-15' },
-  { value: '2026-03-01', label: '2026-03-01' },
-  { value: '2026-02-01', label: '2026-02-01' },
-  { value: '2025-09-15', label: '2025-09-15 (최소 해빙)' },
-];
 
 export default function Sidebar({
   currentRoute,
@@ -55,7 +46,27 @@ export default function Sidebar({
   onSatToggle,
   iceDataSource,
   onMonthChange,
+  departurePort,
+  arrivalPort,
+  onDepartureChange,
+  onArrivalChange,
 }) {
+  const [archiveOptions, setArchiveOptions] = useState([
+    { value: 'live', label: 'LIVE (최신 데이터)' },
+  ]);
+
+  useEffect(() => {
+    fetch('/api/ice/archives')
+      .then(r => r.json())
+      .then(({ dates }) => {
+        setArchiveOptions([
+          { value: 'live', label: 'LIVE (최신 데이터)' },
+          ...dates.map(d => ({ value: d, label: d })),
+        ]);
+      })
+      .catch(() => {});
+  }, []);
+
   const handleSelectAll = () => {
     const allVisible = ROUTE_META.every(r => routeVisibility[r.key]);
     ROUTE_META.forEach(r => onRouteVisibilityChange(r.key, !allVisible));
@@ -74,6 +85,45 @@ export default function Sidebar({
 
   return (
     <aside className="dt-sidebar">
+      {/* ── 출발항 / 도착항 ── */}
+      <section className="dt-sidebar__section">
+        <label className="dt-sidebar__label">출발항</label>
+        <select
+          className="dt-sidebar__select"
+          value={departurePort || 'BUSAN'}
+          onChange={e => onDepartureChange(e.target.value)}
+        >
+          {ALL_PORTS.map(key => (
+            <option key={key} value={key}>{PORTS[key].name} ({PORTS[key].nameEn})</option>
+          ))}
+        </select>
+
+        <label className="dt-sidebar__label" style={{ marginTop: 6 }}>도착항</label>
+        <select
+          className="dt-sidebar__select"
+          value={arrivalPort || 'ROTTERDAM'}
+          onChange={e => onArrivalChange(e.target.value)}
+        >
+          {ALL_PORTS.map(key => (
+            <option key={key} value={key}>{PORTS[key].name} ({PORTS[key].nameEn})</option>
+          ))}
+        </select>
+
+        <button
+          className="dt-sidebar__link"
+          style={{ display: 'block', marginTop: 6, fontSize: 10 }}
+          onClick={() => {
+            const dp = departurePort || 'BUSAN';
+            const ap = arrivalPort || 'ROTTERDAM';
+            onDepartureChange(ap);
+            onArrivalChange(dp);
+          }}
+          title="출발항과 도착항을 서로 바꿉니다"
+        >
+          &#x21C5; 출발/도착 반전
+        </button>
+      </section>
+
       {/* ── 목표 항로 ── */}
       <section className="dt-sidebar__section">
         <label className="dt-sidebar__label">목표 항로</label>
@@ -159,7 +209,7 @@ export default function Sidebar({
           defaultValue="live"
           onChange={e => onMonthChange(e.target.value)}
         >
-          {ARCHIVE_OPTIONS.map(o => (
+          {archiveOptions.map(o => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
