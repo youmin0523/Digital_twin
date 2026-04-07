@@ -1,32 +1,41 @@
 /**
  * routeGenerator.js
  *
- * 동적 경로 생성 서비스 — 3단계 하이브리드 아키텍처
- * Tier 1: Searoute.js (전 구간 해양 기본 경로)
- * Tier 2: A* 격자 최적화 (북극 구간 해빙 회피)
- * Tier 3: 빙산 장애물 회피 (icebergAvoidance.js에서 처리)
+ * 동적 경로 생성 서비스
+ * - 기본(부산→로테르담): 하드코딩된 검증 경로 사용
+ * - 역방향(로테르담→부산): reverseRoute() 적용
+ * - 기타 항구 조합: 방향 감지 후 스마트 회랑 스플라이스
+ * - 북극 구간: A* 격자 최적화 (해빙 회피)
  */
 
-import { ROUTES } from '../data/arcticRoutes';
+import { ROUTES, ROUTE_CORRIDOR } from '../data/arcticRoutes';
 import { findArcticPath, initLandMask } from './arcticPathfinder';
 
-// Searoute는 CommonJS 모듈이므로 동적 import 사용
-let searouteModule = null;
+// ── 포트 분류 ──────────────────────────────────────────────────────────
+const EUROPEAN_PORTS = new Set(['ROTTERDAM', 'HAMBURG', 'LONDON', 'MURMANSK']);
+const ASIAN_PORTS    = new Set(['BUSAN', 'INCHEON', 'SHANGHAI', 'TOKYO', 'VLADIVOSTOK']);
 
-async function getSearoute() {
-  if (!searouteModule) {
-    try {
-      const mod = await import('searoute-js');
-      searouteModule = mod.default || mod;
-    } catch (e) {
-      console.warn('[routeGenerator] searoute-js 로드 실패:', e);
-      searouteModule = null;
-    }
-  }
-  return searouteModule;
+function isDefaultRoute(depId, arrId) {
+  return depId === 'BUSAN' && arrId === 'ROTTERDAM';
 }
 
-// 랜드마스크 초기화 상태
+function isExactReverse(depId, arrId) {
+  return depId === 'ROTTERDAM' && arrId === 'BUSAN';
+}
+
+/**
+ * 유럽→아시아 방향인지 감지 (역방향 스플라이스가 필요한 경우)
+ */
+function isReverseDirection(depId, arrId) {
+  return EUROPEAN_PORTS.has(depId) && ASIAN_PORTS.has(arrId);
+}
+
+function isSameRegion(depId, arrId) {
+  return (ASIAN_PORTS.has(depId) && ASIAN_PORTS.has(arrId)) ||
+         (EUROPEAN_PORTS.has(depId) && EUROPEAN_PORTS.has(arrId));
+}
+
+// ── 랜드마스크 초기화 ─────────────────────────────────────────────────
 let landMaskInitialized = false;
 
 async function ensureLandMask() {
@@ -37,81 +46,15 @@ async function ensureLandMask() {
 }
 
 /**
- * 두 항구가 기존 하드코딩된 부산-로테르담 경로와 동일한지 확인
+ * 공통 회랑만 추출하여 새 출발/도착항으로 연결.
+ * 항구 비특이적 구간(소야해협~북해 입구 등)만 유지하고
+ * 양 끝은 Cesium GEODESIC 호로 자연스럽게 연결됨.
  */
-function isDefaultRoute(departureId, arrivalId) {
-  return departureId === 'BUSAN' && arrivalId === 'ROTTERDAM';
-}
-
-/**
- * Searoute를 사용하여 기본 해양 경로를 생성.
- * GeoJSON 결과를 [{lon, lat, label}, ...] 형식으로 변환.
- */
-async function generateBaseRoute(depPort, arrPort) {
-  const searoute = await getSearoute();
-  if (!searoute) return null;
-
-  try {
-    const origin = [depPort.lon, depPort.lat];
-    const destination = [arrPort.lon, arrPort.lat];
-    const route = searoute(origin, destination);
-
-    if (!route || !route.geometry || !route.geometry.coordinates) {
-      console.warn('[routeGenerator] Searoute 경로 생성 실패');
-      return null;
-    }
-
-    const coords = route.geometry.coordinates;
-    return coords.map((coord, i) => ({
-      lon: coord[0],
-      lat: coord[1],
-      label: i === 0 ? depPort.name
-           : i === coords.length - 1 ? arrPort.name
-           : `경유점 ${i}`,
-    }));
-  } catch (e) {
-    console.warn('[routeGenerator] Searoute 오류:', e);
-    return null;
-  }
-}
-
-/**
- * 기존 하드코딩된 경로에서 북극 구간(lat >= 65)의 진입/이탈 지점을 추출.
- * 이를 통해 A* 최적화를 적용할 구간을 식별.
- */
-function extractArcticSegment(waypoints) {
-  const ARCTIC_LAT = 65;
-  let entryIdx = -1;
-  let exitIdx = -1;
-
-  for (let i = 0; i < waypoints.length; i++) {
-    if (waypoints[i].lat >= ARCTIC_LAT && entryIdx === -1) {
-      entryIdx = Math.max(0, i - 1);
-    }
-    if (entryIdx !== -1 && waypoints[i].lat >= ARCTIC_LAT) {
-      exitIdx = Math.min(waypoints.length - 1, i + 1);
-    }
-  }
-
-  return { entryIdx, exitIdx };
-}
-
-/**
- * 기존 경로의 출발/도착 구간을 새 항구로 교체.
- * 기존 5개 경로(NSR/NWP/TSR/SUEZ/CAPE)를 corridor로 활용.
- */
-function spliceRouteForPorts(baseWaypoints, depPort, arrPort) {
-  if (!baseWaypoints || baseWaypoints.length < 2) return baseWaypoints;
-
-  const result = [...baseWaypoints];
-
-  // 출발점을 새 항구로 교체
-  result[0] = { lon: depPort.lon, lat: depPort.lat, label: depPort.name };
-
-  // 도착점을 새 항구로 교체
-  result[result.length - 1] = { lon: arrPort.lon, lat: arrPort.lat, label: arrPort.name };
-
-  return result;
+function spliceRouteForPorts(baseWaypoints, depPort, arrPort, startIdx, endIdx) {
+  const departure = { lon: depPort.lon, lat: depPort.lat, label: depPort.name };
+  const arrival   = { lon: arrPort.lon, lat: arrPort.lat, label: arrPort.name };
+  const corridor  = baseWaypoints.slice(startIdx, endIdx + 1);
+  return [departure, ...corridor, arrival];
 }
 
 /**
@@ -133,28 +76,46 @@ export async function generateRoute(
   icebergs = [],
   maxSafeConcentration = 0.7
 ) {
-  // 1. 기본 경로가 부산-로테르담이면 기존 하드코딩 경로 사용 (검증된 폴백)
+  const baseRoute = ROUTES[routeType] || ROUTES.NSR;
+  const corridor  = ROUTE_CORRIDOR[routeType] || ROUTE_CORRIDOR.NSR;
+  const n = baseRoute.length;
+
+  // 1. 기본 경로 (부산→로테르담) — 검증된 하드코딩 경로 사용
   if (isDefaultRoute(depPort.id, arrPort.id)) {
-    const defaultRoute = ROUTES[routeType] || ROUTES.NSR;
-    // 북극 구간에 빙산이 있다면 A*로 최적화 시도
     if (icebergs.length > 0 && iceData) {
-      return await optimizeArcticSegment(defaultRoute, iceData, icebergs, maxSafeConcentration);
+      return optimizeArcticSegment(baseRoute, iceData, icebergs, maxSafeConcentration);
     }
-    return defaultRoute;
+    return baseRoute;
   }
 
-  // 2. 새 항구 쌍: 기존 경로를 corridor로 활용하여 출발/도착만 교체
-  const corridorRoute = ROUTES[routeType] || ROUTES.NSR;
-  let waypoints = spliceRouteForPorts(corridorRoute, depPort, arrPort);
-
-  // 3. Searoute로 전체 경로 생성 시도
-  const searouteWps = await generateBaseRoute(depPort, arrPort);
-  if (searouteWps && searouteWps.length > 2) {
-    // Searoute 결과가 있으면 사용, 없으면 corridor 사용
-    waypoints = searouteWps;
+  // 2. 정확한 역방향 (로테르담→부산) — 전체 경로 역전
+  if (isExactReverse(depPort.id, arrPort.id)) {
+    const reversed = reverseRoute(baseRoute);
+    if (icebergs.length > 0 && iceData) {
+      return optimizeArcticSegment(reversed, iceData, icebergs, maxSafeConcentration);
+    }
+    return reversed;
   }
 
-  // 4. 북극 경로(NSR/NWP/TSR)이면 A* 최적화 적용
+  // 2.5. 동일 지역 항구 (아시아↔아시아, 유럽↔유럽) — 직항 geodesic 경로
+  if (isSameRegion(depPort.id, arrPort.id)) {
+    return [
+      { lon: depPort.lon, lat: depPort.lat, label: depPort.name },
+      { lon: arrPort.lon, lat: arrPort.lat, label: arrPort.name },
+    ];
+  }
+
+  // 3. 기타 항구 조합 — 방향 감지 후 스마트 회랑 스플라이스
+  const useReverse = isReverseDirection(depPort.id, arrPort.id);
+  const directedRoute = useReverse ? reverseRoute(baseRoute) : baseRoute;
+
+  // 역방향의 경우 회랑 인덱스도 역전
+  const startIdx = useReverse ? (n - 1 - corridor.endIdx)   : corridor.startIdx;
+  const endIdx   = useReverse ? (n - 1 - corridor.startIdx) : corridor.endIdx;
+
+  let waypoints = spliceRouteForPorts(directedRoute, depPort, arrPort, startIdx, endIdx);
+
+  // 4. 북극 경로 A* 최적화
   if (['NSR', 'NWP', 'TSR'].includes(routeType) && iceData) {
     waypoints = await optimizeArcticSegment(waypoints, iceData, icebergs, maxSafeConcentration);
   }
@@ -171,16 +132,15 @@ async function optimizeArcticSegment(waypoints, iceData, icebergs, maxSafeConcen
 
   const { entryIdx, exitIdx } = extractArcticSegment(waypoints);
   if (entryIdx === -1 || exitIdx === -1 || entryIdx >= exitIdx) {
-    return waypoints; // 북극 구간 없음
+    return waypoints;
   }
 
   const entryWp = waypoints[entryIdx];
-  const exitWp = waypoints[exitIdx];
+  const exitWp  = waypoints[exitIdx];
 
-  // A* 경로 탐색
   const arcticPath = findArcticPath(
     entryWp.lon, entryWp.lat,
-    exitWp.lon, exitWp.lat,
+    exitWp.lon,  exitWp.lat,
     iceData,
     maxSafeConcentration,
     icebergs
@@ -191,28 +151,40 @@ async function optimizeArcticSegment(waypoints, iceData, icebergs, maxSafeConcen
     return waypoints;
   }
 
-  // A* 결과를 웨이포인트 형식으로 변환
   const arcticWaypoints = arcticPath.map((p, i) => ({
     lon: p[0],
     lat: p[1],
     label: i === 0 ? '북극 진입' : i === arcticPath.length - 1 ? '북극 이탈' : `북극 경유 ${i}`,
   }));
 
-  // 기존 경로의 비-북극 구간 + A* 최적화된 북극 구간을 결합
   const before = waypoints.slice(0, entryIdx);
-  const after = waypoints.slice(exitIdx + 1);
-
+  const after  = waypoints.slice(exitIdx + 1);
   return [...before, ...arcticWaypoints, ...after];
+}
+
+/**
+ * 기존 경로에서 북극 구간(lat >= 65)의 진입/이탈 인덱스를 추출.
+ */
+function extractArcticSegment(waypoints) {
+  const ARCTIC_LAT = 65;
+  let entryIdx = -1;
+  let exitIdx  = -1;
+
+  for (let i = 0; i < waypoints.length; i++) {
+    if (waypoints[i].lat >= ARCTIC_LAT && entryIdx === -1) {
+      entryIdx = Math.max(0, i - 1);
+    }
+    if (entryIdx !== -1 && waypoints[i].lat >= ARCTIC_LAT) {
+      exitIdx = Math.min(waypoints.length - 1, i + 1);
+    }
+  }
+
+  return { entryIdx, exitIdx };
 }
 
 /**
  * 경로를 역방향으로 변환 (예: 로테르담 → 부산).
  */
 export function reverseRoute(waypoints) {
-  return waypoints.slice().reverse().map((wp, i, arr) => ({
-    ...wp,
-    label: i === 0 ? wp.label
-         : i === arr.length - 1 ? wp.label
-         : wp.label,
-  }));
+  return waypoints.slice().reverse().map((wp) => ({ ...wp }));
 }

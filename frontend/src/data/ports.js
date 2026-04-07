@@ -16,3 +16,4 @@ export const PORTS = {
 
 export const DEPARTURE_PORTS = ['BUSAN', 'INCHEON', 'SHANGHAI', 'TOKYO', 'VLADIVOSTOK'];
 export const ARRIVAL_PORTS   = ['ROTTERDAM', 'HAMBURG', 'LONDON', 'MURMANSK'];
+export const ALL_PORTS       = Object.keys(PORTS);

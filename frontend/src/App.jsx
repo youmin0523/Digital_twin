@@ -1059,9 +1059,13 @@ function AppInner() {
         iceGridCacheRef.current = grid;
 
         // HUD 데이터 소스 라벨 업데이트
+        const rawDate = iceData?.date || '';
+        const fmtDate = rawDate.length === 8
+          ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
+          : rawDate;
         const source =
           month === 'live'
-            ? `실시간 (${iceData?.date || ''})`
+            ? `실시간 (${fmtDate})`
             : `아카이브 ${month}`;
         dispatch({
           type: 'SET_ICE_DATA',
