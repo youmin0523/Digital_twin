@@ -429,6 +429,33 @@ def fetch_route_weather(route_key: str, waypoints: list[dict], dry_run: bool = F
             print(f"    [WARN] Forecast API: {e}")
             forecast_data.extend([(None, None)] * len(chunk))
 
+    # //! [Original Code] 배치 결과만으로 웨이포인트 결합 (null 다수 발생)
+    # //* [Modified Code] null인 좌표를 개별 재시도 + 인접 보간으로 보완
+    # ── Stage 1: null인 좌표만 개별 재시도 (Open-Meteo는 개별 호출 시 더 잘 응답) ──
+    null_indices = [
+        i for i, (temp, vis) in enumerate(forecast_data)
+        if temp is None or vis is None
+    ]
+    if null_indices:
+        print(f"    [RETRY] Forecast null at {len(null_indices)}/{len(forecast_data)} points, retrying individually...")
+        for idx in null_indices:
+            wp = waypoints[idx]
+            try:
+                retry_result = fetch_forecast_batch([wp])
+                if retry_result and retry_result[0] != (None, None):
+                    old_temp, old_vis = forecast_data[idx]
+                    new_temp, new_vis = retry_result[0]
+                    forecast_data[idx] = (
+                        new_temp if new_temp is not None else old_temp,
+                        new_vis if new_vis is not None else old_vis,
+                    )
+            except RuntimeError:
+                pass  # 개별 재시도 실패 → 보간으로 처리
+            time.sleep(0.05)  # rate limit 방지
+
+    # ── Stage 2: 여전히 null인 좌표는 인접 웨이포인트 값으로 선형 보간 ──
+    _interpolate_nulls(forecast_data)
+
     # 웨이포인트별 결합
     wp_results = []
     for i, wp in enumerate(waypoints):
@@ -457,6 +484,54 @@ def fetch_route_weather(route_key: str, waypoints: list[dict], dry_run: bool = F
           f"min_vis={summary['min_visibility_km']}km")
 
     return {"waypoints": wp_results, "route_summary": summary}
+
+
+def _interpolate_nulls(data: list[tuple[float | None, float | None]]) -> None:
+    """
+    forecast_data 리스트 내 null 값을 인접 유효값으로 선형 보간 (in-place).
+    양쪽 끝 null은 가장 가까운 유효값으로 채움.
+    """
+    n = len(data)
+    if n == 0:
+        return
+
+    # 기온(temp) 보간
+    temps = [t for t, _ in data]
+    _fill_array(temps)
+    # 가시거리(vis) 보간
+    vises = [v for _, v in data]
+    _fill_array(vises)
+
+    for i in range(n):
+        data[i] = (temps[i], vises[i])
+
+
+def _fill_array(arr: list[float | None]) -> None:
+    """1D 배열의 None 값을 인접값 선형 보간으로 채움 (in-place)."""
+    n = len(arr)
+    # forward fill: 왼쪽 유효값 기록
+    last_valid_idx = None
+    for i in range(n):
+        if arr[i] is not None:
+            # 이전 null 구간 보간
+            if last_valid_idx is not None and i - last_valid_idx > 1:
+                v0, v1 = arr[last_valid_idx], arr[i]
+                span = i - last_valid_idx
+                for j in range(last_valid_idx + 1, i):
+                    t = (j - last_valid_idx) / span
+                    arr[j] = round(v0 * (1 - t) + v1 * t, 2)
+            last_valid_idx = i
+
+    # 양쪽 끝 null 처리: nearest fill
+    first_valid = next((i for i in range(n) if arr[i] is not None), None)
+    if first_valid is None:
+        return  # 전부 null → 포기
+    for i in range(first_valid):
+        arr[i] = arr[first_valid]
+    last_valid = next((i for i in range(n - 1, -1, -1) if arr[i] is not None), None)
+    if last_valid is not None:
+        for i in range(last_valid + 1, n):
+            arr[i] = arr[last_valid]
 
 
 def compute_route_summary(waypoints: list[dict]) -> dict:

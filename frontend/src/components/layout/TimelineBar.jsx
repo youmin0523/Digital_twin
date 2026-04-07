@@ -17,7 +17,7 @@ const ROUTE_DAYS = {
   CAPE: 30,
 };
 
-// //! [Original Code] 
+// //! [Original Code]
 // export default function TimelineBar({
 //   simProgress,
 //   timelineDay,
@@ -56,11 +56,13 @@ export default function TimelineBar({
           max={totalDays}
           step="0.1"
           value={timelineDay}
-          onChange={e => onTimelineChange(e.target.value)}
+          onChange={(e) => onTimelineChange(e.target.value)}
         />
       </div>
       <span className="timeline-bar__port">{arrName}</span>
-      <span className="timeline-bar__day">Day {Math.floor(timelineDay)} / {totalDays}</span>
+      <span className="timeline-bar__day">
+        Day {Math.floor(timelineDay)} / {totalDays}
+      </span>
       <span className="timeline-bar__summary">
         {depName} → {routeLabel} → {arrName} | {totalDays}일 운항
       </span>

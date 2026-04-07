@@ -10,8 +10,8 @@
           "lat": 35.1,
           "lon": 129.04,
           "wave_height_m": 0.34,
-          "temperature_c": null,
-          "visibility_km": null,
+          "temperature_c": 12.5,
+          "visibility_km": 15.0,
           "wave_source": "open-meteo"
         },
         {

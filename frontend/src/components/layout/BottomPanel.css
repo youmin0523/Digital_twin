@@ -9,8 +9,15 @@
 }
 
 /* ── Panel (3-section layout) ── */
+.bp-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 .bp-panel--triple {
   display: flex;
+  flex-direction: row; /* //* [Modified Code] 가로 3분할 레이아웃 복원 */
   height: 250px;
   padding: 0;
 }
@@ -33,6 +40,14 @@
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   background: var(--bg-active-tab);
+}
+
+/* //* [Modified Code] 서비스 정보 섹션 타이틀 중앙 정렬 전용 */
+.bp-section__title--centered {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
   text-align: center;
 }
 
@@ -262,7 +277,7 @@
   cursor: pointer;
   line-height: 1.6;
 }
-.bp-design__checks input[type="checkbox"] {
+.bp-design__checks input[type='checkbox'] {
   accent-color: var(--accent);
   width: 11px;
   height: 11px;
@@ -358,4 +373,153 @@
 /* 절감 값 (초록) */
 .bp-val--save {
   color: var(--status-safe) !important;
+}
+
+/* ── Evaluation Reset Button ── */
+.bp-reset-btn {
+  position: absolute; /* //* [Modified Code] 타이틀 바 우측에 절대 위치 */
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  background: rgba(42, 74, 138, 0.2);
+  border: 1px solid var(--border);
+  border-radius: 50%; /* //* [Modified Code] 원형 버튼 */
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+.bp-reset-btn:hover {
+  background: rgba(231, 76, 60, 0.2);
+  border-color: #e74c3c;
+  color: #e74c3c;
+  transform: translateY(-50%) rotate(90deg); /* //* [Modified Code] 호버 시 위트 있는 회전 애니메이션 */
+}
+
+/* ══════════════════════════════════════════════════════
+   //* [Modified Code] React Portal 기반 Hover 툴팁 스타일
+   - document.body에 직접 렌더링되므로 overflow 무관
+   ══════════════════════════════════════════════════════ */
+.bp-portal-tooltip {
+  position: fixed;
+  z-index: 99999;
+  background: linear-gradient(
+    135deg,
+    rgba(10, 20, 42, 0.97),
+    rgba(18, 35, 68, 0.97)
+  );
+  border: 1px solid rgba(78, 205, 196, 0.25);
+  border-radius: 10px;
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.6),
+    0 0 20px rgba(42, 74, 138, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px);
+  pointer-events: none;
+  animation: portalTooltipIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes portalTooltipIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 화살표 */
+.bp-portal-tooltip__arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+.bp-portal-tooltip__arrow--down {
+  bottom: -7px;
+  border-width: 7px 7px 0 7px;
+  border-color: rgba(78, 205, 196, 0.25) transparent transparent transparent;
+  margin-left: -7px;
+}
+.bp-portal-tooltip__arrow--up {
+  top: -7px;
+  border-width: 0 7px 7px 7px;
+  border-color: transparent transparent rgba(78, 205, 196, 0.25) transparent;
+  margin-left: -7px;
+}
+
+/* 헤더 */
+.bp-portal-tooltip__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(78, 205, 196, 0.12);
+  font-size: 12px;
+  font-weight: 700;
+  color: #4ecdc4;
+  letter-spacing: 0.5px;
+}
+.bp-portal-tooltip__icon {
+  font-size: 14px;
+}
+
+/* 본문 */
+.bp-portal-tooltip__body {
+  padding: 12px 14px;
+}
+.bp-portal-tooltip__section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.bp-portal-tooltip__label {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(78, 205, 196, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.bp-portal-tooltip__reason {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #e0e6ef;
+}
+.bp-portal-tooltip__divider {
+  height: 1px;
+  background: rgba(78, 205, 196, 0.12);
+  margin: 10px 0;
+}
+
+/* 조건 리스트 */
+.bp-portal-tooltip__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bp-portal-tooltip__list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10.5px;
+  color: #8fa4c0;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(42, 74, 138, 0.12);
+}
+.bp-portal-tooltip__list li strong {
+  color: #4ecdc4;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }

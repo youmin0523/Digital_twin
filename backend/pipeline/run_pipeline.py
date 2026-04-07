@@ -40,16 +40,24 @@ def ensure_data_dir():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Arctic Digital Twin 데이터 파이프라인")
-    parser.add_argument("--ice-only",     action="store_true", help="Copernicus 해빙 데이터만 수집")
-    parser.add_argument("--berg-only",    action="store_true", help="빙산 데이터만 수집")
-    parser.add_argument("--nsidc-only",   action="store_true", help="NSIDC 데이터만 변환")
-    parser.add_argument("--weather-only", action="store_true", help="Open-Meteo 기상 데이터만 수집")
+    parser = argparse.ArgumentParser(
+        description="Arctic Digital Twin 데이터 파이프라인"
+    )
+    parser.add_argument(
+        "--ice-only", action="store_true", help="Copernicus 해빙 데이터만 수집"
+    )
+    parser.add_argument("--berg-only", action="store_true", help="빙산 데이터만 수집")
+    parser.add_argument("--nsidc-only", action="store_true", help="NSIDC 데이터만 변환")
+    parser.add_argument(
+        "--weather-only", action="store_true", help="Open-Meteo 기상 데이터만 수집"
+    )
     args = parser.parse_args()
 
     ensure_data_dir()
 
-    run_all = not (args.ice_only or args.berg_only or args.nsidc_only or args.weather_only)
+    run_all = not (
+        args.ice_only or args.berg_only or args.nsidc_only or args.weather_only
+    )
 
     results = []
 
@@ -63,8 +71,7 @@ def main():
 
     if run_all or args.nsidc_only:
         rc = run_script(
-            FETCHERS_DIR / "nsidc_pipeline.py",
-            ["--year", "2023", "--all-months"]
+            FETCHERS_DIR / "nsidc_pipeline.py", ["--year", "2023", "--all-months"]
         )
         results.append(("NSIDC Convert", rc))
 
