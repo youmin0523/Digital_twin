@@ -18,12 +18,22 @@ const FOAM_COUNT = 60;
 const MAX_LOCAL_ICEBERGS = 180;
 const SHIP_BASE_Y = 5; // 선체 기본 수선 높이 (수면 위로 올리기)
 
+// //! [Original Code] 기존 빙산 종류별 크기 (높이가 비현실적으로 높게 설정됨)
+// const ICE_TYPES = [
+//   { name: 'tabular', prob: 0.08, w: [400, 900], d: [350, 800], h: [120, 250], subRatio: 5 },
+//   { name: 'large',   prob: 0.12, w: [200, 500], d: [180, 450], h: [400, 800], subRatio: 6 },
+//   { name: 'medium',  prob: 0.30, w: [80, 200],  d: [70, 180],  h: [180, 400], subRatio: 7 },
+//   { name: 'small',   prob: 0.35, w: [25, 80],   d: [22, 70],   h: [60, 160],  subRatio: 5 },
+//   { name: 'growler', prob: 0.15, w: [6, 25],    d: [5, 22],    h: [15, 50],   subRatio: 4 },
+// ];
+
+// //* [Modified Code] 현실적인 스케일에 맞춘 빙상 스케일 및 무작위성 부여(난수 분산)
 const ICE_TYPES = [
-  { name: 'tabular', prob: 0.08, w: [400, 900], d: [350, 800], h: [120, 250], subRatio: 5 },
-  { name: 'large',   prob: 0.12, w: [200, 500], d: [180, 450], h: [400, 800], subRatio: 6 },
-  { name: 'medium',  prob: 0.30, w: [80, 200],  d: [70, 180],  h: [180, 400], subRatio: 7 },
-  { name: 'small',   prob: 0.35, w: [25, 80],   d: [22, 70],   h: [60, 160],  subRatio: 5 },
-  { name: 'growler', prob: 0.15, w: [6, 25],    d: [5, 22],    h: [15, 50],   subRatio: 4 },
+  { name: 'tabular', prob: 0.10, w: [400, 900], d: [300, 800], h: [40, 80],   subRatio: 5 },
+  { name: 'large',   prob: 0.15, w: [200, 450], d: [150, 400], h: [60, 140],  subRatio: 6 },
+  { name: 'medium',  prob: 0.25, w: [80,  200], d: [60,  180], h: [25, 60],   subRatio: 7 },
+  { name: 'small',   prob: 0.35, w: [25,  80],  d: [20,  60],  h: [10, 25],   subRatio: 5 },
+  { name: 'growler', prob: 0.15, w: [6,   25],  d: [5,   20],  h: [2,  8],    subRatio: 4 },
 ];
 
 // ── Utility ──────────────────────────────────────────────────────────────────
@@ -204,7 +214,11 @@ function makeIceGeo(typeName, w, h, d) {
   const flatTop   = typeName === 'tabular' ? 0.7 + rand() * 0.25 : rand() * 0.15;
   const warpAmt   = 0.08 + rand() * 0.20;         // 대규모 뒤틀림 강도
   const noiseScale = 1.5 + rand() * 3.0;          // 노이즈 주파수
-  const noiseAmt  = 0.08 + rand() * 0.18;         // 노이즈 강도
+  // //! [Original Code] 노이즈 강도 설정 (비교적 밋밋한 표면)
+  // const noiseAmt  = 0.08 + rand() * 0.18;         // 노이즈 강도
+
+  // //* [Modified Code] 지형 노이즈를 강하게 주어 빙하 표면이 울퉁불퉁하도록 상향 조정
+  const noiseAmt  = 0.20 + rand() * 0.35;         // 노이즈 강도 대폭 상향
 
   // 빙하별 고유 3D 노이즈 오프셋 (같은 함수여도 완전 다른 결과)
   const ox = rand() * 100, oy = rand() * 100, oz = rand() * 100;
@@ -489,11 +503,19 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
       const wBase = rng(type.w[0], type.w[1]);
       const hBase = rng(type.h[0], type.h[1]);
       const dBase = rng(type.d[0], type.d[1]);
-      const sizeJitter = 0.7 + Math.random() * 0.6;  // 0.7~1.3 크기 변동
-      const ratioJitter = 0.6 + Math.random() * 0.8; // 0.6~1.4 종횡비 변동
-      const w = wBase * sizeJitter;
-      const h = hBase * sizeJitter * ratioJitter;
-      const d = dBase * sizeJitter * (0.5 + Math.random() * 1.0);
+      // //! [Original Code] 기존 빙산 난수 변수 (변동성이 비교적 약함)
+      // const sizeJitter = 0.7 + Math.random() * 0.6;  // 0.7~1.3 크기 변동
+      // const ratioJitter = 0.6 + Math.random() * 0.8; // 0.6~1.4 종횡비 변동
+      // const w = wBase * sizeJitter;
+      // const h = hBase * sizeJitter * ratioJitter;
+      // const d = dBase * sizeJitter * (0.5 + Math.random() * 1.0);
+
+      // //* [Modified Code] 무작위 난수 범위를 확장하여 보다 다양한 형태, 크기의 빙산 표현
+      const sizeJitter = 0.4 + Math.random() * 1.2;  // 0.4~1.6 크기 변동 (범위 확장)
+      const ratioJitter = 0.4 + Math.random() * 1.5; // 0.4~1.9 높이 종횡비 변동
+      const w = wBase * sizeJitter * (0.8 + Math.random() * 0.4);
+      const h = hBase * sizeJitter * ratioJitter * (0.6 + Math.random() * 0.8);
+      const d = dBase * sizeJitter * (0.4 + Math.random() * 1.2);
       const bR = Math.max(Math.max(w, d) * 0.45, 3);
 
       const geo = trackDisposable(makeIceGeo(type.name, w, h, d));
@@ -774,7 +796,11 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
       mkU(new THREE.BoxGeometry(15, 1, 1), C.dark, 0, 72, 55);
     }
 
-    shipMesh3.scale.set(1.4, 1.4, 1.4);
+    // //! [Original Code] 작은 선박 스케일
+    // shipMesh3.scale.set(1.4, 1.4, 1.4);
+
+    // //* [Modified Code] 주변 배경(빙하 등)에 대비되어 너무 작게 느껴지지 않도록 선박 크기 상향 커스텀
+    shipMesh3.scale.set(2.8, 2.8, 2.8);
     shipMesh3.position.y = SHIP_BASE_Y;
     shipMesh3.add(shipUpper3);
     shipGroup3.add(shipMesh3);
@@ -1327,11 +1353,21 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
     pmrem.dispose();
 
     // Shared iceberg materials (created once)
+    // //! [Original Code] 빙하 매터리얼 속성 (부드러운 음영)
+    // ctx.current.iceMat = new THREE.MeshStandardMaterial({
+    //   color: 0xd8e8f0,
+    //   roughness: 0.65,
+    //   metalness: 0.02,
+    //   envMapIntensity: 0.6,
+    // });
+
+    // //* [Modified Code] flatShading 옵션과 roughness를 상향하여 각지고 투박한 빙하 질감(Faceted) 구현
     ctx.current.iceMat = new THREE.MeshStandardMaterial({
       color: 0xd8e8f0,
-      roughness: 0.65,
-      metalness: 0.02,
+      roughness: 0.9,
+      metalness: 0.05,
       envMapIntensity: 0.6,
+      flatShading: true,
     });
     ctx.current.realBergMat = new THREE.MeshStandardMaterial({
       color: 0xFFCC00,

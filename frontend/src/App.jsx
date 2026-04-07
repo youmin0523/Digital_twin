@@ -37,7 +37,7 @@ import {
   getSeaState,
 } from './services/shipSimulator';
 import { evaluateRouting, deriveIceConditions } from './services/polarisRIO';
-import { generateRoute } from './services/routeGenerator';
+import { generateRoute, isSameRegion } from './services/routeGenerator';
 import { checkRouteAhead, rerouteAroundIceberg } from './services/icebergAvoidance';
 
 function AppInner() {
@@ -657,6 +657,7 @@ function AppInner() {
     TSR: false,
     SUEZ: false,
     CAPE: false,
+    ETC: false,
   });
   const handleRouteVisibilityChange = useCallback((key, visible) => {
     setRouteVisibility((prev) => ({ ...prev, [key]: visible }));
@@ -666,6 +667,47 @@ function AppInner() {
       viewer._routeEntities[key].show = visible;
     }
   }, []);
+
+  const [routeDistances, setRouteDistances] = useState({});
+  const [generatedRoutes, setGeneratedRoutes] = useState({});
+
+  useEffect(() => {
+    const depPort = PORTS[state.departurePort];
+    const arrPort = PORTS[state.arrivalPort];
+    if (!depPort || !arrPort) return;
+    
+    let cancelled = false;
+    (async () => {
+      try {
+        const routeKeys = ['NSR', 'NWP', 'TSR', 'SUEZ', 'CAPE', 'ETC'];
+        const results = await Promise.all(
+          routeKeys.map(async key => {
+            if (isSameRegion(depPort.id, arrPort.id) && key !== 'ETC') {
+              return { key, dist: '-' };
+            }
+            if (!isSameRegion(depPort.id, arrPort.id) && key === 'ETC') {
+              return { key, dist: '-' };
+            }
+            const wps = await generateRoute(depPort, arrPort, key, null, []); // 해빙 데이터 없이 빠른 생성
+            return { key, dist: calculateRouteDistanceKM(wps) };
+          })
+        );
+        if (!cancelled) {
+          const distances = {};
+          const paths = {};
+          results.forEach(r => {
+            distances[r.key] = r.dist;
+            paths[r.key] = r.wps;
+          });
+          setRouteDistances(distances);
+          setGeneratedRoutes(paths);
+        }
+      } catch (e) {
+        console.warn('[App] 거리 동적 계산 실패:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [state.departurePort, state.arrivalPort]);
 
   // 라우팅 평가 결과
   const [evaluationResult, setEvaluationResult] = useState(null);
@@ -1533,6 +1575,7 @@ function AppInner() {
           arrivalPort={state.arrivalPort}
           onDepartureChange={(v) => dispatch({ type: 'SET_DEPARTURE_PORT', payload: v })}
           onArrivalChange={(v) => dispatch({ type: 'SET_ARRIVAL_PORT', payload: v })}
+          routeDistances={routeDistances}
         />
 
         <div className="dt-viewport">
@@ -1542,6 +1585,8 @@ function AppInner() {
             currentRouteKey={state.currentRouteKey}
             onViewerReady={handleViewerReady}
             activeWaypoints={activeWaypoints}
+            routeVisibility={routeVisibility}
+            generatedRoutes={generatedRoutes}
           />
           <ThreeOverlay
             ref={threeRef}

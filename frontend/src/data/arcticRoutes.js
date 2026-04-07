@@ -161,12 +161,14 @@ export const ROUTES = {
     { lon: 114.00, lat: 16.00, label: '남중국해 북부' },
     { lon: 110.00, lat: 10.50, label: '남중국해 중부' },
     { lon: 107.50, lat: 6.00, label: '남중국해 남부' },
-    { lon: 105.50, lat: 3.50, label: '말라카 해협 북단' },
-    { lon: 104.20, lat: 1.80, label: '말라카 해협 중앙' },
-    { lon: 103.80, lat: 1.30, label: '싱가포르 (말라카 해협 출구)' },
+    { lon: 105.00, lat: 2.50, label: '말레이 반도 동해안' },
+    { lon: 104.30, lat: 1.50, label: '싱가포르 해협 동측 진입' },
+    { lon: 103.80, lat: 1.20, label: '싱가포르 해협 통과' },
+    { lon: 102.50, lat: 2.00, label: '말라카 해협 남부' },
+    { lon: 100.50, lat: 4.00, label: '말라카 해협 중앙' },
+    { lon: 97.50, lat: 6.00, label: '말라카 해협 북부 (안다만 해 진입)' },
     // 인도양 북상 → 아라비아해
-    { lon: 98.00, lat: -1.00, label: '인도양 북서향' },
-    { lon: 90.00, lat: 5.00, label: '인도양 중앙부' },
+    { lon: 90.00, lat: 5.00, label: '벵골만 남단' },
     { lon: 80.00, lat: 7.00, label: '스리랑카 남방 외해' },
     { lon: 75.00, lat: 10.00, label: '아라비아해 동부' },
     { lon: 68.00, lat: 12.00, label: '아라비아해 중앙' },
@@ -220,12 +222,14 @@ export const ROUTES = {
     { lon: 114.00, lat: 16.00, label: '남중국해 북부' },
     { lon: 110.00, lat: 10.50, label: '남중국해 중부' },
     { lon: 107.50, lat: 6.00, label: '남중국해 남부' },
-    { lon: 105.50, lat: 3.50, label: '말라카 해협 북단' },
-    { lon: 104.20, lat: 1.80, label: '말라카 해협 중앙' },
-    { lon: 103.80, lat: 1.30, label: '싱가포르 (말라카 해협 출구)' },
-    // 순다 해협 방향으로 남하 → 인도양 남부
-    { lon: 107.00, lat: -4.00, label: '자바해 서측' },
-    { lon: 105.80, lat: -6.20, label: '순다 해협 통과 (자바-수마트라)' },
+    { lon: 105.00, lat: 2.50, label: '말레이 반도 동해안' },
+    { lon: 104.30, lat: 1.50, label: '싱가포르 해협 동측 진입' },
+    { lon: 103.80, lat: 1.20, label: '싱가포르 해협 통과' },
+    // 방카 해협을 통한 자바해 남하
+    { lon: 105.00, lat: 0.00, label: '적도 통과 (방카 해협 접근)' },
+    { lon: 106.00, lat: -2.00, label: '방카 해협 동측' },
+    { lon: 106.50, lat: -4.00, label: '자바해 서부' },
+    { lon: 105.50, lat: -6.20, label: '순다 해협 통과 (자바-수마트라)' },
     { lon: 103.00, lat: -8.00, label: '인도양 북동부 진입' },
     // 인도양 남서향 대권항로
     { lon: 97.00, lat: -12.00, label: '인도양 북부 남하' },
@@ -245,9 +249,10 @@ export const ROUTES = {
     { lon: 5.00, lat: -12.00, label: '앙골라 외해' },
     { lon: 2.00, lat: -4.00, label: '콩고 외해' },
     { lon: 0.00, lat: 3.00, label: '기니만 동부' },
-    { lon: -2.50, lat: 8.00, label: '기니만 북부' },
-    { lon: -8.00, lat: 14.00, label: '서아프리카 북상' },
-    { lon: -17.00, lat: 21.00, label: '서아프리카 서안' },
+    { lon: -5.00, lat: 3.00, label: '기니만 서부 (코트디부아르 외해)' },
+    { lon: -11.00, lat: 5.00, label: '라이베리아 외해' },
+    { lon: -18.00, lat: 10.00, label: '기니 외해 (서아프리카 최서단 우회)' },
+    { lon: -19.00, lat: 15.00, label: '세네갈 (다카르) 서방 외해' },
     { lon: -18.00, lat: 28.00, label: '카나리아 제도 외해' },
     { lon: -15.50, lat: 35.00, label: '모로코 서방 외해' },
     { lon: -10.50, lat: 38.50, label: '포르투갈 남서 외해' },
@@ -289,3 +294,320 @@ export function getTotalSeconds(routeKey) {
   const days = ROUTE_DAYS[routeKey] || 14;
   return days * 86400;
 }
+
+export const PORT_APPROACH_WAYPOINTS = {
+
+  // ── A. 아시아 → 북극항로 소야해협 접근 ─────────────────────────────────
+  ARCTIC_DEP: {
+    BUSAN: [
+      { lon: 130.8, lat: 35.8, label: '대한해협 밖' },
+      { lon: 132.5, lat: 37.5, label: '동해 중앙' },
+      { lon: 138.0, lat: 43.0, label: '홋카이도 서해안' },
+      { lon: 140.5, lat: 44.5, label: '소야 해협 접근' },
+      { lon: 141.2, lat: 45.4, label: '소야 해협' },
+    ],
+    INCHEON: [
+      { lon: 126.0, lat: 36.5, label: '서해 중부' },
+      { lon: 125.5, lat: 34.5, label: '서해 남부' },
+      { lon: 126.5, lat: 33.8, label: '제주도 북방' },
+      { lon: 128.5, lat: 34.4, label: '남해 중앙' },
+      { lon: 130.5, lat: 35.5, label: '대한해협' },
+      { lon: 132.5, lat: 37.5, label: '동해 중앙' },
+      { lon: 138.0, lat: 43.0, label: '홋카이도 서해안' },
+      { lon: 141.0, lat: 44.5, label: '소야 해협 접근' },
+    ],
+    SHANGHAI: [
+      { lon: 123.5, lat: 30.0, label: '동중국해' },
+      { lon: 126.0, lat: 33.0, label: '제주도 남방' },
+      { lon: 130.5, lat: 35.5, label: '대한해협' },
+      { lon: 132.5, lat: 37.5, label: '동해 중앙' },
+      { lon: 138.0, lat: 43.0, label: '홋카이도 서해안' },
+      { lon: 141.0, lat: 44.5, label: '소야 해협 접근' },
+    ],
+    TOKYO: [
+      { lon: 139.8, lat: 34.8, label: '도쿄만 출구' },
+      { lon: 141.0, lat: 35.0, label: '보소 반도 우회' },
+      { lon: 142.0, lat: 37.0, label: '관동 동방 외해' },
+      { lon: 143.5, lat: 41.0, label: '홋카이도 동방 외해' },
+      { lon: 143.5, lat: 44.0, label: '홋카이도 동해안 북부' },
+      { lon: 142.0, lat: 45.2, label: '소야 동방 접근' },
+    ],
+    VLADIVOSTOK: [
+      { lon: 133.5, lat: 43.5, label: '블라디보스토크 외해' },
+      { lon: 137.0, lat: 44.5, label: '일본해 북부' },
+      { lon: 140.5, lat: 44.5, label: '소야 서방 접근' },
+    ],
+  },
+
+  // ── B. 아시아 → SUEZ/CAPE 말라카 접근 ──────────────────────────────────
+  SUEZ_DEP: {
+    BUSAN: [
+      { lon: 129.5, lat: 34.8, label: '대한해협 서우회' },
+      { lon: 128.0, lat: 34.0, label: '남해 외곽' },
+      { lon: 126.5, lat: 33.5, label: '제주도 서방 통과' },
+      { lon: 124.0, lat: 29.0, label: '동중국해' },
+      { lon: 121.5, lat: 24.0, label: '대만 해협' },
+      { lon: 118.0, lat: 20.0, label: '루손 해협 서측 외해' },
+      { lon: 114.0, lat: 16.0, label: '남중국해 북부' },
+      { lon: 110.0, lat: 10.5, label: '남중국해 중부' },
+      { lon: 107.5, lat:  6.0, label: '남중국해 남부' },
+    ],
+    INCHEON: [
+      { lon: 126.0, lat: 36.5, label: '서해 중부' },
+      { lon: 125.5, lat: 34.5, label: '서해 남부' },
+      { lon: 126.0, lat: 33.5, label: '제주도 서방' },
+      { lon: 124.0, lat: 29.0, label: '동중국해' },
+      { lon: 121.5, lat: 24.0, label: '대만 해협' },
+      { lon: 118.0, lat: 20.0, label: '루손 해협 서측' },
+      { lon: 114.0, lat: 16.0, label: '남중국해 북부' },
+      { lon: 110.0, lat: 10.5, label: '남중국해 중부' },
+      { lon: 107.5, lat:  6.0, label: '남중국해 남부' },
+    ],
+    SHANGHAI: [
+      { lon: 122.5, lat: 30.5, label: '상하이 동방 외해' },
+      { lon: 121.5, lat: 27.0, label: '동중국해 중부' },
+      { lon: 121.5, lat: 24.0, label: '대만 해협' },
+      { lon: 118.0, lat: 20.0, label: '루손 해협 서측' },
+      { lon: 114.0, lat: 16.0, label: '남중국해 북부' },
+      { lon: 110.0, lat: 10.5, label: '남중국해 중부' },
+      { lon: 107.5, lat:  6.0, label: '남중국해 남부' },
+    ],
+    TOKYO: [
+      { lon: 139.8, lat: 34.5, label: '이즈 반도 우회' },
+      { lon: 138.0, lat: 33.5, label: '기이 반도 서방' },
+      { lon: 136.0, lat: 33.0, label: '시코쿠 남방' },
+      { lon: 130.0, lat: 31.5, label: '규슈 남방 외해' },
+      { lon: 127.0, lat: 31.0, label: '동중국해 진입' },
+      { lon: 124.0, lat: 29.0, label: '동중국해' },
+      { lon: 121.5, lat: 24.0, label: '대만 해협' },
+      { lon: 118.0, lat: 20.0, label: '루손 해협 서측' },
+      { lon: 114.0, lat: 16.0, label: '남중국해 북부' },
+      { lon: 110.0, lat: 10.5, label: '남중국해 중부' },
+      { lon: 107.5, lat:  6.0, label: '남중국해 남부' },
+    ],
+    VLADIVOSTOK: [
+      { lon: 132.0, lat: 40.0, label: '일본해 중부' },
+      { lon: 130.5, lat: 35.5, label: '대한해협 진입' },
+      { lon: 129.5, lat: 34.8, label: '대한해협 통과' },
+      { lon: 128.0, lat: 34.0, label: '남해 외곽' },
+      { lon: 126.5, lat: 33.5, label: '제주도 서방' },
+      { lon: 124.0, lat: 29.0, label: '동중국해' },
+      { lon: 121.5, lat: 24.0, label: '대만 해협' },
+      { lon: 118.0, lat: 20.0, label: '루손 해협 서측' },
+      { lon: 114.0, lat: 16.0, label: '남중국해 북부' },
+      { lon: 110.0, lat: 10.5, label: '남중국해 중부' },
+      { lon: 107.5, lat:  6.0, label: '남중국해 남부' },
+    ],
+  },
+
+  // ── C. MURMANSK 특수 처리 ─────────────────────────────────────────────
+  MURMANSK: {
+    NSR: {
+      corridorIdx: 43,  // 바렌츠해 서부 (32°E, 73.5°N) — 조기 이탈
+      wps: [
+        { lon: 32.5, lat: 71.0, label: '콜라 반도 북방 바렌츠해' },
+        { lon: 33.0, lat: 70.0, label: '콜라 만 북측 입구' },
+      ],
+    },
+    NWP: {
+      corridorIdx: null,
+      wps: [
+        { lon: -10.0, lat: 58.0, label: '아일랜드 북서 외해' },
+        { lon:   0.0, lat: 62.0, label: '영국 북방 외해' },
+        { lon:   5.0, lat: 65.0, label: '노르웨이 서해안 북상' },
+        { lon:  12.0, lat: 72.0, label: '노르웨이해 최북부' },
+        { lon:  24.0, lat: 72.0, label: '바렌츠해 서방 접근' },
+        { lon:  32.5, lat: 71.0, label: '콜라 반도 북방' },
+        { lon:  33.0, lat: 70.0, label: '콜라 만 북측 입구' },
+      ],
+    },
+    TSR: {
+      corridorIdx: null,
+      wps: [
+        { lon:  12.0, lat: 72.0, label: '노르웨이해 최북부' },
+        { lon:  24.0, lat: 72.0, label: '바렌츠해 서방 접근' },
+        { lon:  32.5, lat: 71.0, label: '콜라 반도 북방' },
+        { lon:  33.0, lat: 70.0, label: '콜라 만 북측 입구' },
+      ],
+    },
+    SUEZ: {
+      corridorIdx: null,
+      wps: [
+        { lon:   2.0, lat: 57.0, label: '북해 북진' },
+        { lon:   5.0, lat: 63.0, label: '노르웨이 서해안' },
+        { lon:  12.0, lat: 72.0, label: '노르웨이해 최북부' },
+        { lon:  24.0, lat: 72.0, label: '바렌츠해 서방 접근' },
+        { lon:  32.5, lat: 71.0, label: '콜라 반도 북방' },
+        { lon:  33.0, lat: 70.0, label: '콜라 만 북측 입구' },
+      ],
+    },
+    CAPE: {
+      corridorIdx: null,
+      wps: [
+        { lon:   2.0, lat: 57.0, label: '북해 북진' },
+        { lon:   5.0, lat: 63.0, label: '노르웨이 서해안' },
+        { lon:  12.0, lat: 72.0, label: '노르웨이해 최북부' },
+        { lon:  24.0, lat: 72.0, label: '바렌츠해 서방 접근' },
+        { lon:  32.5, lat: 71.0, label: '콜라 반도 북방' },
+        { lon:  33.0, lat: 70.0, label: '콜라 만 북측 입구' },
+      ],
+    },
+  },
+};
+
+export const INTRA_REGION_ROUTES = {
+  'BUSAN-INCHEON': [
+    { lon: 129.04, lat: 35.1, label: '부산항' },
+    { lon: 129.5, lat: 34.8, label: '대한해협' },
+    { lon: 128.0, lat: 34.0, label: '남해 중앙' },
+    { lon: 126.5, lat: 33.8, label: '제주도 북방' },
+    { lon: 125.5, lat: 34.5, label: '서해 남부' },
+    { lon: 126.0, lat: 36.5, label: '서해 중부' },
+    { lon: 126.6, lat: 37.4, label: '인천항' }
+  ],
+  'BUSAN-SHANGHAI': [
+    { lon: 129.04, lat: 35.1, label: '부산항' },
+    { lon: 128.0, lat: 34.0, label: '남해 외곽' },
+    { lon: 126.5, lat: 33.5, label: '제주도 서방 통과' },
+    { lon: 124.0, lat: 31.5, label: '동중국해 북부' },
+    { lon: 122.5, lat: 30.5, label: '상하이 동방 외해' },
+    { lon: 121.5, lat: 31.2, label: '상하이항' }
+  ],
+  'BUSAN-TOKYO': [
+    { lon: 129.04, lat: 35.1, label: '부산항' },
+    { lon: 130.5, lat: 34.5, label: '대한해협 외곽' },
+    { lon: 132.0, lat: 33.5, label: '규슈 동방' },
+    { lon: 136.0, lat: 33.0, label: '시코쿠 남방' },
+    { lon: 138.0, lat: 33.5, label: '기이 반도 서방' },
+    { lon: 139.8, lat: 34.5, label: '이즈 반도 우회' },
+    { lon: 139.8, lat: 35.6, label: '도쿄항' }
+  ],
+  'BUSAN-VLADIVOSTOK': [
+    { lon: 129.04, lat: 35.1, label: '부산항' },
+    { lon: 130.8, lat: 35.8, label: '대한해협 밖' },
+    { lon: 132.5, lat: 37.5, label: '동해 중앙' },
+    { lon: 132.5, lat: 40.0, label: '동해 북부' },
+    { lon: 131.9, lat: 43.1, label: '블라디보스토크항' }
+  ],
+  'INCHEON-SHANGHAI': [
+    { lon: 126.6, lat: 37.4, label: '인천항' },
+    { lon: 125.0, lat: 36.0, label: '황해 중부' },
+    { lon: 124.0, lat: 32.5, label: '황해 남부' },
+    { lon: 122.5, lat: 30.5, label: '상하이 동방 외해' },
+    { lon: 121.5, lat: 31.2, label: '상하이항' }
+  ],
+  'INCHEON-TOKYO': [
+    { lon: 126.6, lat: 37.4, label: '인천항' },
+    { lon: 126.0, lat: 36.5, label: '서해 중부' },
+    { lon: 125.5, lat: 34.5, label: '서해 남부' },
+    { lon: 126.5, lat: 33.8, label: '제주도 북방' },
+    { lon: 128.5, lat: 34.4, label: '남해 중앙' },
+    { lon: 130.5, lat: 34.5, label: '대한해협 외곽' },
+    { lon: 132.0, lat: 33.5, label: '규슈 동방' },
+    { lon: 136.0, lat: 33.0, label: '시코쿠 남방' },
+    { lon: 138.0, lat: 33.5, label: '기이 반도 서방' },
+    { lon: 139.8, lat: 34.5, label: '이즈 반도 우회' },
+    { lon: 139.8, lat: 35.6, label: '도쿄항' }
+  ],
+  'INCHEON-VLADIVOSTOK': [
+    { lon: 126.6, lat: 37.4, label: '인천항' },
+    { lon: 126.0, lat: 36.5, label: '서해 중부' },
+    { lon: 125.5, lat: 34.5, label: '서해 남부' },
+    { lon: 126.5, lat: 33.8, label: '제주도 북방' },
+    { lon: 128.5, lat: 34.4, label: '남해 중앙' },
+    { lon: 130.5, lat: 35.5, label: '대한해협' },
+    { lon: 132.5, lat: 37.5, label: '동해 중앙' },
+    { lon: 132.5, lat: 40.0, label: '동해 북부' },
+    { lon: 131.9, lat: 43.1, label: '블라디보스토크항' }
+  ],
+  'SHANGHAI-TOKYO': [
+    { lon: 121.5, lat: 31.2, label: '상하이항' },
+    { lon: 122.5, lat: 30.5, label: '상하이 동방 외해' },
+    { lon: 126.0, lat: 30.0, label: '동중국해 동진' },
+    { lon: 130.0, lat: 30.5, label: '규슈 남방' },
+    { lon: 136.0, lat: 33.0, label: '시코쿠 남방' },
+    { lon: 138.0, lat: 33.5, label: '기이 반도 서방' },
+    { lon: 139.8, lat: 34.5, label: '이즈 반도 우회' },
+    { lon: 139.8, lat: 35.6, label: '도쿄항' }
+  ],
+  'SHANGHAI-VLADIVOSTOK': [
+    { lon: 121.5, lat: 31.2, label: '상하이항' },
+    { lon: 124.0, lat: 31.5, label: '동중국해 북부' },
+    { lon: 126.5, lat: 33.5, label: '제주도 서방 통과' },
+    { lon: 129.5, lat: 34.8, label: '대한해협 서우회' },
+    { lon: 130.8, lat: 35.8, label: '대한해협 밖' },
+    { lon: 132.5, lat: 37.5, label: '동해 중앙' },
+    { lon: 132.5, lat: 40.0, label: '동해 북부' },
+    { lon: 131.9, lat: 43.1, label: '블라디보스토크항' }
+  ],
+  'TOKYO-VLADIVOSTOK': [
+    { lon: 139.8, lat: 35.6, label: '도쿄항' },
+    { lon: 139.8, lat: 34.8, label: '도쿄만 출구' },
+    { lon: 141.0, lat: 35.0, label: '보소 반도 우회' },
+    { lon: 142.0, lat: 37.0, label: '관동 동방 외해' },
+    { lon: 142.5, lat: 40.0, label: '혼슈 동방' },
+    { lon: 141.0, lat: 41.5, label: '쓰가루 해협 동측 접근' },
+    { lon: 140.0, lat: 41.5, label: '쓰가루 해협 통과' },
+    { lon: 138.0, lat: 41.5, label: '일본해 진입' },
+    { lon: 135.0, lat: 42.5, label: '일본해 북진' },
+    { lon: 131.9, lat: 43.1, label: '블라디보스토크항' }
+  ],
+  'HAMBURG-ROTTERDAM': [
+    { lon: 9.9, lat: 53.5, label: '함부르크항' },
+    { lon: 8.5, lat: 54.0, label: '엘베강 하구' },
+    { lon: 7.0, lat: 53.8, label: '저먼바이트' },
+    { lon: 5.5, lat: 53.0, label: '프리지아 제도 북방' },
+    { lon: 4.5, lat: 51.9, label: '로테르담' }
+  ],
+  'LONDON-ROTTERDAM': [
+    { lon: 0.0, lat: 51.5, label: '런던항' },
+    { lon: 1.5, lat: 51.5, label: '템즈강 하구' },
+    { lon: 2.5, lat: 51.8, label: '북해 횡단' },
+    { lon: 3.5, lat: 51.9, label: '유로포트 북해망' },
+    { lon: 4.5, lat: 51.9, label: '로테르담' }
+  ],
+  'HAMBURG-LONDON': [
+    { lon: 9.9, lat: 53.5, label: '함부르크항' },
+    { lon: 8.5, lat: 54.0, label: '엘베강 하구' },
+    { lon: 6.0, lat: 53.5, label: '북해 횡단 (네덜란드 북방)' },
+    { lon: 3.0, lat: 52.5, label: '영국 해협 입구' },
+    { lon: 1.5, lat: 51.5, label: '템즈강 하구' },
+    { lon: 0.0, lat: 51.5, label: '런던항' }
+  ],
+  'MURMANSK-ROTTERDAM': [
+    { lon: 33.0, lat: 68.9, label: '무르만스크항' },
+    { lon: 33.0, lat: 70.0, label: '콜라 만 북측 입구' },
+    { lon: 32.5, lat: 71.0, label: '콜라 반도 북방' },
+    { lon: 24.0, lat: 72.0, label: '바렌츠해 서방 접근' },
+    { lon: 12.0, lat: 72.0, label: '노르웨이해 최북부' },
+    { lon: 5.0, lat: 65.0, label: '노르웨이 서해안 남하' },
+    { lon: 0.0, lat: 62.0, label: '영국 북방 외해' },
+    { lon: 2.0, lat: 57.0, label: '북해 중앙' },
+    { lon: 4.5, lat: 51.9, label: '로테르담' }
+  ],
+  'HAMBURG-MURMANSK': [
+    { lon: 9.9, lat: 53.5, label: '함부르크항' },
+    { lon: 8.5, lat: 54.0, label: '엘베강 하구' },
+    { lon: 7.0, lat: 55.0, label: '덴마크 서해안' },
+    { lon: 5.0, lat: 58.0, label: '북해 북상' },
+    { lon: 5.0, lat: 65.0, label: '노르웨이 서해안 북상' },
+    { lon: 12.0, lat: 72.0, label: '노르웨이해 최북부' },
+    { lon: 24.0, lat: 72.0, label: '바렌츠해 서방 접근' },
+    { lon: 32.5, lat: 71.0, label: '콜라 반도 북방' },
+    { lon: 33.0, lat: 70.0, label: '콜라 만 북측 입구' },
+    { lon: 33.0, lat: 68.9, label: '무르만스크항' }
+  ],
+  'LONDON-MURMANSK': [
+    { lon: 0.0, lat: 51.5, label: '런던항' },
+    { lon: 1.5, lat: 51.5, label: '템즈강 하구' },
+    { lon: 2.5, lat: 53.0, label: '북해 중부 북상' },
+    { lon: 2.0, lat: 57.0, label: '북해 중앙' },
+    { lon: 0.0, lat: 62.0, label: '영국 북방 외해' },
+    { lon: 5.0, lat: 65.0, label: '노르웨이 서해안 북상' },
+    { lon: 12.0, lat: 72.0, label: '노르웨이해 최북부' },
+    { lon: 24.0, lat: 72.0, label: '바렌츠해 서방 접근' },
+    { lon: 32.5, lat: 71.0, label: '콜라 반도 북방' },
+    { lon: 33.0, lat: 70.0, label: '콜라 만 북측 입구' },
+    { lon: 33.0, lat: 68.9, label: '무르만스크항' }
+  ]
+};

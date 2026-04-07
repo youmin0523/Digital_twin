@@ -1,7 +1,7 @@
-import React, { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState } from 'react';
 
 /**
- * Minimap component - polar-projection minimap showing ship position on the NSR route.
+ * Minimap component - polar-projection minimap showing ship position on the route.
  *
  * Props:
  *   shipPos    - { lat, lon }
@@ -22,13 +22,11 @@ export default function Minimap({
   const canvasRef = useRef(null);
   const [blink, setBlink] = useState(true);
 
-  /* blinking dot interval */
   useEffect(() => {
     const id = setInterval(() => setBlink((b) => !b), 500);
     return () => clearInterval(id);
   }, []);
 
-  /* redraw whenever relevant props change */
   useEffect(() => {
     drawMinimap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -38,19 +36,22 @@ export default function Minimap({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const W = 200,
-      H = 200;
-    const LAT_MIN = 30,
-      LAT_MAX = 90;
-    const cx = W / 2,
-      cy = H / 2,
-      R = W / 2 - 10;
+    const W = 200, H = 200;
+    const cx = W / 2, cy = H / 2, R = W / 2 - 10;
 
     const lat = shipPos?.lat ?? 0;
     const lon = shipPos?.lon ?? 0;
+    const wps = waypoints || [];
 
+    // LAT_MIN을 웨이포인트 최소 위도 기준으로 동적 계산 (15° 단위 내림, 5° 여유)
+    const minWpLat = wps.length ? Math.min(...wps.map((w) => w.lat)) : 30;
+    const LAT_MIN = Math.floor((minWpLat - 5) / 15) * 15;
+    const LAT_MAX = 90;
+    const latRange = LAT_MAX - LAT_MIN;
+
+    // 극좌표 변환: 북극(90°N)이 항상 중심
     function latLonToMM(la, lo) {
-      const r = ((LAT_MAX - la) / (LAT_MAX - LAT_MIN)) * R;
+      const r = ((LAT_MAX - la) / latRange) * R;
       const theta = (lo * Math.PI) / 180;
       return { x: cx + r * Math.sin(theta), y: cy - r * Math.cos(theta) };
     }
@@ -59,21 +60,24 @@ export default function Minimap({
     ctx.fillStyle = '#050d18';
     ctx.fillRect(0, 0, W, H);
 
-    // latitude circles
-    [30, 45, 60, 75].forEach((la) => {
-      const r = ((LAT_MAX - la) / (LAT_MAX - LAT_MIN)) * R;
+    // 위도권 그리드 (범위에 따라 15° or 30° 간격)
+    const step = latRange <= 75 ? 15 : 30;
+    const gridStart = Math.ceil(LAT_MIN / step) * step;
+    for (let la = gridStart; la < LAT_MAX; la += step) {
+      const r = ((LAT_MAX - la) / latRange) * R;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.strokeStyle = la === 60 ? '#1a3060' : '#0d1f40';
-      ctx.lineWidth = la === 60 ? 1 : 0.5;
+      ctx.strokeStyle = la === 60 ? '#1a3060' : (la === 0 ? '#1a3060' : '#0d1f40');
+      ctx.lineWidth = (la === 60 || la === 0) ? 1 : 0.5;
       ctx.stroke();
       ctx.fillStyle = '#1e3a8a';
       ctx.font = '7px Courier New';
       ctx.textAlign = 'left';
-      ctx.fillText(la + '\u00b0', cx + 2, cy - r + 8);
-    });
+      const label = la >= 0 ? la + '\u00b0' : la + '\u00b0';
+      ctx.fillText(label, cx + 2, cy - r + 8);
+    }
 
-    // meridians (60-degree intervals)
+    // 경선 (60° 간격)
     [-120, -60, 0, 60, 120, 180].forEach((lo) => {
       const theta = (lo * Math.PI) / 180;
       ctx.beginPath();
@@ -84,75 +88,62 @@ export default function Minimap({
       ctx.stroke();
     });
 
-    // outer circle
+    // 외곽 원
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
     ctx.strokeStyle = '#1e40af';
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // north-pole label
+    // 북극 라벨
     ctx.fillStyle = '#334466';
     ctx.font = '8px Courier New';
     ctx.textAlign = 'center';
     ctx.fillText('N', cx, cy + 3);
 
-    // route line
-    const wps = waypoints || [];
+    // 경로선 (전체 웨이포인트, 클리핑 없음)
     ctx.beginPath();
     let first = true;
     wps.forEach((wp) => {
-      if (wp.lat < LAT_MIN) {
-        first = true;
-        return;
-      }
       const p = latLonToMM(wp.lat, wp.lon);
-      if (first) {
-        ctx.moveTo(p.x, p.y);
-        first = false;
-      } else ctx.lineTo(p.x, p.y);
+      if (first) { ctx.moveTo(p.x, p.y); first = false; }
+      else ctx.lineTo(p.x, p.y);
     });
     ctx.strokeStyle = '#f59e0b';
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // departure dot
+    // 출발항 점
     const depLat = departurePort?.lat ?? 35.1;
     const depLon = departurePort?.lon ?? 129.0;
-    if (depLat >= LAT_MIN) {
-      const p = latLonToMM(depLat, depLon);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-      ctx.fillStyle = '#22c55e';
-      ctx.fill();
-    }
+    const depP = latLonToMM(depLat, depLon);
+    ctx.beginPath();
+    ctx.arc(depP.x, depP.y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#22c55e';
+    ctx.fill();
 
-    // arrival dot
+    // 도착항 점
     const arrLat = arrivalPort?.lat ?? 51.9;
     const arrLon = arrivalPort?.lon ?? 4.5;
-    if (arrLat >= LAT_MIN) {
-      const p = latLonToMM(arrLat, arrLon);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-      ctx.fillStyle = '#60a5fa';
-      ctx.fill();
-    }
+    const arrP = latLonToMM(arrLat, arrLon);
+    ctx.beginPath();
+    ctx.arc(arrP.x, arrP.y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#60a5fa';
+    ctx.fill();
 
-    // current position
-    if (lat >= LAT_MIN) {
-      const p = latLonToMM(lat, lon);
-      // outer ring
+    // 현재 위치
+    const p = latLonToMM(lat, lon);
+    const inCircle = Math.hypot(p.x - cx, p.y - cy) <= R;
+    if (inCircle) {
       ctx.beginPath();
       ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(239,68,68,0.35)';
       ctx.lineWidth = 1;
       ctx.stroke();
-      // solid dot (blinking)
       ctx.beginPath();
       ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
       ctx.fillStyle = blink ? '#ef4444' : '#ff8080';
       ctx.fill();
-      // heading arrow
       const hd = heading ?? 0;
       ctx.beginPath();
       ctx.moveTo(p.x, p.y);
@@ -167,7 +158,6 @@ export default function Minimap({
       ctx.fillText('\u25bc ' + lat.toFixed(1) + '\u00b0N', cx, H - 6);
     }
 
-    // reset textAlign for safety
     ctx.textAlign = 'left';
   }
 
@@ -224,8 +214,6 @@ export default function Minimap({
       </div>
       <button
         onClick={onOpenTeleport}
-        // //! [Original Code] { ... style props ... }
-        // //* [Modified Code] 프리미엄 버튼 스타일 적용 (Transition 포함)
         style={{
           width: '100%',
           marginTop: 12,
@@ -246,5 +234,5 @@ export default function Minimap({
         🛰 위치 이동
       </button>
     </div>
-  ); // 테스트 주석
+  );
 }

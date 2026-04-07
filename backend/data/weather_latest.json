@@ -1,5 +1,5 @@
 {
-  "fetched_at": "2026-04-06T09:58:57Z",
+  "fetched_at": "2026-04-07T03:32:49Z",
   "source": "Open-Meteo (Marine API + Weather Forecast API)",
   "dry_run": false,
   "routes": {
@@ -9,63 +9,63 @@
           "name": "부산항",
           "lat": 35.1,
           "lon": 129.04,
-          "wave_height_m": 0.72,
-          "temperature_c": 15.3,
-          "visibility_km": 17.12,
+          "wave_height_m": 0.34,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "대한해협 우회",
           "lat": 35.8,
           "lon": 130.8,
-          "wave_height_m": 1.78,
-          "temperature_c": 14.9,
-          "visibility_km": 24.14,
+          "wave_height_m": 2.04,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "동해 중앙",
           "lat": 37.5,
           "lon": 132.5,
-          "wave_height_m": 1.48,
-          "temperature_c": 11.4,
-          "visibility_km": 13.32,
+          "wave_height_m": 2.46,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "홋카이도 서해안",
           "lat": 43.0,
           "lon": 138.0,
-          "wave_height_m": 1.74,
-          "temperature_c": 8.8,
-          "visibility_km": 24.14,
+          "wave_height_m": 1.34,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "소야 해협 접근",
           "lat": 44.5,
           "lon": 140.5,
-          "wave_height_m": 1.04,
-          "temperature_c": 7.7,
-          "visibility_km": 24.14,
+          "wave_height_m": 1.24,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "소야 해협",
           "lat": 45.4,
           "lon": 141.2,
-          "wave_height_m": 0.9,
-          "temperature_c": 4.2,
-          "visibility_km": 24.14,
+          "wave_height_m": 0.98,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "소야 해협 통과",
           "lat": 45.65,
           "lon": 141.93,
-          "wave_height_m": 1.4,
-          "temperature_c": 2.5,
-          "visibility_km": 24.14,
+          "wave_height_m": 0.78,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
@@ -73,98 +73,98 @@
           "lat": 46.0,
           "lon": 144.0,
           "wave_height_m": 1.04,
-          "temperature_c": -0.7,
-          "visibility_km": 24.14,
-          "wave_source": "copernicus"
+          "temperature_c": null,
+          "visibility_km": null,
+          "wave_source": "open-meteo"
         },
         {
           "name": "오호츠크해",
           "lat": 47.0,
           "lon": 145.5,
-          "wave_height_m": 1.3,
-          "temperature_c": -0.1,
-          "visibility_km": 24.14,
+          "wave_height_m": 1.92,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "부솔 해협 접근",
           "lat": 48.0,
           "lon": 148.0,
-          "wave_height_m": 1.58,
-          "temperature_c": 0.0,
-          "visibility_km": 24.14,
+          "wave_height_m": 2.0,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "부솔 해협 (쿠릴 패주)",
           "lat": 46.5,
           "lon": 151.3,
-          "wave_height_m": 2.48,
-          "temperature_c": 1.5,
-          "visibility_km": 24.14,
+          "wave_height_m": 2.16,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "북태평양 진입",
           "lat": 46.0,
           "lon": 154.0,
-          "wave_height_m": 2.6,
-          "temperature_c": 2.1,
-          "visibility_km": 24.14,
+          "wave_height_m": 2.24,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "캄차카 반도 남방 외해",
           "lat": 48.5,
           "lon": 160.0,
-          "wave_height_m": 2.76,
-          "temperature_c": 2.1,
-          "visibility_km": 24.14,
+          "wave_height_m": 2.14,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "캄차카 동해안 남부",
           "lat": 51.5,
           "lon": 163.5,
-          "wave_height_m": 3.0,
-          "temperature_c": 2.4,
-          "visibility_km": 24.14,
+          "wave_height_m": 2.08,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "캄차카 동해안 중부",
           "lat": 53.5,
           "lon": 165.0,
-          "wave_height_m": 3.14,
-          "temperature_c": 2.0,
-          "visibility_km": 24.14,
+          "wave_height_m": 2.64,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "캄차카 동해안 북부",
           "lat": 56.0,
           "lon": 166.0,
-          "wave_height_m": 2.0,
-          "temperature_c": 0.8,
-          "visibility_km": 0.04,
+          "wave_height_m": 2.86,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "베링해 진입",
           "lat": 58.5,
           "lon": 167.0,
-          "wave_height_m": 2.84,
-          "temperature_c": 0.5,
-          "visibility_km": 0.06,
+          "wave_height_m": 2.7,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "베링해 중부",
           "lat": 60.0,
           "lon": 170.0,
-          "wave_height_m": 2.24,
-          "temperature_c": -1.0,
-          "visibility_km": 1.48,
+          "wave_height_m": 1.0,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
@@ -172,16 +172,16 @@
           "lat": 63.0,
           "lon": 175.0,
           "wave_height_m": null,
-          "temperature_c": -6.5,
-          "visibility_km": 24.14
+          "temperature_c": null,
+          "visibility_km": null
         },
         {
           "name": "날짜변경선",
           "lat": 64.5,
           "lon": 180.0,
-          "wave_height_m": 0.08,
-          "temperature_c": -8.3,
-          "visibility_km": 23.26,
+          "wave_height_m": 0.1,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
@@ -189,16 +189,16 @@
           "lat": 65.0,
           "lon": -175.0,
           "wave_height_m": null,
-          "temperature_c": -15.7,
-          "visibility_km": 20.68
+          "temperature_c": null,
+          "visibility_km": null
         },
         {
           "name": "베링해협 서측",
           "lat": 65.5,
           "lon": -170.0,
           "wave_height_m": 0.03,
-          "temperature_c": -13.3,
-          "visibility_km": 11.16,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
@@ -206,8 +206,8 @@
           "lat": 66.5,
           "lon": -168.8,
           "wave_height_m": 0.02,
-          "temperature_c": -16.4,
-          "visibility_km": 6.6,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
@@ -215,8 +215,8 @@
           "lat": 67.5,
           "lon": -168.0,
           "wave_height_m": 0.02,
-          "temperature_c": -17.1,
-          "visibility_km": 12.22,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
@@ -224,26 +224,26 @@
           "lat": 70.5,
           "lon": -175.0,
           "wave_height_m": 0.03,
-          "temperature_c": -15.9,
-          "visibility_km": 6.54,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
           "name": "브랑겔 섬 서방 북상",
           "lat": 72.5,
           "lon": -179.5,
-          "wave_height_m": 0.04,
-          "temperature_c": -15.7,
-          "visibility_km": 24.14,
+          "wave_height_m": 0.03,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
           "name": "브랑겔 섬 북방 통과",
           "lat": 72.8,
           "lon": 178.5,
-          "wave_height_m": 0.03,
-          "temperature_c": -15.9,
-          "visibility_km": 6.54,
+          "wave_height_m": 0.02,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
@@ -251,17 +251,17 @@
           "lat": 73.0,
           "lon": 175.0,
           "wave_height_m": 0.03,
-          "temperature_c": -16.5,
-          "visibility_km": 24.14,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
           "name": "동시베리아해 서진",
           "lat": 73.0,
           "lon": 168.0,
-          "wave_height_m": 0.04,
-          "temperature_c": -13.6,
-          "visibility_km": 6.54,
+          "wave_height_m": 0.03,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
@@ -269,8 +269,8 @@
           "lat": 73.5,
           "lon": 160.0,
           "wave_height_m": 0.03,
-          "temperature_c": -12.4,
-          "visibility_km": 5.76,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
@@ -278,17 +278,17 @@
           "lat": 73.5,
           "lon": 153.0,
           "wave_height_m": 0.03,
-          "temperature_c": -13.6,
-          "visibility_km": 0.16,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
           "name": "산니코프 해협 진입",
           "lat": 73.5,
           "lon": 148.5,
-          "wave_height_m": 0.03,
-          "temperature_c": -15.9,
-          "visibility_km": 0.44,
+          "wave_height_m": 0.02,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
@@ -296,33 +296,33 @@
           "lat": 73.8,
           "lon": 145.0,
           "wave_height_m": null,
-          "temperature_c": -17.8,
-          "visibility_km": 2.18
+          "temperature_c": null,
+          "visibility_km": null
         },
         {
           "name": "드미트리 랍테프 해협",
           "lat": 74.0,
           "lon": 142.0,
           "wave_height_m": null,
-          "temperature_c": -18.8,
-          "visibility_km": 24.14
+          "temperature_c": null,
+          "visibility_km": null
         },
         {
           "name": "랍테프해 진입",
           "lat": 74.5,
           "lon": 140.0,
           "wave_height_m": 0.02,
-          "temperature_c": -19.5,
-          "visibility_km": 24.14,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "랍테프해 서부",
           "lat": 77.5,
           "lon": 130.0,
-          "wave_height_m": 0.03,
-          "temperature_c": -21.9,
-          "visibility_km": 24.14,
+          "wave_height_m": 0.02,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
@@ -330,8 +330,8 @@
           "lat": 77.5,
           "lon": 115.0,
           "wave_height_m": 0.04,
-          "temperature_c": -20.8,
-          "visibility_km": 24.12,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
@@ -339,17 +339,17 @@
           "lat": 77.8,
           "lon": 110.0,
           "wave_height_m": 0.04,
-          "temperature_c": -20.9,
-          "visibility_km": 24.14,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
           "name": "빌키츠키 통과",
           "lat": 77.92,
           "lon": 104.0,
-          "wave_height_m": 1.58,
-          "temperature_c": -17.5,
-          "visibility_km": 4.76,
+          "wave_height_m": 1.36,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
@@ -357,8 +357,8 @@
           "lat": 77.5,
           "lon": 98.0,
           "wave_height_m": 0.04,
-          "temperature_c": -17.8,
-          "visibility_km": 6.18,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
@@ -366,17 +366,17 @@
           "lat": 77.0,
           "lon": 80.0,
           "wave_height_m": 0.04,
-          "temperature_c": -15.6,
-          "visibility_km": 24.14,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "copernicus"
         },
         {
           "name": "노바야젬랴 섬 우회",
           "lat": 77.5,
           "lon": 69.0,
-          "wave_height_m": 0.56,
-          "temperature_c": -13.4,
-          "visibility_km": 1.32,
+          "wave_height_m": 0.7,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
@@ -384,79 +384,79 @@
           "lat": 76.0,
           "lon": 60.0,
           "wave_height_m": null,
-          "temperature_c": -10.5,
-          "visibility_km": 0.48
+          "temperature_c": null,
+          "visibility_km": null
         },
         {
           "name": "바렌츠해 중앙",
           "lat": 73.0,
           "lon": 45.0,
-          "wave_height_m": 0.82,
-          "temperature_c": -4.1,
-          "visibility_km": 24.14,
+          "wave_height_m": 1.0,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "바렌츠해 서부",
           "lat": 73.5,
           "lon": 32.0,
-          "wave_height_m": 1.92,
-          "temperature_c": 0.1,
-          "visibility_km": 24.14,
+          "wave_height_m": 1.4,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "노스케이프 북방 외해",
           "lat": 73.0,
           "lon": 20.0,
-          "wave_height_m": 3.3,
-          "temperature_c": 2.0,
-          "visibility_km": 16.34,
+          "wave_height_m": 2.62,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "노르웨이해 북부",
           "lat": 72.0,
           "lon": 14.0,
-          "wave_height_m": 3.86,
-          "temperature_c": 3.3,
-          "visibility_km": 13.98,
+          "wave_height_m": 2.14,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "노르웨이해 중부",
           "lat": 69.0,
           "lon": 6.0,
-          "wave_height_m": 3.4,
-          "temperature_c": 6.1,
-          "visibility_km": 32.0,
+          "wave_height_m": 2.86,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "노르웨이해 남부",
           "lat": 64.0,
           "lon": 2.0,
-          "wave_height_m": 3.46,
-          "temperature_c": 4.7,
-          "visibility_km": 31.08,
+          "wave_height_m": 3.34,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "북해 입구",
           "lat": 60.0,
           "lon": 1.0,
-          "wave_height_m": 2.88,
-          "temperature_c": 6.5,
-          "visibility_km": 36.56,
+          "wave_height_m": 2.2,
+          "temperature_c": null,
+          "visibility_km": null,
           "wave_source": "open-meteo"
         },
         {
           "name": "북해 중부",
           "lat": 57.0,
           "lon": 4.5,
-          "wave_height_m": 3.24,
-          "temperature_c": 6.4,
-          "visibility_km": 28.9,
+          "wave_height_m": 1.64,
+          "temperature_c": 5.7,
+          "visibility_km": 19.14,
           "wave_source": "open-meteo"
         },
         {
@@ -464,15 +464,15 @@
           "lat": 51.9,
           "lon": 4.5,
           "wave_height_m": null,
-          "temperature_c": 11.9,
+          "temperature_c": 6.3,
           "visibility_km": 50.0
         }
       ],
       "route_summary": {
-        "max_wave_height_m": 3.86,
-        "min_temperature_c": -21.9,
-        "min_visibility_km": 0.04,
-        "is_temp_below_minus_10": true
+        "max_wave_height_m": 3.34,
+        "min_temperature_c": 5.7,
+        "min_visibility_km": 19.14,
+        "is_temp_below_minus_10": false
       }
     },
     "NWP": {
@@ -481,17 +481,17 @@
           "name": "부산항",
           "lat": 35.1,
           "lon": 129.04,
-          "wave_height_m": 0.72,
-          "temperature_c": 15.3,
-          "visibility_km": 17.12,
+          "wave_height_m": 0.34,
+          "temperature_c": 12.1,
+          "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
         {
           "name": "대한해협 우회",
           "lat": 35.8,
           "lon": 130.8,
-          "wave_height_m": 1.78,
-          "temperature_c": 14.9,
+          "wave_height_m": 2.04,
+          "temperature_c": 10.1,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -499,8 +499,8 @@
           "name": "홋카이도 외곽",
           "lat": 43.0,
           "lon": 138.0,
-          "wave_height_m": 1.74,
-          "temperature_c": 8.8,
+          "wave_height_m": 1.34,
+          "temperature_c": 4.9,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -508,9 +508,9 @@
           "name": "소야 해협",
           "lat": 45.65,
           "lon": 141.93,
-          "wave_height_m": 1.4,
-          "temperature_c": 2.5,
-          "visibility_km": 24.14,
+          "wave_height_m": 0.78,
+          "temperature_c": 5.8,
+          "visibility_km": 1.58,
           "wave_source": "open-meteo"
         },
         {
@@ -518,34 +518,34 @@
           "lat": 46.0,
           "lon": 144.0,
           "wave_height_m": 1.04,
-          "temperature_c": -0.7,
-          "visibility_km": 24.14,
-          "wave_source": "copernicus"
+          "temperature_c": 0.6,
+          "visibility_km": 0.86,
+          "wave_source": "open-meteo"
         },
         {
           "name": "오호츠크해",
           "lat": 47.0,
           "lon": 145.5,
-          "wave_height_m": 1.3,
-          "temperature_c": -0.1,
-          "visibility_km": 24.14,
+          "wave_height_m": 1.92,
+          "temperature_c": 0.6,
+          "visibility_km": 0.14,
           "wave_source": "open-meteo"
         },
         {
           "name": "부솔 해협 접근",
           "lat": 48.0,
           "lon": 148.0,
-          "wave_height_m": 1.58,
-          "temperature_c": 0.0,
-          "visibility_km": 24.14,
+          "wave_height_m": 2.0,
+          "temperature_c": 1.5,
+          "visibility_km": 1.5,
           "wave_source": "open-meteo"
         },
         {
           "name": "부솔 해협",
           "lat": 46.5,
           "lon": 151.3,
-          "wave_height_m": 2.48,
-          "temperature_c": 1.5,
+          "wave_height_m": 2.16,
+          "temperature_c": 2.0,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -553,7 +553,7 @@
           "name": "북태평양 진입",
           "lat": 46.0,
           "lon": 154.0,
-          "wave_height_m": 2.6,
+          "wave_height_m": 2.24,
           "temperature_c": 2.1,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
@@ -562,8 +562,8 @@
           "name": "캄차카 반도 남방 외해",
           "lat": 48.5,
           "lon": 160.0,
-          "wave_height_m": 2.76,
-          "temperature_c": 2.1,
+          "wave_height_m": 2.14,
+          "temperature_c": 2.4,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -571,8 +571,8 @@
           "name": "캄차카 동해안 남부",
           "lat": 51.5,
           "lon": 163.5,
-          "wave_height_m": 3.0,
-          "temperature_c": 2.4,
+          "wave_height_m": 2.08,
+          "temperature_c": 2.5,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -580,8 +580,8 @@
           "name": "캄차카 동해안 중부",
           "lat": 53.5,
           "lon": 165.0,
-          "wave_height_m": 3.14,
-          "temperature_c": 2.0,
+          "wave_height_m": 2.64,
+          "temperature_c": 1.8,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -589,27 +589,27 @@
           "name": "캄차카 동해안 북부",
           "lat": 56.0,
           "lon": 166.0,
-          "wave_height_m": 2.0,
-          "temperature_c": 0.8,
-          "visibility_km": 0.04,
+          "wave_height_m": 2.86,
+          "temperature_c": 0.5,
+          "visibility_km": 10.7,
           "wave_source": "open-meteo"
         },
         {
           "name": "베링해 진입",
           "lat": 58.5,
           "lon": 167.0,
-          "wave_height_m": 2.84,
-          "temperature_c": 0.5,
-          "visibility_km": 0.06,
+          "wave_height_m": 2.7,
+          "temperature_c": -0.7,
+          "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
         {
           "name": "날짜변경선",
           "lat": 64.5,
           "lon": 180.0,
-          "wave_height_m": 0.08,
-          "temperature_c": -8.3,
-          "visibility_km": 23.26,
+          "wave_height_m": 0.1,
+          "temperature_c": -5.8,
+          "visibility_km": 23.74,
           "wave_source": "copernicus"
         },
         {
@@ -617,8 +617,8 @@
           "lat": 65.0,
           "lon": -173.0,
           "wave_height_m": null,
-          "temperature_c": -15.8,
-          "visibility_km": 3.02
+          "temperature_c": -13.9,
+          "visibility_km": 24.14
         },
         {
           "name": "베링해협 서측",
@@ -626,7 +626,7 @@
           "lon": -170.0,
           "wave_height_m": 0.03,
           "temperature_c": -13.3,
-          "visibility_km": 11.16,
+          "visibility_km": 24.14,
           "wave_source": "copernicus"
         },
         {
@@ -634,8 +634,8 @@
           "lat": 66.5,
           "lon": -168.8,
           "wave_height_m": 0.02,
-          "temperature_c": -16.4,
-          "visibility_km": 6.6,
+          "temperature_c": -16.8,
+          "visibility_km": 24.14,
           "wave_source": "copernicus"
         },
         {
@@ -643,7 +643,7 @@
           "lat": 69.0,
           "lon": -165.0,
           "wave_height_m": 0.03,
-          "temperature_c": -15.6,
+          "temperature_c": -15.0,
           "visibility_km": 24.14,
           "wave_source": "copernicus"
         },
@@ -652,16 +652,16 @@
           "lat": 71.8,
           "lon": -156.0,
           "wave_height_m": 0.02,
-          "temperature_c": -21.2,
-          "visibility_km": 5.54,
+          "temperature_c": -21.4,
+          "visibility_km": 24.14,
           "wave_source": "copernicus"
         },
         {
           "name": "보퍼트해 연안 우회",
           "lat": 72.0,
           "lon": -140.0,
-          "wave_height_m": 0.03,
-          "temperature_c": -17.4,
+          "wave_height_m": 0.02,
+          "temperature_c": -17.5,
           "visibility_km": 6.54,
           "wave_source": "copernicus"
         },
@@ -670,7 +670,7 @@
           "lat": 73.5,
           "lon": -130.0,
           "wave_height_m": 0.03,
-          "temperature_c": -15.9,
+          "temperature_c": -15.3,
           "visibility_km": 24.14,
           "wave_source": "copernicus"
         },
@@ -679,16 +679,16 @@
           "lat": 74.0,
           "lon": -124.5,
           "wave_height_m": null,
-          "temperature_c": -16.5,
-          "visibility_km": 8.22
+          "temperature_c": -15.5,
+          "visibility_km": 24.14
         },
         {
           "name": "맥클루어 해협 서부",
           "lat": 74.8,
           "lon": -119.0,
-          "wave_height_m": 0.03,
-          "temperature_c": -17.1,
-          "visibility_km": 1.9,
+          "wave_height_m": 0.04,
+          "temperature_c": -16.0,
+          "visibility_km": 24.14,
           "wave_source": "copernicus"
         },
         {
@@ -696,7 +696,7 @@
           "lat": 75.0,
           "lon": -115.5,
           "wave_height_m": 0.25,
-          "temperature_c": -17.8,
+          "temperature_c": -13.9,
           "visibility_km": 24.14,
           "wave_source": "copernicus"
         },
@@ -705,16 +705,16 @@
           "lat": 74.8,
           "lon": -112.0,
           "wave_height_m": null,
-          "temperature_c": -21.5,
-          "visibility_km": 24.14
+          "temperature_c": -16.7,
+          "visibility_km": 20.94
         },
         {
           "name": "바이카운트멜빌 해협 서부",
           "lat": 74.7,
           "lon": -109.5,
           "wave_height_m": 0.03,
-          "temperature_c": -20.1,
-          "visibility_km": 9.12,
+          "temperature_c": -19.0,
+          "visibility_km": 21.88,
           "wave_source": "copernicus"
         },
         {
@@ -722,8 +722,8 @@
           "lat": 74.6,
           "lon": -106.0,
           "wave_height_m": 0.03,
-          "temperature_c": -19.8,
-          "visibility_km": 6.54,
+          "temperature_c": -19.2,
+          "visibility_km": 1.8,
           "wave_source": "copernicus"
         },
         {
@@ -731,17 +731,17 @@
           "lat": 74.5,
           "lon": -102.5,
           "wave_height_m": 0.03,
-          "temperature_c": -21.0,
-          "visibility_km": 6.58,
+          "temperature_c": -20.9,
+          "visibility_km": 2.84,
           "wave_source": "copernicus"
         },
         {
           "name": "배로우 해협 서부",
           "lat": 74.0,
           "lon": -97.0,
-          "wave_height_m": 0.04,
-          "temperature_c": -22.3,
-          "visibility_km": 10.48,
+          "wave_height_m": 0.03,
+          "temperature_c": -22.7,
+          "visibility_km": 7.0,
           "wave_source": "copernicus"
         },
         {
@@ -749,16 +749,16 @@
           "lat": 74.0,
           "lon": -93.5,
           "wave_height_m": null,
-          "temperature_c": -25.6,
-          "visibility_km": 9.74
+          "temperature_c": -24.8,
+          "visibility_km": 1.72
         },
         {
           "name": "랭커스터 해협 서부",
           "lat": 74.0,
           "lon": -87.0,
           "wave_height_m": 0.03,
-          "temperature_c": -19.8,
-          "visibility_km": 3.1,
+          "temperature_c": -22.2,
+          "visibility_km": 4.62,
           "wave_source": "copernicus"
         },
         {
@@ -766,8 +766,8 @@
           "lat": 74.0,
           "lon": -84.0,
           "wave_height_m": 0.03,
-          "temperature_c": -20.3,
-          "visibility_km": 6.42,
+          "temperature_c": -20.8,
+          "visibility_km": 3.16,
           "wave_source": "copernicus"
         },
         {
@@ -775,16 +775,16 @@
           "lat": 73.3,
           "lon": -80.5,
           "wave_height_m": null,
-          "temperature_c": -21.9,
-          "visibility_km": 2.14
+          "temperature_c": -20.5,
+          "visibility_km": 22.0
         },
         {
           "name": "배핀 만 서부",
           "lat": 72.5,
           "lon": -75.0,
-          "wave_height_m": 0.02,
-          "temperature_c": -24.4,
-          "visibility_km": 24.14,
+          "wave_height_m": 0.22,
+          "temperature_c": -20.6,
+          "visibility_km": 9.22,
           "wave_source": "open-meteo"
         },
         {
@@ -792,17 +792,17 @@
           "lat": 70.0,
           "lon": -65.0,
           "wave_height_m": 0.02,
-          "temperature_c": -22.6,
-          "visibility_km": 0.34,
+          "temperature_c": -22.0,
+          "visibility_km": 6.94,
           "wave_source": "copernicus"
         },
         {
           "name": "데이비스 해협",
           "lat": 65.0,
           "lon": -60.0,
-          "wave_height_m": 0.03,
-          "temperature_c": -15.9,
-          "visibility_km": 6.54,
+          "wave_height_m": 0.04,
+          "temperature_c": -11.7,
+          "visibility_km": 24.14,
           "wave_source": "copernicus"
         },
         {
@@ -810,26 +810,26 @@
           "lat": 60.0,
           "lon": -50.0,
           "wave_height_m": 1.7,
-          "temperature_c": -4.6,
-          "visibility_km": 24.14,
+          "temperature_c": -0.9,
+          "visibility_km": 21.54,
           "wave_source": "open-meteo"
         },
         {
           "name": "대서양 중앙",
           "lat": 55.0,
           "lon": -30.0,
-          "wave_height_m": 9.62,
-          "temperature_c": 4.8,
-          "visibility_km": 20.12,
+          "wave_height_m": 6.04,
+          "temperature_c": 4.3,
+          "visibility_km": 50.0,
           "wave_source": "open-meteo"
         },
         {
           "name": "영국 해협 서측",
           "lat": 50.0,
           "lon": -10.0,
-          "wave_height_m": 2.92,
-          "temperature_c": 11.4,
-          "visibility_km": 25.08,
+          "wave_height_m": 4.88,
+          "temperature_c": 12.2,
+          "visibility_km": 17.9,
           "wave_source": "open-meteo"
         },
         {
@@ -837,22 +837,22 @@
           "lat": 51.0,
           "lon": 0.0,
           "wave_height_m": null,
-          "temperature_c": 10.4,
-          "visibility_km": 42.26
+          "temperature_c": 6.6,
+          "visibility_km": 44.24
         },
         {
           "name": "로테르담",
           "lat": 51.9,
           "lon": 4.5,
           "wave_height_m": null,
-          "temperature_c": 11.9,
+          "temperature_c": 6.3,
           "visibility_km": 50.0
         }
       ],
       "route_summary": {
-        "max_wave_height_m": 9.62,
-        "min_temperature_c": -25.6,
-        "min_visibility_km": 0.04,
+        "max_wave_height_m": 6.04,
+        "min_temperature_c": -24.8,
+        "min_visibility_km": 0.14,
         "is_temp_below_minus_10": true
       }
     },
@@ -862,17 +862,17 @@
           "name": "부산항",
           "lat": 35.1,
           "lon": 129.04,
-          "wave_height_m": 0.72,
-          "temperature_c": 15.3,
-          "visibility_km": 17.12,
+          "wave_height_m": 0.34,
+          "temperature_c": 12.1,
+          "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
         {
           "name": "대한해협 우회",
           "lat": 35.8,
           "lon": 130.8,
-          "wave_height_m": 1.78,
-          "temperature_c": 14.9,
+          "wave_height_m": 2.04,
+          "temperature_c": 10.1,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -880,9 +880,9 @@
           "name": "소야 해협 통과",
           "lat": 45.65,
           "lon": 141.93,
-          "wave_height_m": 1.4,
-          "temperature_c": 2.5,
-          "visibility_km": 24.14,
+          "wave_height_m": 0.78,
+          "temperature_c": 5.8,
+          "visibility_km": 1.58,
           "wave_source": "open-meteo"
         },
         {
@@ -890,34 +890,34 @@
           "lat": 46.0,
           "lon": 144.0,
           "wave_height_m": 1.04,
-          "temperature_c": -0.7,
-          "visibility_km": 24.14,
-          "wave_source": "copernicus"
+          "temperature_c": 0.6,
+          "visibility_km": 0.86,
+          "wave_source": "open-meteo"
         },
         {
           "name": "오호츠크해",
           "lat": 47.0,
           "lon": 145.5,
-          "wave_height_m": 1.3,
-          "temperature_c": -0.1,
-          "visibility_km": 24.14,
+          "wave_height_m": 1.92,
+          "temperature_c": 0.6,
+          "visibility_km": 0.14,
           "wave_source": "open-meteo"
         },
         {
           "name": "부솔 해협 접근",
           "lat": 48.0,
           "lon": 148.0,
-          "wave_height_m": 1.58,
-          "temperature_c": 0.0,
-          "visibility_km": 24.14,
+          "wave_height_m": 2.0,
+          "temperature_c": 1.5,
+          "visibility_km": 1.5,
           "wave_source": "open-meteo"
         },
         {
           "name": "부솔 해협",
           "lat": 46.5,
           "lon": 151.3,
-          "wave_height_m": 2.48,
-          "temperature_c": 1.5,
+          "wave_height_m": 2.16,
+          "temperature_c": 2.0,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -925,7 +925,7 @@
           "name": "북태평양 진입",
           "lat": 46.0,
           "lon": 154.0,
-          "wave_height_m": 2.6,
+          "wave_height_m": 2.24,
           "temperature_c": 2.1,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
@@ -934,8 +934,8 @@
           "name": "캄차카 반도 남방 외해",
           "lat": 48.5,
           "lon": 160.0,
-          "wave_height_m": 2.76,
-          "temperature_c": 2.1,
+          "wave_height_m": 2.14,
+          "temperature_c": 2.4,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -943,8 +943,8 @@
           "name": "캄차카 동해안 남부",
           "lat": 51.5,
           "lon": 163.5,
-          "wave_height_m": 3.0,
-          "temperature_c": 2.4,
+          "wave_height_m": 2.08,
+          "temperature_c": 2.5,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -952,8 +952,8 @@
           "name": "캄차카 동해안 중부",
           "lat": 53.5,
           "lon": 165.0,
-          "wave_height_m": 3.14,
-          "temperature_c": 2.0,
+          "wave_height_m": 2.64,
+          "temperature_c": 1.8,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -961,27 +961,27 @@
           "name": "캄차카 동해안 북부",
           "lat": 56.0,
           "lon": 166.0,
-          "wave_height_m": 2.0,
-          "temperature_c": 0.8,
-          "visibility_km": 0.04,
+          "wave_height_m": 2.86,
+          "temperature_c": 0.5,
+          "visibility_km": 10.7,
           "wave_source": "open-meteo"
         },
         {
           "name": "베링해 진입",
           "lat": 58.5,
           "lon": 167.0,
-          "wave_height_m": 2.84,
-          "temperature_c": 0.5,
-          "visibility_km": 0.06,
+          "wave_height_m": 2.7,
+          "temperature_c": -0.7,
+          "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
         {
           "name": "날짜변경선",
           "lat": 64.5,
           "lon": 180.0,
-          "wave_height_m": 0.08,
-          "temperature_c": -8.3,
-          "visibility_km": 23.26,
+          "wave_height_m": 0.1,
+          "temperature_c": -5.8,
+          "visibility_km": 23.74,
           "wave_source": "copernicus"
         },
         {
@@ -989,8 +989,8 @@
           "lat": 65.0,
           "lon": -173.0,
           "wave_height_m": null,
-          "temperature_c": -15.8,
-          "visibility_km": 3.02
+          "temperature_c": -13.9,
+          "visibility_km": 24.14
         },
         {
           "name": "베링해협 서측",
@@ -998,7 +998,7 @@
           "lon": -170.0,
           "wave_height_m": 0.03,
           "temperature_c": -13.3,
-          "visibility_km": 11.16,
+          "visibility_km": 24.14,
           "wave_source": "copernicus"
         },
         {
@@ -1006,8 +1006,8 @@
           "lat": 66.5,
           "lon": -168.8,
           "wave_height_m": 0.02,
-          "temperature_c": -16.4,
-          "visibility_km": 6.6,
+          "temperature_c": -16.8,
+          "visibility_km": 24.14,
           "wave_source": "copernicus"
         },
         {
@@ -1015,8 +1015,8 @@
           "lat": 70.0,
           "lon": -168.0,
           "wave_height_m": 0.02,
-          "temperature_c": -18.4,
-          "visibility_km": 6.54,
+          "temperature_c": -18.9,
+          "visibility_km": 24.14,
           "wave_source": "copernicus"
         },
         {
@@ -1024,16 +1024,16 @@
           "lat": 80.0,
           "lon": 180.0,
           "wave_height_m": 0.03,
-          "temperature_c": -16.1,
-          "visibility_km": 14.02,
+          "temperature_c": -17.0,
+          "visibility_km": 24.14,
           "wave_source": "copernicus"
         },
         {
           "name": "북극점 돌파",
           "lat": 89.9,
           "lon": 0.0,
-          "wave_height_m": 0.03,
-          "temperature_c": -24.2,
+          "wave_height_m": 0.02,
+          "temperature_c": -25.1,
           "visibility_km": 6.54,
           "wave_source": "copernicus"
         },
@@ -1041,27 +1041,27 @@
           "name": "스발바르 북방",
           "lat": 80.0,
           "lon": 10.0,
-          "wave_height_m": 0.68,
-          "temperature_c": -2.6,
-          "visibility_km": 9.46,
+          "wave_height_m": 1.34,
+          "temperature_c": -4.6,
+          "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
         {
           "name": "노르웨이해",
           "lat": 70.0,
           "lon": 10.0,
-          "wave_height_m": 3.4,
-          "temperature_c": 4.8,
-          "visibility_km": 29.02,
+          "wave_height_m": 2.5,
+          "temperature_c": 5.7,
+          "visibility_km": 22.04,
           "wave_source": "open-meteo"
         },
         {
           "name": "북해",
           "lat": 62.0,
           "lon": 5.0,
-          "wave_height_m": 2.98,
-          "temperature_c": 5.0,
-          "visibility_km": 25.82,
+          "wave_height_m": 2.64,
+          "temperature_c": 3.3,
+          "visibility_km": 33.18,
           "wave_source": "open-meteo"
         },
         {
@@ -1069,14 +1069,14 @@
           "lat": 51.9,
           "lon": 4.5,
           "wave_height_m": null,
-          "temperature_c": 11.9,
+          "temperature_c": 6.3,
           "visibility_km": 50.0
         }
       ],
       "route_summary": {
-        "max_wave_height_m": 3.4,
-        "min_temperature_c": -24.2,
-        "min_visibility_km": 0.04,
+        "max_wave_height_m": 2.86,
+        "min_temperature_c": -25.1,
+        "min_visibility_km": 0.14,
         "is_temp_below_minus_10": true
       }
     },
@@ -1086,17 +1086,17 @@
           "name": "부산항 출항",
           "lat": 35.1,
           "lon": 129.04,
-          "wave_height_m": 0.72,
-          "temperature_c": 15.3,
-          "visibility_km": 17.12,
+          "wave_height_m": 0.34,
+          "temperature_c": 12.1,
+          "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
         {
           "name": "제주도 서방 통과",
           "lat": 33.5,
           "lon": 127.0,
-          "wave_height_m": 1.04,
-          "temperature_c": 15.2,
+          "wave_height_m": 0.98,
+          "temperature_c": 11.5,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1104,9 +1104,9 @@
           "name": "동중국해",
           "lat": 29.0,
           "lon": 124.0,
-          "wave_height_m": 0.96,
-          "temperature_c": 17.5,
-          "visibility_km": 6.02,
+          "wave_height_m": 1.8,
+          "temperature_c": 15.4,
+          "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
         {
@@ -1114,14 +1114,14 @@
           "lat": 24.0,
           "lon": 121.5,
           "wave_height_m": null,
-          "temperature_c": 12.1,
-          "visibility_km": 24.14
+          "temperature_c": 12.5,
+          "visibility_km": 22.4
         },
         {
           "name": "루손 해협 서측 외해",
           "lat": 20.0,
           "lon": 118.0,
-          "wave_height_m": 1.44,
+          "wave_height_m": 1.16,
           "temperature_c": 26.9,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
@@ -1130,8 +1130,8 @@
           "name": "남중국해 북부",
           "lat": 16.0,
           "lon": 114.0,
-          "wave_height_m": 1.4,
-          "temperature_c": 27.9,
+          "wave_height_m": 1.34,
+          "temperature_c": 27.5,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1139,8 +1139,8 @@
           "name": "남중국해 중부",
           "lat": 10.5,
           "lon": 110.0,
-          "wave_height_m": 0.42,
-          "temperature_c": 28.1,
+          "wave_height_m": 0.52,
+          "temperature_c": 27.9,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1148,8 +1148,8 @@
           "name": "남중국해 남부",
           "lat": 6.0,
           "lon": 107.5,
-          "wave_height_m": 0.32,
-          "temperature_c": 28.4,
+          "wave_height_m": 0.28,
+          "temperature_c": 28.2,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1157,8 +1157,8 @@
           "name": "말라카 해협 북단",
           "lat": 3.5,
           "lon": 105.5,
-          "wave_height_m": 0.4,
-          "temperature_c": 27.6,
+          "wave_height_m": 0.26,
+          "temperature_c": 28.3,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1167,34 +1167,34 @@
           "lat": 1.8,
           "lon": 104.2,
           "wave_height_m": 0.14,
-          "temperature_c": 32.2,
-          "visibility_km": 20.56,
+          "temperature_c": 29.3,
+          "visibility_km": 19.4,
           "wave_source": "open-meteo"
         },
         {
           "name": "싱가포르 (말라카 해협 출구)",
           "lat": 1.3,
           "lon": 103.8,
-          "wave_height_m": 0.16,
-          "temperature_c": 29.8,
-          "visibility_km": 24.14,
+          "wave_height_m": 0.22,
+          "temperature_c": 28.3,
+          "visibility_km": 22.06,
           "wave_source": "open-meteo"
         },
         {
           "name": "인도양 북서향",
           "lat": -1.0,
           "lon": 98.0,
-          "wave_height_m": 1.46,
-          "temperature_c": 28.2,
-          "visibility_km": 23.86,
+          "wave_height_m": 1.3,
+          "temperature_c": 28.0,
+          "visibility_km": 5.86,
           "wave_source": "open-meteo"
         },
         {
           "name": "인도양 중앙부",
           "lat": 5.0,
           "lon": 90.0,
-          "wave_height_m": 1.24,
-          "temperature_c": 28.9,
+          "wave_height_m": 1.16,
+          "temperature_c": 28.7,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1202,9 +1202,9 @@
           "name": "스리랑카 남방 외해",
           "lat": 7.0,
           "lon": 80.0,
-          "wave_height_m": 1.06,
-          "temperature_c": 30.3,
-          "visibility_km": 24.14,
+          "wave_height_m": 0.94,
+          "temperature_c": 29.0,
+          "visibility_km": 22.42,
           "wave_source": "open-meteo"
         },
         {
@@ -1212,7 +1212,7 @@
           "lat": 10.0,
           "lon": 75.0,
           "wave_height_m": 1.12,
-          "temperature_c": 29.9,
+          "temperature_c": 29.6,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1220,8 +1220,8 @@
           "name": "아라비아해 중앙",
           "lat": 12.0,
           "lon": 68.0,
-          "wave_height_m": 0.8,
-          "temperature_c": 28.5,
+          "wave_height_m": 0.72,
+          "temperature_c": 28.6,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1230,7 +1230,7 @@
           "lat": 13.5,
           "lon": 62.0,
           "wave_height_m": 0.7,
-          "temperature_c": 27.8,
+          "temperature_c": 27.5,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1238,17 +1238,17 @@
           "name": "아덴만 진입",
           "lat": 12.5,
           "lon": 55.0,
-          "wave_height_m": 0.8,
-          "temperature_c": 28.3,
-          "visibility_km": 24.14,
+          "wave_height_m": 0.86,
+          "temperature_c": 28.1,
+          "visibility_km": 22.08,
           "wave_source": "open-meteo"
         },
         {
           "name": "아덴만 중앙",
           "lat": 12.0,
           "lon": 49.0,
-          "wave_height_m": 0.32,
-          "temperature_c": 28.1,
+          "wave_height_m": 0.24,
+          "temperature_c": 27.9,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1256,8 +1256,8 @@
           "name": "아덴만 서부 (예멘 외해)",
           "lat": 12.0,
           "lon": 45.5,
-          "wave_height_m": 0.46,
-          "temperature_c": 28.4,
+          "wave_height_m": 0.38,
+          "temperature_c": 27.8,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1265,8 +1265,8 @@
           "name": "바브엘만데브 해협 접근",
           "lat": 12.8,
           "lon": 44.0,
-          "wave_height_m": 0.34,
-          "temperature_c": 30.7,
+          "wave_height_m": 0.22,
+          "temperature_c": 27.2,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1274,8 +1274,8 @@
           "name": "바브엘만데브 해협 통과",
           "lat": 13.8,
           "lon": 43.0,
-          "wave_height_m": 0.36,
-          "temperature_c": 29.1,
+          "wave_height_m": 0.34,
+          "temperature_c": 27.0,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1284,15 +1284,15 @@
           "lat": 15.5,
           "lon": 43.0,
           "wave_height_m": null,
-          "temperature_c": 32.9,
-          "visibility_km": 24.14
+          "temperature_c": 28.0,
+          "visibility_km": 24.06
         },
         {
           "name": "홍해 중앙",
           "lat": 18.5,
           "lon": 42.5,
           "wave_height_m": null,
-          "temperature_c": 22.1,
+          "temperature_c": 17.7,
           "visibility_km": 24.14
         },
         {
@@ -1300,15 +1300,15 @@
           "lat": 21.5,
           "lon": 41.0,
           "wave_height_m": null,
-          "temperature_c": 30.1,
+          "temperature_c": 21.5,
           "visibility_km": 24.14
         },
         {
           "name": "홍해 북부",
           "lat": 24.0,
           "lon": 38.5,
-          "wave_height_m": 0.66,
-          "temperature_c": 33.7,
+          "wave_height_m": 0.88,
+          "temperature_c": 24.2,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1317,15 +1317,15 @@
           "lat": 26.5,
           "lon": 36.8,
           "wave_height_m": null,
-          "temperature_c": 29.1,
+          "temperature_c": 19.7,
           "visibility_km": 24.14
         },
         {
           "name": "수에즈만 남단",
           "lat": 28.5,
           "lon": 34.5,
-          "wave_height_m": 0.42,
-          "temperature_c": 24.8,
+          "wave_height_m": 0.34,
+          "temperature_c": 18.4,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1334,16 +1334,16 @@
           "lat": 29.93,
           "lon": 32.55,
           "wave_height_m": null,
-          "temperature_c": 23.0,
-          "visibility_km": 42.76
+          "temperature_c": 15.6,
+          "visibility_km": 31.36
         },
         {
           "name": "그레이트 비터 호수",
           "lat": 30.42,
           "lon": 32.42,
-          "wave_height_m": 0.1,
-          "temperature_c": 22.5,
-          "visibility_km": 42.58,
+          "wave_height_m": 0.08,
+          "temperature_c": 16.1,
+          "visibility_km": 36.08,
           "wave_source": "open-meteo"
         },
         {
@@ -1351,97 +1351,97 @@
           "lat": 30.62,
           "lon": 32.27,
           "wave_height_m": null,
-          "temperature_c": 22.5,
-          "visibility_km": 42.56
+          "temperature_c": 15.8,
+          "visibility_km": 31.52
         },
         {
           "name": "수에즈 운하 북단 (Port Said)",
           "lat": 31.25,
           "lon": 32.33,
-          "wave_height_m": 0.22,
-          "temperature_c": 20.5,
-          "visibility_km": 40.82,
+          "wave_height_m": 0.14,
+          "temperature_c": 16.4,
+          "visibility_km": 22.88,
           "wave_source": "open-meteo"
         },
         {
           "name": "지중해 진입 (동지중해)",
           "lat": 32.0,
           "lon": 32.5,
-          "wave_height_m": 0.84,
-          "temperature_c": 17.0,
-          "visibility_km": 29.46,
+          "wave_height_m": 0.52,
+          "temperature_c": 16.6,
+          "visibility_km": 32.02,
           "wave_source": "open-meteo"
         },
         {
           "name": "동지중해 북부",
           "lat": 33.5,
           "lon": 30.0,
-          "wave_height_m": 0.7,
-          "temperature_c": 16.7,
-          "visibility_km": 33.84,
+          "wave_height_m": 0.66,
+          "temperature_c": 15.2,
+          "visibility_km": 29.06,
           "wave_source": "open-meteo"
         },
         {
           "name": "크레타 섬 남방 통과",
           "lat": 34.8,
           "lon": 24.0,
-          "wave_height_m": 0.64,
-          "temperature_c": 17.0,
-          "visibility_km": 34.48,
+          "wave_height_m": 0.74,
+          "temperature_c": 15.9,
+          "visibility_km": 25.96,
           "wave_source": "open-meteo"
         },
         {
           "name": "시칠리아 해협 접근",
           "lat": 35.5,
           "lon": 18.0,
-          "wave_height_m": 0.7,
-          "temperature_c": 15.8,
-          "visibility_km": 31.16,
+          "wave_height_m": 0.52,
+          "temperature_c": 15.3,
+          "visibility_km": 23.5,
           "wave_source": "open-meteo"
         },
         {
           "name": "시칠리아 해협 통과",
           "lat": 37.0,
           "lon": 12.5,
-          "wave_height_m": 0.52,
-          "temperature_c": 14.4,
-          "visibility_km": 26.18,
+          "wave_height_m": 0.26,
+          "temperature_c": 15.2,
+          "visibility_km": 28.64,
           "wave_source": "open-meteo"
         },
         {
           "name": "서지중해 동부",
           "lat": 38.0,
           "lon": 9.0,
-          "wave_height_m": 0.34,
-          "temperature_c": 13.9,
-          "visibility_km": 19.56,
+          "wave_height_m": 0.26,
+          "temperature_c": 16.2,
+          "visibility_km": 34.8,
           "wave_source": "open-meteo"
         },
         {
           "name": "서지중해 중앙",
           "lat": 38.5,
           "lon": 4.5,
-          "wave_height_m": 0.38,
-          "temperature_c": 15.5,
-          "visibility_km": 30.2,
+          "wave_height_m": 0.64,
+          "temperature_c": 16.5,
+          "visibility_km": 21.16,
           "wave_source": "open-meteo"
         },
         {
           "name": "알보란해",
           "lat": 37.0,
           "lon": -1.5,
-          "wave_height_m": 0.66,
-          "temperature_c": 16.3,
-          "visibility_km": 39.34,
+          "wave_height_m": 0.74,
+          "temperature_c": 16.6,
+          "visibility_km": 36.32,
           "wave_source": "open-meteo"
         },
         {
           "name": "지브롤터 해협 통과",
           "lat": 35.9,
           "lon": -5.4,
-          "wave_height_m": 0.8,
-          "temperature_c": 15.7,
-          "visibility_km": 22.24,
+          "wave_height_m": 0.86,
+          "temperature_c": 14.0,
+          "visibility_km": 20.24,
           "wave_source": "open-meteo"
         },
         {
@@ -1449,25 +1449,25 @@
           "lat": 38.5,
           "lon": -9.0,
           "wave_height_m": 1.54,
-          "temperature_c": 18.5,
-          "visibility_km": 37.3,
+          "temperature_c": 16.7,
+          "visibility_km": 37.32,
           "wave_source": "open-meteo"
         },
         {
           "name": "이베리아 반도 서안 북진",
           "lat": 43.5,
           "lon": -9.5,
-          "wave_height_m": 2.24,
-          "temperature_c": 15.8,
-          "visibility_km": 32.84,
+          "wave_height_m": 3.78,
+          "temperature_c": 14.9,
+          "visibility_km": 18.62,
           "wave_source": "open-meteo"
         },
         {
           "name": "비스케이만 북동부",
           "lat": 47.0,
           "lon": -7.0,
-          "wave_height_m": 2.34,
-          "temperature_c": 12.8,
+          "wave_height_m": 3.48,
+          "temperature_c": 13.8,
           "visibility_km": 50.0,
           "wave_source": "open-meteo"
         },
@@ -1475,8 +1475,8 @@
           "name": "우에상 섬 (브르타뉴 외해)",
           "lat": 48.5,
           "lon": -5.5,
-          "wave_height_m": 2.22,
-          "temperature_c": 11.3,
+          "wave_height_m": 3.26,
+          "temperature_c": 14.4,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1484,9 +1484,9 @@
           "name": "영국 해협 서측",
           "lat": 50.0,
           "lon": -3.0,
-          "wave_height_m": 1.26,
-          "temperature_c": 10.1,
-          "visibility_km": 50.16,
+          "wave_height_m": 1.46,
+          "temperature_c": 12.0,
+          "visibility_km": 38.7,
           "wave_source": "open-meteo"
         },
         {
@@ -1494,8 +1494,8 @@
           "lat": 51.1,
           "lon": 1.5,
           "wave_height_m": 0.4,
-          "temperature_c": 8.6,
-          "visibility_km": 25.5,
+          "temperature_c": 9.1,
+          "visibility_km": 33.14,
           "wave_source": "open-meteo"
         },
         {
@@ -1503,14 +1503,14 @@
           "lat": 51.9,
           "lon": 4.5,
           "wave_height_m": null,
-          "temperature_c": 11.9,
+          "temperature_c": 6.3,
           "visibility_km": 50.0
         }
       ],
       "route_summary": {
-        "max_wave_height_m": 2.34,
-        "min_temperature_c": 8.6,
-        "min_visibility_km": 6.02,
+        "max_wave_height_m": 3.78,
+        "min_temperature_c": 6.3,
+        "min_visibility_km": 5.86,
         "is_temp_below_minus_10": false
       }
     },
@@ -1520,17 +1520,17 @@
           "name": "부산항 출항",
           "lat": 35.1,
           "lon": 129.04,
-          "wave_height_m": 0.72,
-          "temperature_c": 15.3,
-          "visibility_km": 17.12,
+          "wave_height_m": 0.34,
+          "temperature_c": 12.1,
+          "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
         {
           "name": "제주도 서방 통과",
           "lat": 33.5,
           "lon": 127.0,
-          "wave_height_m": 1.04,
-          "temperature_c": 15.2,
+          "wave_height_m": 0.98,
+          "temperature_c": 11.5,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1538,9 +1538,9 @@
           "name": "동중국해",
           "lat": 29.0,
           "lon": 124.0,
-          "wave_height_m": 0.96,
-          "temperature_c": 17.5,
-          "visibility_km": 6.02,
+          "wave_height_m": 1.8,
+          "temperature_c": 15.4,
+          "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
         {
@@ -1548,14 +1548,14 @@
           "lat": 24.0,
           "lon": 121.5,
           "wave_height_m": null,
-          "temperature_c": 12.1,
-          "visibility_km": 24.14
+          "temperature_c": 12.5,
+          "visibility_km": 22.4
         },
         {
           "name": "루손 해협 서측 외해",
           "lat": 20.0,
           "lon": 118.0,
-          "wave_height_m": 1.44,
+          "wave_height_m": 1.16,
           "temperature_c": 26.9,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
@@ -1564,8 +1564,8 @@
           "name": "남중국해 북부",
           "lat": 16.0,
           "lon": 114.0,
-          "wave_height_m": 1.4,
-          "temperature_c": 27.9,
+          "wave_height_m": 1.34,
+          "temperature_c": 27.5,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1573,8 +1573,8 @@
           "name": "남중국해 중부",
           "lat": 10.5,
           "lon": 110.0,
-          "wave_height_m": 0.42,
-          "temperature_c": 28.1,
+          "wave_height_m": 0.52,
+          "temperature_c": 27.9,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1582,8 +1582,8 @@
           "name": "남중국해 남부",
           "lat": 6.0,
           "lon": 107.5,
-          "wave_height_m": 0.32,
-          "temperature_c": 28.4,
+          "wave_height_m": 0.28,
+          "temperature_c": 28.2,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1591,8 +1591,8 @@
           "name": "말라카 해협 북단",
           "lat": 3.5,
           "lon": 105.5,
-          "wave_height_m": 0.4,
-          "temperature_c": 27.6,
+          "wave_height_m": 0.26,
+          "temperature_c": 28.3,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1601,25 +1601,25 @@
           "lat": 1.8,
           "lon": 104.2,
           "wave_height_m": 0.14,
-          "temperature_c": 32.2,
-          "visibility_km": 20.56,
+          "temperature_c": 29.3,
+          "visibility_km": 19.4,
           "wave_source": "open-meteo"
         },
         {
           "name": "싱가포르 (말라카 해협 출구)",
           "lat": 1.3,
           "lon": 103.8,
-          "wave_height_m": 0.16,
-          "temperature_c": 29.8,
-          "visibility_km": 24.14,
+          "wave_height_m": 0.22,
+          "temperature_c": 28.3,
+          "visibility_km": 22.06,
           "wave_source": "open-meteo"
         },
         {
           "name": "자바해 서측",
           "lat": -4.0,
           "lon": 107.0,
-          "wave_height_m": 0.24,
-          "temperature_c": 28.0,
+          "wave_height_m": 0.16,
+          "temperature_c": 28.3,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1627,17 +1627,17 @@
           "name": "순다 해협 통과 (자바-수마트라)",
           "lat": -6.2,
           "lon": 105.8,
-          "wave_height_m": 0.36,
-          "temperature_c": 29.4,
-          "visibility_km": 24.14,
+          "wave_height_m": 0.38,
+          "temperature_c": 28.5,
+          "visibility_km": 13.6,
           "wave_source": "open-meteo"
         },
         {
           "name": "인도양 북동부 진입",
           "lat": -8.0,
           "lon": 103.0,
-          "wave_height_m": 1.46,
-          "temperature_c": 27.3,
+          "wave_height_m": 1.34,
+          "temperature_c": 27.5,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1645,17 +1645,17 @@
           "name": "인도양 북부 남하",
           "lat": -12.0,
           "lon": 97.0,
-          "wave_height_m": 1.64,
-          "temperature_c": 27.1,
-          "visibility_km": 9.72,
+          "wave_height_m": 1.46,
+          "temperature_c": 27.2,
+          "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
         {
           "name": "인도양 중앙 서남향",
           "lat": -18.0,
           "lon": 90.0,
-          "wave_height_m": 2.36,
-          "temperature_c": 25.8,
+          "wave_height_m": 2.08,
+          "temperature_c": 25.3,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1663,8 +1663,8 @@
           "name": "인도양 중남부",
           "lat": -25.0,
           "lon": 80.0,
-          "wave_height_m": 1.78,
-          "temperature_c": 25.0,
+          "wave_height_m": 1.88,
+          "temperature_c": 24.5,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1672,8 +1672,8 @@
           "name": "인도양 남부",
           "lat": -29.0,
           "lon": 70.0,
-          "wave_height_m": 2.18,
-          "temperature_c": 25.1,
+          "wave_height_m": 1.56,
+          "temperature_c": 24.7,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1681,8 +1681,8 @@
           "name": "인도양 남서부 (마다가스카르 동방)",
           "lat": -33.0,
           "lon": 58.0,
-          "wave_height_m": 2.12,
-          "temperature_c": 21.2,
+          "wave_height_m": 1.78,
+          "temperature_c": 20.6,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1690,17 +1690,17 @@
           "name": "아굴하스 곶 동방 외해",
           "lat": -35.5,
           "lon": 40.0,
-          "wave_height_m": 3.06,
-          "temperature_c": 21.4,
-          "visibility_km": 3.42,
+          "wave_height_m": 6.08,
+          "temperature_c": 18.3,
+          "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
         {
           "name": "희망봉 동방 접근",
           "lat": -36.0,
           "lon": 30.0,
-          "wave_height_m": 5.78,
-          "temperature_c": 19.0,
+          "wave_height_m": 4.94,
+          "temperature_c": 18.7,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1708,8 +1708,8 @@
           "name": "아굴하스 뱅크 통과",
           "lat": -35.5,
           "lon": 22.0,
-          "wave_height_m": 5.14,
-          "temperature_c": 18.1,
+          "wave_height_m": 4.04,
+          "temperature_c": 19.4,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1717,8 +1717,8 @@
           "name": "희망봉 (Cape of Good Hope)",
           "lat": -34.4,
           "lon": 18.5,
-          "wave_height_m": 4.88,
-          "temperature_c": 18.1,
+          "wave_height_m": 3.52,
+          "temperature_c": 18.4,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1726,8 +1726,8 @@
           "name": "케이프타운 북서방 통과",
           "lat": -33.0,
           "lon": 16.0,
-          "wave_height_m": 4.4,
-          "temperature_c": 19.1,
+          "wave_height_m": 3.48,
+          "temperature_c": 19.6,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1735,8 +1735,8 @@
           "name": "대서양 동부 남부 북상",
           "lat": -28.0,
           "lon": 12.0,
-          "wave_height_m": 3.9,
-          "temperature_c": 20.5,
+          "wave_height_m": 3.82,
+          "temperature_c": 20.4,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1744,8 +1744,8 @@
           "name": "나미비아 외해",
           "lat": -20.0,
           "lon": 8.0,
-          "wave_height_m": 2.32,
-          "temperature_c": 22.4,
+          "wave_height_m": 3.32,
+          "temperature_c": 21.9,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1753,8 +1753,8 @@
           "name": "앙골라 외해",
           "lat": -12.0,
           "lon": 5.0,
-          "wave_height_m": 1.6,
-          "temperature_c": 26.0,
+          "wave_height_m": 1.7,
+          "temperature_c": 26.1,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1762,8 +1762,8 @@
           "name": "콩고 외해",
           "lat": -4.0,
           "lon": 2.0,
-          "wave_height_m": 1.46,
-          "temperature_c": 28.6,
+          "wave_height_m": 1.34,
+          "temperature_c": 28.8,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1771,8 +1771,8 @@
           "name": "기니만 동부",
           "lat": 3.0,
           "lon": 0.0,
-          "wave_height_m": 1.18,
-          "temperature_c": 28.8,
+          "wave_height_m": 1.22,
+          "temperature_c": 28.1,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1781,7 +1781,7 @@
           "lat": 8.0,
           "lon": -2.5,
           "wave_height_m": null,
-          "temperature_c": 28.9,
+          "temperature_c": 24.0,
           "visibility_km": 24.14
         },
         {
@@ -1789,15 +1789,15 @@
           "lat": 14.0,
           "lon": -8.0,
           "wave_height_m": null,
-          "temperature_c": 30.2,
+          "temperature_c": 23.0,
           "visibility_km": 24.14
         },
         {
           "name": "서아프리카 서안",
           "lat": 21.0,
           "lon": -17.0,
-          "wave_height_m": 0.62,
-          "temperature_c": 21.1,
+          "wave_height_m": 0.78,
+          "temperature_c": 19.6,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1806,7 +1806,7 @@
           "lat": 28.0,
           "lon": -18.0,
           "wave_height_m": 1.7,
-          "temperature_c": 18.3,
+          "temperature_c": 18.2,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1814,35 +1814,35 @@
           "name": "모로코 서방 외해",
           "lat": 35.0,
           "lon": -15.5,
-          "wave_height_m": 2.36,
-          "temperature_c": 16.1,
-          "visibility_km": 26.76,
+          "wave_height_m": 3.06,
+          "temperature_c": 13.7,
+          "visibility_km": 37.8,
           "wave_source": "open-meteo"
         },
         {
           "name": "포르투갈 남서 외해",
           "lat": 38.5,
           "lon": -10.5,
-          "wave_height_m": 2.6,
-          "temperature_c": 16.9,
-          "visibility_km": 28.48,
+          "wave_height_m": 2.42,
+          "temperature_c": 16.0,
+          "visibility_km": 15.68,
           "wave_source": "open-meteo"
         },
         {
           "name": "이베리아 반도 서안 북진",
           "lat": 43.5,
           "lon": -9.5,
-          "wave_height_m": 2.24,
-          "temperature_c": 15.8,
-          "visibility_km": 32.84,
+          "wave_height_m": 3.78,
+          "temperature_c": 14.9,
+          "visibility_km": 18.62,
           "wave_source": "open-meteo"
         },
         {
           "name": "비스케이만 북동부",
           "lat": 47.0,
           "lon": -7.0,
-          "wave_height_m": 2.34,
-          "temperature_c": 12.8,
+          "wave_height_m": 3.48,
+          "temperature_c": 13.8,
           "visibility_km": 50.0,
           "wave_source": "open-meteo"
         },
@@ -1850,8 +1850,8 @@
           "name": "우에상 섬 (브르타뉴 외해)",
           "lat": 48.5,
           "lon": -5.5,
-          "wave_height_m": 2.22,
-          "temperature_c": 11.3,
+          "wave_height_m": 3.26,
+          "temperature_c": 14.4,
           "visibility_km": 24.14,
           "wave_source": "open-meteo"
         },
@@ -1859,9 +1859,9 @@
           "name": "영국 해협 서측",
           "lat": 50.0,
           "lon": -3.0,
-          "wave_height_m": 1.26,
-          "temperature_c": 10.1,
-          "visibility_km": 50.16,
+          "wave_height_m": 1.46,
+          "temperature_c": 12.0,
+          "visibility_km": 38.7,
           "wave_source": "open-meteo"
         },
         {
@@ -1869,8 +1869,8 @@
           "lat": 51.1,
           "lon": 1.5,
           "wave_height_m": 0.4,
-          "temperature_c": 8.6,
-          "visibility_km": 25.5,
+          "temperature_c": 9.1,
+          "visibility_km": 33.14,
           "wave_source": "open-meteo"
         },
         {
@@ -1878,22 +1878,22 @@
           "lat": 51.9,
           "lon": 4.5,
           "wave_height_m": null,
-          "temperature_c": 11.9,
+          "temperature_c": 6.3,
           "visibility_km": 50.0
         }
       ],
       "route_summary": {
-        "max_wave_height_m": 5.78,
-        "min_temperature_c": 8.6,
-        "min_visibility_km": 3.42,
+        "max_wave_height_m": 6.08,
+        "min_temperature_c": 6.3,
+        "min_visibility_km": 13.6,
         "is_temp_below_minus_10": false
       }
     }
   },
   "route_summary": {
-    "max_wave_height_m": 9.62,
-    "min_temperature_c": -25.6,
-    "min_visibility_km": 0.04,
+    "max_wave_height_m": 6.08,
+    "min_temperature_c": -25.1,
+    "min_visibility_km": 0.14,
     "is_temp_below_minus_10": true
   },
   "copernicus_wave_fallback": true

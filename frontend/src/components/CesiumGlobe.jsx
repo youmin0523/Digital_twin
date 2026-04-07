@@ -16,7 +16,7 @@ Cesium.Ion.defaultAccessToken =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MTJlMTZiNS02MzQ1LTRmZGMtOWM0Ni1kZWJkMzQxZTJhMTEiLCJpZCI6NDA2NTU5LCJpYXQiOjE3NzM5OTY1Mjl9.lpSbE0Dchaf-IEx0J8MkS6FoisyRwd4nfSZ0GyFciLI';
 
 const ROUTE_COLORS = {
-  NSR: '#60a5fa', NWP: '#a78bfa', TSR: '#34d399', SUEZ: '#fbbf24', CAPE: '#f87171',
+  NSR: '#00f2fe', NWP: '#f43f5e', TSR: '#a855f7', SUEZ: '#facc15', CAPE: '#fb923c', ETC: '#9ca3af',
 };
 
 // ── Canvas 기반 선박 아이콘 생성 ──────────────────────────────
@@ -188,7 +188,7 @@ function createShipIcon(type = 'icebreaker') {
 // ═══════════════════════════════════════════════════════════════
 
 const CesiumGlobe = forwardRef(function CesiumGlobe(
-  { currentRouteKey = 'NSR', onViewerReady, activeWaypoints },
+  { currentRouteKey = 'NSR', onViewerReady, activeWaypoints, routeVisibility, generatedRoutes },
   ref,
 ) {
   const containerRef = useRef(null);
@@ -198,40 +198,64 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
   const shipEntityRef = useRef(null);
   const lastShipType = useRef(null);
 
-  const drawRoute = useCallback((viewer, routeKey, overrideWaypoints) => {
+  const drawRoute = useCallback((viewer, currentRouteKey, overrideWaypoints, visibilityStates, generatedRoutesObj) => {
     if (!viewer || viewer.isDestroyed()) return;
-    const waypoints = overrideWaypoints || ROUTES[routeKey];
-    if (!waypoints || waypoints.length === 0) return;
 
-    if (routeLineRef.current) viewer.entities.remove(routeLineRef.current);
-    waypointEntitiesRef.current.forEach((e) => viewer.entities.remove(e));
-    waypointEntitiesRef.current = [];
+    if (!viewer._routeEntities) viewer._routeEntities = {};
 
-    const cssColor = ROUTE_COLORS[routeKey] || '#60a5fa';
-    routeLineRef.current = viewer.entities.add({
-      polyline: {
-        positions: Cesium.Cartesian3.fromDegreesArray(waypoints.flatMap((w) => [w.lon, w.lat])),
-        width: 4.0,
-        arcType: Cesium.ArcType.GEODESIC,
-        material: new Cesium.PolylineGlowMaterialProperty({
-          glowPower: 0.4,
-          color: Cesium.Color.fromCssColorString(cssColor).withAlpha(0.8),
-        }),
-      },
+    Object.keys(viewer._routeEntities).forEach(key => {
+      viewer._routeEntities[key].forEach(e => viewer.entities.remove(e));
+    });
+    viewer._routeEntities = {};
+
+    const renderRoute = (key, pathWps, isMain) => {
+      if (!pathWps || pathWps.length === 0) return;
+      
+      const isVisible = (visibilityStates && visibilityStates[key] !== undefined) ? visibilityStates[key] : isMain;
+      const cssColor = ROUTE_COLORS[key] || '#60a5fa';
+      const entities = [];
+
+      const line = viewer.entities.add({
+        show: isVisible,
+        polyline: {
+          positions: Cesium.Cartesian3.fromDegreesArray(pathWps.flatMap(w => [w.lon, w.lat])),
+          width: isMain ? 4.0 : 2.5,
+          arcType: Cesium.ArcType.GEODESIC,
+          material: isMain 
+            ? new Cesium.PolylineGlowMaterialProperty({
+                glowPower: 0.4,
+                color: Cesium.Color.fromCssColorString(cssColor).withAlpha(0.9),
+              })
+            : new Cesium.ColorMaterialProperty(Cesium.Color.fromCssColorString(cssColor).withAlpha(0.7)),
+        }
+      });
+      entities.push(line);
+
+      for (const wp of pathWps) {
+        const pt = viewer.entities.add({
+          show: isVisible,
+          position: Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, 5000),
+          point: { pixelSize: isMain ? 8 : 5, color: Cesium.Color.YELLOW, outlineColor: Cesium.Color.BLACK, outlineWidth: isMain ? 2 : 1 },
+          label: isMain ? {
+            text: wp.label, font: 'bold 13px sans-serif',
+            fillColor: Cesium.Color.WHITE, outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 3, style: Cesium.LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cesium.Cartesian2(0, -22),
+            scaleByDistance: new Cesium.NearFarScalar(1e5, 1, 8e6, 0.45),
+          } : undefined,
+        });
+        entities.push(pt);
+      }
+      viewer._routeEntities[key] = entities;
+    };
+
+    Object.keys(ROUTES).forEach(key => {
+      if (key !== currentRouteKey) {
+        const path = (generatedRoutesObj && generatedRoutesObj[key]) ? generatedRoutesObj[key] : ROUTES[key];
+        renderRoute(key, path, false);
+      }
     });
 
-    for (const wp of waypoints) {
-      const ent = viewer.entities.add({
-        position: Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, 5000),
-        point: { pixelSize: 8, color: Cesium.Color.YELLOW, outlineColor: Cesium.Color.BLACK, outlineWidth: 2 },
-        label: {
-          text: wp.label, font: 'bold 13px sans-serif', fillColor: Cesium.Color.WHITE, outlineColor: Cesium.Color.BLACK,
-          outlineWidth: 3, style: Cesium.LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cesium.Cartesian2(0, -22),
-          scaleByDistance: new Cesium.NearFarScalar(1e5, 1, 8e6, 0.45),
-        },
-      });
-      waypointEntitiesRef.current.push(ent);
-    }
+    renderRoute(currentRouteKey, overrideWaypoints || ROUTES[currentRouteKey] || ROUTES.NSR, true);
   }, []);
 
   const updateShipEntity = useCallback((pos, heading, shipSpecs = {}) => {
@@ -436,8 +460,10 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
   }, []);
 
   useEffect(() => {
-    if (viewerRef.current && !viewerRef.current.isDestroyed()) drawRoute(viewerRef.current, currentRouteKey, activeWaypoints);
-  }, [currentRouteKey, activeWaypoints, drawRoute]);
+    if (viewerRef.current && !viewerRef.current.isDestroyed()) {
+      drawRoute(viewerRef.current, currentRouteKey, activeWaypoints, routeVisibility, generatedRoutes);
+    }
+  }, [currentRouteKey, activeWaypoints, routeVisibility, generatedRoutes, drawRoute]);
 
   return <div id="cesium-wrap" ref={containerRef} />;
 });
