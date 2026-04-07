@@ -283,8 +283,12 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
         position,
         billboard: {
           image: iconUrl,
-          width: 40,
-          height: 80,
+// //! [Original Code] 
+//           width: 40,
+//           height: 80,
+// //* [Modified Code] 시인성 확보를 위해 크기 약 35% 증대 (40x80 -> 54x108)
+          width: 54,
+          height: 108,
           alignedAxis: Cesium.Cartesian3.UNIT_Z,
           rotation: rot,
           verticalOrigin: Cesium.VerticalOrigin.CENTER,
@@ -300,7 +304,10 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
           outlineWidth: 3,
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
           verticalOrigin: Cesium.VerticalOrigin.TOP,
-          pixelOffset: new Cesium.Cartesian2(0, 45),
+// //! [Original Code] 
+//           pixelOffset: new Cesium.Cartesian2(0, 45),
+// //* [Modified Code] 아이콘 크기 커짐에 따라 라벨이 겹치지 않도록 오프셋 하향 조정
+          pixelOffset: new Cesium.Cartesian2(0, 60),
           scaleByDistance: new Cesium.NearFarScalar(5000, 1.0, 300000, 0.4),
           distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 500000),
         },

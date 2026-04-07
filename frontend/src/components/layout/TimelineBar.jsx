@@ -17,6 +17,17 @@ const ROUTE_DAYS = {
   CAPE: 30,
 };
 
+// //! [Original Code] 
+// export default function TimelineBar({
+//   simProgress,
+//   timelineDay,
+//   onTimelineChange,
+//   currentRouteKey,
+//   departureName,
+//   arrivalName,
+// }) {
+//   const totalDays = ROUTE_DAYS[currentRouteKey] || 14;
+// //* [Modified Code] 상위 컴포넌트에서 전달받은 동적 실제 totalDays 적용
 export default function TimelineBar({
   simProgress,
   timelineDay,
@@ -24,9 +35,10 @@ export default function TimelineBar({
   currentRouteKey,
   departureName,
   arrivalName,
+  totalDays: propTotalDays,
 }) {
-  const totalDays = ROUTE_DAYS[currentRouteKey] || 14;
-  const routeLabel = ROUTE_LABELS[currentRouteKey] || '북극항로';
+  const totalDays = propTotalDays || ROUTE_DAYS[currentRouteKey] || 14;
+  const routeLabel = ROUTE_LABELS[currentRouteKey] || '기타항로';
   const pct = Math.min(100, (simProgress || 0) * 100);
   const depName = departureName || '부산';
   const arrName = arrivalName || '로테르담';
