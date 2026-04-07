@@ -37,7 +37,7 @@ import {
   getSeaState,
 } from './services/shipSimulator';
 import { evaluateRouting, deriveIceConditions } from './services/polarisRIO';
-import { generateRoute } from './services/routeGenerator';
+import { generateRoute, isSameRegion } from './services/routeGenerator';
 import { checkRouteAhead, rerouteAroundIceberg } from './services/icebergAvoidance';
 
 function AppInner() {
@@ -136,7 +136,11 @@ function AppInner() {
     let throttleText = '정지';
     if (state.isSimulating && !state.manualMode) {
       const distKm = calculateRouteDistanceKM(activeWaypoints);
-      const totalSec = getTotalSeconds(state.currentRouteKey);
+// //! [Original Code] 하드코딩된 총 초 수
+//      const totalSec = getTotalSeconds(state.currentRouteKey);
+// //* [Modified Code] 실측 거리 기반 동적 초 산출 (15노트 기준)
+      const dynamicDays = Math.max(1, Math.round(distKm / (15 * 1.852 * 24)));
+      const totalSec = dynamicDays * 86400;
       const speedKmH = (distKm / totalSec) * state.multiplier * 3600;
       const kn = (speedKmH / 1.852).toFixed(1);
       speedText = kn + ' kn';
@@ -223,8 +227,20 @@ function AppInner() {
   useEffect(() => {
     currentRouteKeyRef.current = state.currentRouteKey;
   }, [state.currentRouteKey]);
+// //! [Original Code] 
+//   useEffect(() => {
+//     shipSpecsRef.current = state.shipSpecs;
+//   }, [state.shipSpecs]);
+
+// //* [Modified Code] 선박 제원(선종) 변경 시 Cesium 선박 아이콘 즉시 업데이트 (시뮬레이션 정지 시 대응)
   useEffect(() => {
     shipSpecsRef.current = state.shipSpecs;
+    if (!isSimulatingRef.current || manualModeRef.current) {
+      if (cesiumRef.current && cesiumRef.current.updateShipEntity) {
+        const { lat, lon, heading } = state.shipState;
+        cesiumRef.current.updateShipEntity({ lat, lon }, heading, state.shipSpecs);
+      }
+    }
   }, [state.shipSpecs]);
 
   // ── 타임드 웨이포인트 (항로/항구 변경 시 재계산) ─────────────────
@@ -336,10 +352,15 @@ function AppInner() {
         const mult = multiplierRef.current;
         simElapsedRef.current += dt * mult;
         const routeKey = currentRouteKeyRef.current;
-        const routeTotalSec = getTotalSeconds(routeKey);
+// //! [Original Code] 
+//        const routeTotalSec = getTotalSeconds(routeKey);
+// //* [Modified Code] 동적 시간 계산
+        const wps = activeWpRef.current;
+        const distKm = calculateRouteDistanceKM(wps);
+        const dynamicDays = Math.max(1, Math.round(distKm / (15 * 1.852 * 24)));
+        const routeTotalSec = dynamicDays * 86400;
         const progress = Math.min(simElapsedRef.current / routeTotalSec, 1);
 
-        const wps = activeWpRef.current;
         const TWP = timedWpRef.current;
 
         const pos = routePos(progress, TWP, wps);
@@ -355,8 +376,12 @@ function AppInner() {
         });
 
         // 타임라인 일수 동기화
-        const routeDays = ROUTE_DAYS[routeKey] || 14;
-        const dayValue = Math.min(routeDays, Math.floor(progress * routeDays));
+// //! [Original Code] 
+//        const routeDays = ROUTE_DAYS[routeKey] || 14;
+//        const dayValue = Math.min(routeDays, Math.floor(progress * routeDays));
+// //* [Modified Code] 동적으로 계산된 남은 일수로 업데이트 (소수점 유지)
+        const routeDays = dynamicDays;
+        const dayValue = Math.min(routeDays, progress * routeDays);
         dispatch({ type: 'SET_TIMELINE', payload: dayValue });
 
         // HUD 업데이트 (10프레임마다, 성능 최적화)
@@ -454,14 +479,21 @@ function AppInner() {
           try {
             const camPos = viewer.camera.positionCartographic;
             const currentAlt = camPos ? camPos.height : (curMode === 'WIDE' ? 3000000 : 120000);
-            viewer.camera.setView({
-              destination: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, currentAlt),
-              orientation: {
-                heading: viewer.camera.heading,
-                pitch: viewer.camera.pitch,
-                roll: 0,
-              },
-            });
+// //! [Original Code] 
+//            viewer.camera.setView({
+//              destination: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, currentAlt),
+//              orientation: {
+//                heading: viewer.camera.heading,
+//                pitch: viewer.camera.pitch,
+//                roll: 0,
+//              },
+//            });
+// //* [Modified Code] 카메라가 바라보는 타겟(중심)을 선박으로 유지 (화면 하단 쏠림 방지)
+            const target = Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat);
+            const pitch = viewer.camera.pitch;
+            const range = currentAlt / Math.sin(Math.abs(pitch));
+            viewer.camera.lookAt(target, new Cesium.HeadingPitchRange(viewer.camera.heading, pitch, range));
+            viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
           } catch (e) {
             /* ignore */
           }
@@ -657,6 +689,7 @@ function AppInner() {
     TSR: false,
     SUEZ: false,
     CAPE: false,
+    ETC: false,
   });
   const handleRouteVisibilityChange = useCallback((key, visible) => {
     setRouteVisibility((prev) => ({ ...prev, [key]: visible }));
@@ -666,6 +699,47 @@ function AppInner() {
       viewer._routeEntities[key].show = visible;
     }
   }, []);
+
+  const [routeDistances, setRouteDistances] = useState({});
+  const [generatedRoutes, setGeneratedRoutes] = useState({});
+
+  useEffect(() => {
+    const depPort = PORTS[state.departurePort];
+    const arrPort = PORTS[state.arrivalPort];
+    if (!depPort || !arrPort) return;
+    
+    let cancelled = false;
+    (async () => {
+      try {
+        const routeKeys = ['NSR', 'NWP', 'TSR', 'SUEZ', 'CAPE', 'ETC'];
+        const results = await Promise.all(
+          routeKeys.map(async key => {
+            if (isSameRegion(depPort.id, arrPort.id) && key !== 'ETC') {
+              return { key, dist: '-' };
+            }
+            if (!isSameRegion(depPort.id, arrPort.id) && key === 'ETC') {
+              return { key, dist: '-' };
+            }
+            const wps = await generateRoute(depPort, arrPort, key, null, []); // 해빙 데이터 없이 빠른 생성
+            return { key, dist: calculateRouteDistanceKM(wps) };
+          })
+        );
+        if (!cancelled) {
+          const distances = {};
+          const paths = {};
+          results.forEach(r => {
+            distances[r.key] = r.dist;
+            paths[r.key] = r.wps;
+          });
+          setRouteDistances(distances);
+          setGeneratedRoutes(paths);
+        }
+      } catch (e) {
+        console.warn('[App] 거리 동적 계산 실패:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [state.departurePort, state.arrivalPort]);
 
   // 라우팅 평가 결과
   const [evaluationResult, setEvaluationResult] = useState(null);
@@ -756,7 +830,12 @@ function AppInner() {
   const handleStart = useCallback(() => {
     if (!state.isSimulating) {
       // 시작 시 simElapsed를 현재 progress 기반으로 복원
-      simElapsedRef.current = state.simProgress * getTotalSeconds(state.currentRouteKey);
+// //! [Original Code] 
+//      simElapsedRef.current = state.simProgress * getTotalSeconds(state.currentRouteKey);
+// //* [Modified Code] 
+      const distKm = calculateRouteDistanceKM(activeWaypoints);
+      const dynamicDays = Math.max(1, Math.round(distKm / (15 * 1.852 * 24)));
+      simElapsedRef.current = state.simProgress * (dynamicDays * 86400);
       dispatch({ type: 'SET_ELAPSED', payload: simElapsedRef.current });
     }
     dispatch({ type: 'SET_SIMULATING', payload: !state.isSimulating });
@@ -785,13 +864,21 @@ function AppInner() {
         if (viewer && !viewer.isDestroyed()) {
           const alt = mode === 'WIDE' ? 3000000 : 120000;
           const pitch = mode === 'WIDE' ? -60 : -80;
-          viewer.camera.flyTo({
-            destination: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
-            orientation: {
-              heading: 0,
-              pitch: Cesium.Math.toRadians(pitch),
-              roll: 0,
-            },
+// //! [Original Code]
+//          viewer.camera.flyTo({
+//            destination: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
+//            orientation: {
+//              heading: 0,
+//              pitch: Cesium.Math.toRadians(pitch),
+//              roll: 0,
+//            },
+//            duration: 1.0,
+//          });
+// //* [Modified Code] flyToBoundingSphere를 사용하여 정중앙 정렬
+          const pitchRad = Cesium.Math.toRadians(pitch);
+          const range = alt / Math.sin(Math.abs(pitchRad));
+          viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(lon, lat), 0), {
+            offset: new Cesium.HeadingPitchRange(0, pitchRad, range),
             duration: 1.0,
           });
         }
@@ -814,30 +901,88 @@ function AppInner() {
 
   const handleTimelineChange = useCallback(
     (value) => {
+      // 슬라이더 스크러빙 시 기존 렌더링 락(카메라 조작) 강제 해제
+      userCameraInteracting.current = false;
       const day = Number(value);
       dispatch({ type: 'SET_TIMELINE', payload: day });
       // 타임라인 슬라이더를 드래그하면 시뮬레이션 위치도 이동
-      const totalDays = ROUTE_DAYS[state.currentRouteKey] || 14;
+// //! [Original Code] 
+//      const totalDays = ROUTE_DAYS[state.currentRouteKey] || 14;
+//      const newProgress = Math.min(1, day / totalDays);
+//      const newElapsed = newProgress * getTotalSeconds(state.currentRouteKey);
+// //* [Modified Code] 실제 거리에 기반하여 progress 재계산
+      const distKm = calculateRouteDistanceKM(activeWaypoints);
+      const totalDays = Math.max(1, Math.round(distKm / (15 * 1.852 * 24)));
       const newProgress = Math.min(1, day / totalDays);
-      const newElapsed = newProgress * getTotalSeconds(state.currentRouteKey);
+      const newElapsed = newProgress * (totalDays * 86400);
       simElapsedRef.current = newElapsed;
       dispatch({ type: 'SET_PROGRESS', payload: newProgress });
       dispatch({ type: 'SET_ELAPSED', payload: newElapsed });
-      // 선박 위치 즉시 업데이트
+// //! [Original Code]
+//       // 선박 위치 즉시 업데이트
+//       const wps = activeWaypoints;
+//       const TWP = timedWaypoints;
+//       const pos = routePos(newProgress, TWP, wps);
+//       const hdg = routeHeading(newProgress, TWP, wps);
+//       dispatch({
+//         type: 'SET_SHIP_STATE',
+//         payload: {
+//           lat: pos.lat,
+//           lon: pos.lon,
+//           heading: ((hdg * 180) / Math.PI + 360) % 360,
+//         },
+//       });
+//     },
+//     [dispatch, state.currentRouteKey, timedWaypoints],
+// //* [Modified Code] 선박 위치 업데이트 및 정지 시 카메라/객체 강제 뷰 리렌더링
       const wps = activeWaypoints;
       const TWP = timedWaypoints;
       const pos = routePos(newProgress, TWP, wps);
       const hdg = routeHeading(newProgress, TWP, wps);
+      const hdgDeg = ((hdg * 180) / Math.PI + 360) % 360;
+      
       dispatch({
         type: 'SET_SHIP_STATE',
-        payload: {
-          lat: pos.lat,
-          lon: pos.lon,
-          heading: ((hdg * 180) / Math.PI + 360) % 360,
-        },
+        payload: { lat: pos.lat, lon: pos.lon, heading: hdgDeg },
       });
+
+      // 일시 정지(또는 수동 모드) 중일 때 스크러빙하면 메인루프가 3D뷰를 갱신하지 않으므로 수동 트리거
+      if (!isSimulatingRef.current || manualModeRef.current) {
+        if (cesiumRef.current && cesiumRef.current.updateShipEntity) {
+          cesiumRef.current.updateShipEntity(pos, hdgDeg, shipSpecsRef.current);
+        }
+
+        const viewer = viewerRef.current;
+        const curMode = currentModeRef.current;
+        if (viewer && !viewer.isDestroyed() && !userCameraInteracting.current && (curMode === 'SATELLITE' || curMode === 'WIDE')) {
+          try {
+            const camPos = viewer.camera.positionCartographic;
+            const currentAlt = camPos ? camPos.height : (curMode === 'WIDE' ? 3000000 : 120000);
+// //! [Original Code]
+//            viewer.camera.setView({
+//              destination: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, currentAlt),
+//              orientation: { heading: viewer.camera.heading, pitch: viewer.camera.pitch, roll: 0 },
+//            });
+// //* [Modified Code] 중앙 정렬된 lookAt 사용
+            const target = Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat);
+            const pitch = viewer.camera.pitch;
+            const range = currentAlt / Math.sin(Math.abs(pitch));
+            viewer.camera.lookAt(target, new Cesium.HeadingPitchRange(viewer.camera.heading, pitch, range));
+            viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+          } catch(e) {}
+        }
+        
+        if ((curMode === 'BRIDGE' || curMode === 'FOLLOW') && threeRef.current && threeRef.current.shipPivot) {
+          const depPort = PORTS[state.departurePort] || PORTS.BUSAN;
+          const METERS_PER_DEGREE_LAT = 111132.954;
+          const mPerDegLon = 111319.491 * Math.cos((depPort.lat * Math.PI) / 180);
+          threeRef.current.shipPivot.position.x = ((pos.lon - depPort.lon) * mPerDegLon) / 1.5;
+          threeRef.current.shipPivot.position.z = (-(pos.lat - depPort.lat) * METERS_PER_DEGREE_LAT) / 1.5;
+          if (threeRef.current.updateShipMotion) threeRef.current.updateShipMotion(0, pos.lat);
+        }
+      }
     },
-    [dispatch, state.currentRouteKey, timedWaypoints],
+    [dispatch, state.currentRouteKey, timedWaypoints, activeWaypoints, state.departurePort],
   );
 
   // 항로/선박 제원
@@ -1462,15 +1607,24 @@ function AppInner() {
       const viewer = viewerRef.current;
       if (viewer && !viewer.isDestroyed()) {
         try {
-          viewer.camera.flyTo({
-            destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
-            orientation: {
-              heading: 0,
-              pitch: Cesium.Math.toRadians(-80),
-              roll: 0,
-            },
-            duration: 1.5,
-          });
+// //! [Original Code]
+//          viewer.camera.flyTo({
+//            destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
+//            orientation: {
+//              heading: 0,
+//              pitch: Cesium.Math.toRadians(-80),
+//              roll: 0,
+//            },
+//            duration: 1.5,
+//          });
+// //* [Modified Code] flyToBoundingSphere를 사용하여 정중앙 정렬
+          const pitch = Cesium.Math.toRadians(-80);
+          const alt = 120000;
+          const range = alt / Math.sin(Math.abs(pitch));
+          viewer.camera.flyToBoundingSphere(
+            new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(lon, lat), 0),
+            { offset: new Cesium.HeadingPitchRange(0, pitch, range), duration: 1.5 }
+          );
         } catch (e) {
           console.warn('flyTo error:', e);
         }
@@ -1493,13 +1647,22 @@ function AppInner() {
     const viewer = viewerRef.current;
     if (viewer) {
       const { lon, lat } = state.shipState;
-      viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
-        orientation: {
-          heading: 0,
-          pitch: Cesium.Math.toRadians(-80),
-          roll: 0,
-        },
+// //! [Original Code]
+//      viewer.camera.flyTo({
+//        destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000),
+//        orientation: {
+//          heading: 0,
+//          pitch: Cesium.Math.toRadians(-80),
+//          roll: 0,
+//        },
+//        duration: 1.0,
+//      });
+// //* [Modified Code] flyToBoundingSphere를 사용하여 정중앙 정렬
+      const target = Cesium.Cartesian3.fromDegrees(lon, lat);
+      const pitch = Cesium.Math.toRadians(-80);
+      const range = 120000 / Math.sin(Math.abs(pitch));
+      viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(target, 0), {
+        offset: new Cesium.HeadingPitchRange(0, pitch, range),
         duration: 1.0,
       });
     }
@@ -1533,6 +1696,7 @@ function AppInner() {
           arrivalPort={state.arrivalPort}
           onDepartureChange={(v) => dispatch({ type: 'SET_DEPARTURE_PORT', payload: v })}
           onArrivalChange={(v) => dispatch({ type: 'SET_ARRIVAL_PORT', payload: v })}
+          routeDistances={routeDistances}
         />
 
         <div className="dt-viewport">
@@ -1542,6 +1706,8 @@ function AppInner() {
             currentRouteKey={state.currentRouteKey}
             onViewerReady={handleViewerReady}
             activeWaypoints={activeWaypoints}
+            routeVisibility={routeVisibility}
+            generatedRoutes={generatedRoutes}
           />
           <ThreeOverlay
             ref={threeRef}
@@ -1590,6 +1756,8 @@ function AppInner() {
             currentRouteKey={state.currentRouteKey}
             departureName={(PORTS[state.departurePort] || PORTS.BUSAN).name}
             arrivalName={(PORTS[state.arrivalPort] || PORTS.ROTTERDAM).name}
+// //* [Modified Code] 동적 총 소요 일수를 렌더링에 반영 (totalDays prop 추가)
+            totalDays={Math.max(1, Math.round(calculateRouteDistanceKM(activeWaypoints) / (15 * 1.852 * 24)))}
           />
 
           {/* WMS Legends (bottom-left overlay, above timeline) */}

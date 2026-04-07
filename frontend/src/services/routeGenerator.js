@@ -8,7 +8,7 @@
  * - 북극 구간: A* 격자 최적화 (해빙 회피)
  */
 
-import { ROUTES, ROUTE_CORRIDOR } from '../data/arcticRoutes';
+import { ROUTES, ROUTE_CORRIDOR, PORT_APPROACH_WAYPOINTS, INTRA_REGION_ROUTES } from '../data/arcticRoutes';
 import { findArcticPath, initLandMask } from './arcticPathfinder';
 
 // ── 포트 분류 ──────────────────────────────────────────────────────────
@@ -30,9 +30,18 @@ function isReverseDirection(depId, arrId) {
   return EUROPEAN_PORTS.has(depId) && ASIAN_PORTS.has(arrId);
 }
 
-function isSameRegion(depId, arrId) {
+export function isSameRegion(depId, arrId) {
   return (ASIAN_PORTS.has(depId) && ASIAN_PORTS.has(arrId)) ||
          (EUROPEAN_PORTS.has(depId) && EUROPEAN_PORTS.has(arrId));
+}
+
+/** 아시아 출발항의 회랑 접근 웨이포인트 반환 */
+function getAsianApproach(portId, routeType) {
+  if (['NSR', 'NWP', 'TSR'].includes(routeType))
+    return PORT_APPROACH_WAYPOINTS.ARCTIC_DEP[portId] || [];
+  if (['SUEZ', 'CAPE'].includes(routeType))
+    return PORT_APPROACH_WAYPOINTS.SUEZ_DEP[portId] || [];
+  return [];
 }
 
 // ── 랜드마스크 초기화 ─────────────────────────────────────────────────
@@ -50,11 +59,17 @@ async function ensureLandMask() {
  * 항구 비특이적 구간(소야해협~북해 입구 등)만 유지하고
  * 양 끝은 Cesium GEODESIC 호로 자연스럽게 연결됨.
  */
-function spliceRouteForPorts(baseWaypoints, depPort, arrPort, startIdx, endIdx) {
+function spliceRouteForPorts(
+  baseWaypoints, depPort, arrPort, startIdx, endIdx,
+  depApproach = [], arrApproach = []
+) {
   const departure = { lon: depPort.lon, lat: depPort.lat, label: depPort.name };
   const arrival   = { lon: arrPort.lon, lat: arrPort.lat, label: arrPort.name };
+  // //! [Original Code] const corridor  = baseWaypoints.slice(startIdx, endIdx + 1);
+  // //! [Original Code] return [departure, ...corridor, arrival];
+  // //* [Modified Code] 지형 관통을 피하기 위한 approach 웨이포인트 병합
   const corridor  = baseWaypoints.slice(startIdx, endIdx + 1);
-  return [departure, ...corridor, arrival];
+  return [departure, ...depApproach, ...corridor, ...arrApproach, arrival];
 }
 
 /**
@@ -97,8 +112,27 @@ export async function generateRoute(
     return reversed;
   }
 
-  // 2.5. 동일 지역 항구 (아시아↔아시아, 유럽↔유럽) — 직항 geodesic 경로
-  if (isSameRegion(depPort.id, arrPort.id)) {
+  // 2.5. 동일 지역 항구 (아시아↔아시아, 유럽↔유럽) 또는 직항(ETC) 경로
+  // //! [Original Code] 직항 단순 연결 (육지 관통 버그 수정 전)
+  // //* [Modified Code] INTRA_REGION_ROUTES 참조 우회 및 ETC 직항 모드 지원
+  if (routeType === 'ETC' || isSameRegion(depPort.id, arrPort.id)) {
+    const routeKey = `${depPort.id}-${arrPort.id}`;
+    const reverseKey = `${arrPort.id}-${depPort.id}`;
+    
+    let localRoute = null;
+    if (INTRA_REGION_ROUTES[routeKey]) {
+      localRoute = [...INTRA_REGION_ROUTES[routeKey]];
+    } else if (INTRA_REGION_ROUTES[reverseKey]) {
+      localRoute = [...INTRA_REGION_ROUTES[reverseKey]].reverse();
+    }
+    
+    if (localRoute) {
+      // 시작과 끝점은 실제 시뮬레이션용 포트 좌표로 치환하여 매끄럽게 연결
+      localRoute[0] = { lon: depPort.lon, lat: depPort.lat, label: depPort.name };
+      localRoute[localRoute.length - 1] = { lon: arrPort.lon, lat: arrPort.lat, label: arrPort.name };
+      return localRoute;
+    }
+
     return [
       { lon: depPort.lon, lat: depPort.lat, label: depPort.name },
       { lon: arrPort.lon, lat: arrPort.lat, label: arrPort.name },
@@ -106,14 +140,44 @@ export async function generateRoute(
   }
 
   // 3. 기타 항구 조합 — 방향 감지 후 스마트 회랑 스플라이스
+  // //! [Original Code] 방향 감지 및 역방향 회랑만 계산
+  // //* [Modified Code] approach 웨이포인트 포함 안전 스플라이스 병합
   const useReverse = isReverseDirection(depPort.id, arrPort.id);
   const directedRoute = useReverse ? reverseRoute(baseRoute) : baseRoute;
 
-  // 역방향의 경우 회랑 인덱스도 역전
-  const startIdx = useReverse ? (n - 1 - corridor.endIdx)   : corridor.startIdx;
-  const endIdx   = useReverse ? (n - 1 - corridor.startIdx) : corridor.endIdx;
+  let startIdx = useReverse ? (n - 1 - corridor.endIdx)   : corridor.startIdx;
+  let endIdx   = useReverse ? (n - 1 - corridor.startIdx) : corridor.endIdx;
 
-  let waypoints = spliceRouteForPorts(directedRoute, depPort, arrPort, startIdx, endIdx);
+  let depApproach = [];
+  let arrApproach = [];
+
+  if (!useReverse) {
+    // 순방향 (아시아 → 유럽)
+    depApproach = getAsianApproach(depPort.id, routeType);
+
+    if (arrPort.id === 'MURMANSK') {
+      const mConf = PORT_APPROACH_WAYPOINTS.MURMANSK[routeType];
+      if (mConf) {
+        if (mConf.corridorIdx != null) endIdx = mConf.corridorIdx;
+        arrApproach = mConf.wps;
+      }
+    }
+  } else {
+    // 역방향 (유럽 → 아시아): 아시아 도착항 접근 = 순방향 depApproach의 역순
+    arrApproach = [...getAsianApproach(arrPort.id, routeType)].reverse();
+
+    if (depPort.id === 'MURMANSK') {
+      const mConf = PORT_APPROACH_WAYPOINTS.MURMANSK[routeType];
+      if (mConf) {
+        if (mConf.corridorIdx != null) startIdx = n - 1 - mConf.corridorIdx;
+        depApproach = [...mConf.wps].reverse();
+      }
+    }
+  }
+
+  let waypoints = spliceRouteForPorts(
+    directedRoute, depPort, arrPort, startIdx, endIdx, depApproach, arrApproach
+  );
 
   // 4. 북극 경로 A* 최적화
   if (['NSR', 'NWP', 'TSR'].includes(routeType) && iceData) {

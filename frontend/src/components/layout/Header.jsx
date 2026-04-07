@@ -2,18 +2,20 @@ import React, { useState, useEffect } from 'react';
 import './Header.css';
 
 export default function Header() {
-  const [utc, setUtc] = useState('');
+  const [kst, setKst] = useState('');
 
   useEffect(() => {
     const tick = () => {
       const now = new Date();
-      setUtc(
-        now.getUTCFullYear() + '-' +
-        String(now.getUTCMonth() + 1).padStart(2, '0') + '-' +
-        String(now.getUTCDate()).padStart(2, '0') + ' ' +
-        String(now.getUTCHours()).padStart(2, '0') + ':' +
-        String(now.getUTCMinutes()).padStart(2, '0') + ':' +
-        String(now.getUTCSeconds()).padStart(2, '0') + ' UTC'
+      const kstOffset = 9 * 60 * 60 * 1000;
+      const kstDate = new Date(now.getTime() + kstOffset);
+      setKst(
+        kstDate.getUTCFullYear() + '-' +
+        String(kstDate.getUTCMonth() + 1).padStart(2, '0') + '-' +
+        String(kstDate.getUTCDate()).padStart(2, '0') + ' ' +
+        String(kstDate.getUTCHours()).padStart(2, '0') + ':' +
+        String(kstDate.getUTCMinutes()).padStart(2, '0') + ':' +
+        String(kstDate.getUTCSeconds()).padStart(2, '0') + ' KST'
       );
     };
     tick();
@@ -40,7 +42,7 @@ export default function Header() {
           <span className="dt-header__dot dt-header__dot--ok" />
           <span className="dt-header__indicator-label">NASA GIBS</span>
         </div>
-        <span className="dt-header__clock">{utc}</span>
+        <span className="dt-header__clock">{kst}</span>
       </div>
     </header>
   );

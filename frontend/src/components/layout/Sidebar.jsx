@@ -3,11 +3,12 @@ import { PORTS, ALL_PORTS } from '../../data/ports';
 import './Sidebar.css';
 
 const ROUTE_META = [
-  { key: 'NSR', label: 'NSR', color: '#4ecdc4', dist: '7,200km' },
-  { key: 'NWP', label: 'NWP', color: '#f39c12', dist: '8,100km' },
-  { key: 'TSR', label: 'TSR', color: '#9b59b6', dist: '6,900km' },
-  { key: 'SUEZ', label: 'SUEZ', color: '#6a89b8', dist: '11,200km' },
-  { key: 'CAPE', label: 'CAPE', color: '#6a89b8', dist: '14,500km' },
+  { key: 'NSR', label: 'NSR', color: '#00f2fe', dist: '7,200km' },
+  { key: 'NWP', label: 'NWP', color: '#f43f5e', dist: '8,100km' },
+  { key: 'TSR', label: 'TSR', color: '#a855f7', dist: '6,900km' },
+  { key: 'SUEZ', label: 'SUEZ', color: '#facc15', dist: '11,200km' },
+  { key: 'CAPE', label: 'CAPE', color: '#fb923c', dist: '14,500km' },
+  { key: 'ETC', label: 'ETC', color: '#9ca3af', dist: '0km' },
 ];
 
 const VIEW_MODES = [
@@ -50,22 +51,37 @@ export default function Sidebar({
   arrivalPort,
   onDepartureChange,
   onArrivalChange,
+  routeDistances = {}, // 동적 거리 프롭스 추가
 }) {
-  const [archiveOptions, setArchiveOptions] = useState([
-    { value: 'live', label: 'LIVE (최신 데이터)' },
-  ]);
+  const [iceMode, setIceMode] = useState('live');
+  const [archiveEntries, setArchiveEntries] = useState([]);
+  const [selectedArchive, setSelectedArchive] = useState('');
 
   useEffect(() => {
     fetch('/api/ice/archives')
       .then(r => r.json())
-      .then(({ dates }) => {
-        setArchiveOptions([
-          { value: 'live', label: 'LIVE (최신 데이터)' },
-          ...dates.map(d => ({ value: d, label: d })),
-        ]);
+      .then((data) => {
+        // entries(신규) 또는 dates(구버전) 모두 호환
+        const list = data.entries || (data.dates || []).map(d => ({ value: d, label: d }));
+        setArchiveEntries(list);
+        if (list.length > 0) setSelectedArchive(list[0].value);
       })
       .catch(() => {});
   }, []);
+
+  const handleIceMode = (mode) => {
+    setIceMode(mode);
+    if (mode === 'live') {
+      onMonthChange('live');
+    } else if (selectedArchive) {
+      onMonthChange(selectedArchive);
+    }
+  };
+
+  const handleArchiveSelect = (e) => {
+    setSelectedArchive(e.target.value);
+    onMonthChange(e.target.value);
+  };
 
   const handleSelectAll = () => {
     const allVisible = ROUTE_META.every(r => routeVisibility[r.key]);
@@ -137,6 +153,7 @@ export default function Sidebar({
           <option value="TSR">북극횡단항로 (TSR)</option>
           <option value="SUEZ">수에즈 운하 (SUEZ)</option>
           <option value="CAPE">희망봉 우회 (CAPE)</option>
+          <option value="ETC">직항 (ETC)</option>
         </select>
       </section>
 
@@ -156,7 +173,9 @@ export default function Sidebar({
             />
             <span className="dt-sidebar__route-bar" style={{ background: r.color }} />
             <span className="dt-sidebar__route-label">{r.label}</span>
-            <span className="dt-sidebar__route-dist">{r.dist}</span>
+            <span className="dt-sidebar__route-dist">
+              {routeDistances[r.key] === '-' ? '-' : (routeDistances[r.key] ? Math.round(routeDistances[r.key]).toLocaleString() + 'km' : r.dist)}
+            </span>
           </label>
         ))}
       </section>
@@ -204,15 +223,41 @@ export default function Sidebar({
       {/* ── 빙하 아카이브 ── */}
       <section className="dt-sidebar__section">
         <label className="dt-sidebar__label">빙하 아카이브</label>
-        <select
-          className="dt-sidebar__select"
-          defaultValue="live"
-          onChange={e => onMonthChange(e.target.value)}
-        >
-          {archiveOptions.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
+
+        <div className="dt-sidebar__toggle-group">
+          <button
+            className={`dt-sidebar__toggle-btn${iceMode === 'live' ? ' dt-sidebar__toggle-btn--active' : ''}`}
+            onClick={() => handleIceMode('live')}
+          >
+            Live
+          </button>
+          <button
+            className={`dt-sidebar__toggle-btn${iceMode === 'archive' ? ' dt-sidebar__toggle-btn--active' : ''}`}
+            onClick={() => handleIceMode('archive')}
+          >
+            Archives
+          </button>
+        </div>
+
+        {iceMode === 'live' && (
+          <div className="dt-sidebar__live-badge">LIVE (최신 데이터)</div>
+        )}
+
+        {iceMode === 'archive' && (
+          <select
+            className="dt-sidebar__select"
+            value={selectedArchive}
+            onChange={handleArchiveSelect}
+          >
+            {archiveEntries.length === 0
+              ? <option disabled>아카이브 없음</option>
+              : archiveEntries.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))
+            }
+          </select>
+        )}
+
         <div className="dt-sidebar__datasource">
           <span className="dt-sidebar__label">데이터 소스</span>
           <span className="dt-sidebar__datasource-value">{iceDataSource || '실시간'}</span>
