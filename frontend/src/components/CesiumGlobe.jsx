@@ -16,7 +16,12 @@ Cesium.Ion.defaultAccessToken =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MTJlMTZiNS02MzQ1LTRmZGMtOWM0Ni1kZWJkMzQxZTJhMTEiLCJpZCI6NDA2NTU5LCJpYXQiOjE3NzM5OTY1Mjl9.lpSbE0Dchaf-IEx0J8MkS6FoisyRwd4nfSZ0GyFciLI';
 
 const ROUTE_COLORS = {
-  NSR: '#00f2fe', NWP: '#f43f5e', TSR: '#a855f7', SUEZ: '#facc15', CAPE: '#fb923c', ETC: '#9ca3af',
+  NSR: '#00f2fe',
+  NWP: '#f43f5e',
+  TSR: '#a855f7',
+  SUEZ: '#facc15',
+  CAPE: '#fb923c',
+  ETC: '#9ca3af',
 };
 
 // ── Canvas 기반 선박 아이콘 생성 ──────────────────────────────
@@ -25,7 +30,8 @@ const shipIconCache = {};
 function createShipIcon(type = 'icebreaker') {
   if (shipIconCache[type]) return shipIconCache[type];
 
-  const W = 128, H = 256;
+  const W = 128,
+    H = 256;
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
@@ -39,9 +45,9 @@ function createShipIcon(type = 'icebreaker') {
     const cx = W / 2;
     // 선체 (빨간색)
     ctx.beginPath();
-    ctx.moveTo(cx, 18);                // 선수 꼭짓점
-    ctx.lineTo(cx + 38, 60);           // 우현 어깨
-    ctx.lineTo(cx + 36, 200);          // 우현 선미
+    ctx.moveTo(cx, 18); // 선수 꼭짓점
+    ctx.lineTo(cx + 38, 60); // 우현 어깨
+    ctx.lineTo(cx + 36, 200); // 우현 선미
     ctx.quadraticCurveTo(cx + 34, 228, cx + 20, 232); // 선미 라운드
     ctx.lineTo(cx - 20, 232);
     ctx.quadraticCurveTo(cx - 34, 228, cx - 36, 200);
@@ -87,7 +93,6 @@ function createShipIcon(type = 'icebreaker') {
     ctx.stroke();
     ctx.fillStyle = 'rgba(241,196,15,0.15)';
     ctx.fill();
-
   } else if (type === 'lng') {
     // ── LNG 운반선: 길고 파란 선체, 구형 탱크 4개 ──
     const cx = W / 2;
@@ -108,7 +113,7 @@ function createShipIcon(type = 'icebreaker') {
 
     // LNG 구형 탱크 4개
     const tankY = [65, 105, 145, 185];
-    tankY.forEach(y => {
+    tankY.forEach((y) => {
       ctx.beginPath();
       ctx.arc(cx, y, 16, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(200, 220, 240, 0.7)';
@@ -132,7 +137,6 @@ function createShipIcon(type = 'icebreaker') {
     // 굴뚝
     ctx.fillStyle = '#2c3e50';
     ctx.fillRect(cx - 5, 234, 10, 8);
-
   } else {
     // ── 컨테이너선: 길고 어두운 선체, 컨테이너 격자 ──
     const cx = W / 2;
@@ -152,9 +156,20 @@ function createShipIcon(type = 'icebreaker') {
     ctx.stroke();
 
     // 컨테이너 격자 (색 다양하게)
-    const colors = ['#e74c3c', '#3498db', '#27ae60', '#f39c12', '#8e44ad', '#e67e22', '#1abc9c', '#c0392b'];
-    const rows = 8, cols = 3;
-    const cw = 16, ch = 16;
+    const colors = [
+      '#e74c3c',
+      '#3498db',
+      '#27ae60',
+      '#f39c12',
+      '#8e44ad',
+      '#e67e22',
+      '#1abc9c',
+      '#c0392b',
+    ];
+    const rows = 8,
+      cols = 3;
+    const cw = 16,
+      ch = 16;
     const startX = cx - (cols * cw) / 2;
     const startY = 55;
     for (let r = 0; r < rows; r++) {
@@ -188,7 +203,13 @@ function createShipIcon(type = 'icebreaker') {
 // ═══════════════════════════════════════════════════════════════
 
 const CesiumGlobe = forwardRef(function CesiumGlobe(
-  { currentRouteKey = 'NSR', onViewerReady, activeWaypoints, routeVisibility, generatedRoutes },
+  {
+    currentRouteKey = 'NSR',
+    onViewerReady,
+    activeWaypoints,
+    routeVisibility,
+    generatedRoutes,
+  },
   ref,
 ) {
   const containerRef = useRef(null);
@@ -198,65 +219,125 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
   const shipEntityRef = useRef(null);
   const lastShipType = useRef(null);
 
-  const drawRoute = useCallback((viewer, currentRouteKey, overrideWaypoints, visibilityStates, generatedRoutesObj) => {
-    if (!viewer || viewer.isDestroyed()) return;
+  const drawRoute = useCallback(
+    (
+      viewer,
+      currentRouteKey,
+      overrideWaypoints,
+      visibilityStates,
+      generatedRoutesObj,
+    ) => {
+      if (!viewer || viewer.isDestroyed()) return;
 
-    if (!viewer._routeEntities) viewer._routeEntities = {};
+      if (!viewer._routeEntities) viewer._routeEntities = {};
 
-    Object.keys(viewer._routeEntities).forEach(key => {
-      viewer._routeEntities[key].forEach(e => viewer.entities.remove(e));
-    });
-    viewer._routeEntities = {};
+      Object.keys(viewer._routeEntities).forEach((key) => {
+        viewer._routeEntities[key].forEach((e) => viewer.entities.remove(e));
+      });
+      viewer._routeEntities = {};
+      const renderedLabels = new Set();
 
-    const renderRoute = (key, pathWps, isMain) => {
-      if (!pathWps || pathWps.length === 0) return;
-      
-      const isVisible = (visibilityStates && visibilityStates[key] !== undefined) ? visibilityStates[key] : isMain;
-      const cssColor = ROUTE_COLORS[key] || '#60a5fa';
-      const entities = [];
+      const renderRoute = (key, pathWps, isMain) => {
+        if (!pathWps || pathWps.length === 0) return;
 
-      const line = viewer.entities.add({
-        show: isVisible,
-        polyline: {
-          positions: Cesium.Cartesian3.fromDegreesArray(pathWps.flatMap(w => [w.lon, w.lat])),
-          width: isMain ? 4.0 : 2.5,
-          arcType: Cesium.ArcType.GEODESIC,
-          material: isMain 
-            ? new Cesium.PolylineGlowMaterialProperty({
-                glowPower: 0.4,
-                color: Cesium.Color.fromCssColorString(cssColor).withAlpha(0.9),
-              })
-            : new Cesium.ColorMaterialProperty(Cesium.Color.fromCssColorString(cssColor).withAlpha(0.7)),
+        const isVisible =
+          visibilityStates && visibilityStates[key] !== undefined
+            ? visibilityStates[key]
+            : isMain;
+        const cssColor = ROUTE_COLORS[key] || '#60a5fa';
+        const entities = [];
+
+        const line = viewer.entities.add({
+          show: isVisible,
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArray(
+              pathWps.flatMap((w) => [w.lon, w.lat]),
+            ),
+            width: isMain ? 4.0 : 2.5,
+            arcType: Cesium.ArcType.GEODESIC,
+            material: isMain
+              ? new Cesium.PolylineGlowMaterialProperty({
+                  glowPower: 0.4,
+                  color:
+                    Cesium.Color.fromCssColorString(cssColor).withAlpha(0.9),
+                })
+              : new Cesium.ColorMaterialProperty(
+                  Cesium.Color.fromCssColorString(cssColor).withAlpha(0.7),
+                ),
+          },
+        });
+        entities.push(line);
+
+        for (const wp of pathWps) {
+          const pt = viewer.entities.add({
+            show: isVisible,
+            position: Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, 5000),
+            point: {
+              pixelSize: isMain ? 8 : 5,
+              color: Cesium.Color.YELLOW,
+              outlineColor: Cesium.Color.BLACK,
+              outlineWidth: isMain ? 2 : 1,
+            },
+            // //! [Original Code] isMain인 경우에만 라벨 표시 (Comparison 항로는 명칭 안 뜸)
+            //           label: isMain ? {
+            //             text: wp.label, font: 'bold 13px sans-serif',
+            //             fillColor: Cesium.Color.WHITE, outlineColor: Cesium.Color.BLACK,
+            //             outlineWidth: 3, style: Cesium.LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cesium.Cartesian2(0, -22),
+            //             scaleByDistance: new Cesium.NearFarScalar(1e5, 1, 8e6, 0.45),
+            //           } : undefined,
+
+            // //* [Modified Code] isVisible 상태이고 중복되지 않은 명칭인 경우에만 라벨 표시 (명칭이 겹치면 주 항로만 표시)
+            label:
+              isVisible && wp.label && !renderedLabels.has(wp.label)
+                ? {
+                    text: wp.label,
+                    font: isMain
+                      ? 'bold 13px sans-serif'
+                      : 'bold 11px sans-serif',
+                    fillColor: isMain
+                      ? Cesium.Color.WHITE
+                      : Cesium.Color.fromCssColorString('#cccccc'),
+                    outlineColor: Cesium.Color.BLACK,
+                    outlineWidth: 2,
+                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                    pixelOffset: isMain
+                      ? new Cesium.Cartesian2(0, -22)
+                      : new Cesium.Cartesian2(0, -18),
+                    scaleByDistance: new Cesium.NearFarScalar(
+                      1e5,
+                      1,
+                      8e6,
+                      0.45,
+                    ),
+                  }
+                : undefined,
+          });
+          if (isVisible && wp.label) renderedLabels.add(wp.label);
+          entities.push(pt);
+        }
+        viewer._routeEntities[key] = entities;
+      };
+
+      // 1. 메인 항로 먼저 렌더링 (레이블 표시 우선권 부여)
+      renderRoute(
+        currentRouteKey,
+        overrideWaypoints || ROUTES[currentRouteKey] || ROUTES.NSR,
+        true,
+      );
+
+      // 2. 나머지 비교 항로 렌더링 (중복 레이블 생략됨)
+      Object.keys(ROUTES).forEach((key) => {
+        if (key !== currentRouteKey) {
+          const path =
+            generatedRoutesObj && generatedRoutesObj[key]
+              ? generatedRoutesObj[key]
+              : ROUTES[key];
+          renderRoute(key, path, false);
         }
       });
-      entities.push(line);
-
-      for (const wp of pathWps) {
-        const pt = viewer.entities.add({
-          show: isVisible,
-          position: Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, 5000),
-          point: { pixelSize: isMain ? 8 : 5, color: Cesium.Color.YELLOW, outlineColor: Cesium.Color.BLACK, outlineWidth: isMain ? 2 : 1 },
-          label: isMain ? {
-            text: wp.label, font: 'bold 13px sans-serif',
-            fillColor: Cesium.Color.WHITE, outlineColor: Cesium.Color.BLACK,
-            outlineWidth: 3, style: Cesium.LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cesium.Cartesian2(0, -22),
-            scaleByDistance: new Cesium.NearFarScalar(1e5, 1, 8e6, 0.45),
-          } : undefined,
-        });
-        entities.push(pt);
-      }
-      viewer._routeEntities[key] = entities;
-    };
-
-    Object.keys(ROUTES).forEach(key => {
-      if (key !== currentRouteKey) {
-        const path = (generatedRoutesObj && generatedRoutesObj[key]) ? generatedRoutesObj[key] : ROUTES[key];
-        renderRoute(key, path, false);
-      }
-    });
-
-    renderRoute(currentRouteKey, overrideWaypoints || ROUTES[currentRouteKey] || ROUTES.NSR, true);
-  }, []);
+    },
+    [],
+  );
 
   const updateShipEntity = useCallback((pos, heading, shipSpecs = {}) => {
     const viewer = viewerRef.current;
@@ -283,10 +364,10 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
         position,
         billboard: {
           image: iconUrl,
-// //! [Original Code] 
-//           width: 40,
-//           height: 80,
-// //* [Modified Code] 시인성 확보를 위해 크기 약 35% 증대 (40x80 -> 54x108)
+          // //! [Original Code]
+          //           width: 40,
+          //           height: 80,
+          // //* [Modified Code] 시인성 확보를 위해 크기 약 35% 증대 (40x80 -> 54x108)
           width: 54,
           height: 108,
           alignedAxis: Cesium.Cartesian3.UNIT_Z,
@@ -297,19 +378,27 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
           scaleByDistance: new Cesium.NearFarScalar(5000, 1.8, 500000, 0.6),
         },
         label: {
-          text: type === 'lng' ? 'LNG Carrier' : type === 'container' ? 'Container' : 'Icebreaker',
+          text:
+            type === 'lng'
+              ? 'LNG Carrier'
+              : type === 'container'
+                ? 'Container'
+                : 'Icebreaker',
           font: 'bold 12px sans-serif',
           fillColor: Cesium.Color.WHITE,
           outlineColor: Cesium.Color.BLACK,
           outlineWidth: 3,
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
           verticalOrigin: Cesium.VerticalOrigin.TOP,
-// //! [Original Code] 
-//           pixelOffset: new Cesium.Cartesian2(0, 45),
-// //* [Modified Code] 아이콘 크기 커짐에 따라 라벨이 겹치지 않도록 오프셋 하향 조정
+          // //! [Original Code]
+          //           pixelOffset: new Cesium.Cartesian2(0, 45),
+          // //* [Modified Code] 아이콘 크기 커짐에 따라 라벨이 겹치지 않도록 오프셋 하향 조정
           pixelOffset: new Cesium.Cartesian2(0, 60),
           scaleByDistance: new Cesium.NearFarScalar(5000, 1.0, 300000, 0.4),
-          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 500000),
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(
+            0,
+            500000,
+          ),
         },
       });
     } else {
@@ -318,10 +407,14 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
     }
   }, []);
 
-  useImperativeHandle(ref, () => ({
-    viewer: viewerRef.current,
-    updateShipEntity,
-  }), [updateShipEntity]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      viewer: viewerRef.current,
+      updateShipEntity,
+    }),
+    [updateShipEntity],
+  );
 
   useEffect(() => {
     let destroyed = false;
@@ -329,148 +422,288 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
       if (!containerRef.current) return;
       try {
         const viewer = new Cesium.Viewer(containerRef.current, {
-          animation: false, timeline: false, baseLayerPicker: false, geocoder: false,
-          homeButton: false, sceneModePicker: false, navigationHelpButton: false,
-          fullscreenButton: false, infoBox: false, selectionIndicator: false,
+          animation: false,
+          timeline: false,
+          baseLayerPicker: false,
+          geocoder: false,
+          homeButton: false,
+          sceneModePicker: false,
+          navigationHelpButton: false,
+          fullscreenButton: false,
+          infoBox: false,
+          selectionIndicator: false,
           requestRenderMode: false,
           creditContainer: document.createElement('div'),
         });
 
-        Cesium.createWorldTerrainAsync().then((terrain) => {
-          if (!destroyed && viewer && !viewer.isDestroyed()) viewer.terrainProvider = terrain;
-        }).catch(e => console.warn('Terrain fail:', e));
+        Cesium.createWorldTerrainAsync()
+          .then((terrain) => {
+            if (!destroyed && viewer && !viewer.isDestroyed())
+              viewer.terrainProvider = terrain;
+          })
+          .catch((e) => console.warn('Terrain fail:', e));
 
         viewer.scene.globe.enableLighting = true;
         viewer.scene.atmosphere.show = true;
         viewer.scene.fog.enabled = true;
         const ctrl = viewer.scene.screenSpaceCameraController;
-        ctrl.enableRotate = ctrl.enableZoom = ctrl.enableTranslate = ctrl.enableTilt = ctrl.enableLook = true;
+        ctrl.enableRotate =
+          ctrl.enableZoom =
+          ctrl.enableTranslate =
+          ctrl.enableTilt =
+          ctrl.enableLook =
+            true;
 
         const layers = {};
         try {
-          const gebco = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
-            url: 'https://ows.emodnet-bathymetry.eu/wms', layers: 'emodnet:mean_rainbowcolour',
-            parameters: { transparent: 'true', format: 'image/png', VERSION: '1.1.1', SRS: 'EPSG:4326' },
-            tileWidth: 512, tileHeight: 512, enablePickFeatures: false,
-          }));
+          const gebco = viewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapServiceImageryProvider({
+              url: 'https://ows.emodnet-bathymetry.eu/wms',
+              layers: 'emodnet:mean_rainbowcolour',
+              parameters: {
+                transparent: 'true',
+                format: 'image/png',
+                VERSION: '1.1.1',
+                SRS: 'EPSG:4326',
+              },
+              tileWidth: 512,
+              tileHeight: 512,
+              enablePickFeatures: false,
+            }),
+          );
           gebco.show = false;
           layers.gebco = gebco;
-          const nsidcConc = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
-            url: 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi',
-            layers: 'AMSR2_Sea_Ice_Concentration_12km_3Day',
-            parameters: { transparent: 'true', format: 'image/png', TIME: new Date(Date.now() - 4 * 86400000).toISOString().slice(0, 10) },
-            tileWidth: 256, tileHeight: 256, enablePickFeatures: false, credit: 'NASA GIBS',
-          }));
+          const nsidcConc = viewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapServiceImageryProvider({
+              url: 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi',
+              layers: 'AMSR2_Sea_Ice_Concentration_12km_3Day',
+              parameters: {
+                transparent: 'true',
+                format: 'image/png',
+                TIME: new Date(Date.now() - 4 * 86400000)
+                  .toISOString()
+                  .slice(0, 10),
+              },
+              tileWidth: 256,
+              tileHeight: 256,
+              enablePickFeatures: false,
+              credit: 'NASA GIBS',
+            }),
+          );
           nsidcConc.show = false;
           layers.nsidcConc = nsidcConc;
-        } catch (e) { console.warn('Layers error:', e); }
+        } catch (e) {
+          console.warn('Layers error:', e);
+        }
 
-        const gibsDate = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
-        const gibsUrl = 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi';
+        const gibsDate = new Date(Date.now() - 3 * 86400000)
+          .toISOString()
+          .slice(0, 10);
+        const gibsUrl =
+          'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi';
         const gibsOpts = (lyName) => ({
-          url: gibsUrl, layers: lyName,
-          parameters: { transparent: 'true', format: 'image/png', TIME: gibsDate },
-          tileWidth: 512, tileHeight: 512, enablePickFeatures: false, credit: 'NASA GIBS',
+          url: gibsUrl,
+          layers: lyName,
+          parameters: {
+            transparent: 'true',
+            format: 'image/png',
+            TIME: gibsDate,
+          },
+          tileWidth: 512,
+          tileHeight: 512,
+          enablePickFeatures: false,
+          credit: 'NASA GIBS',
         });
 
         // 위성 실사영상 (MODIS Terra + VIIRS SNPP) → viewer._satLayers
         try {
           const satLayers = [];
           const modis = viewer.imageryLayers.addImageryProvider(
-            new Cesium.WebMapServiceImageryProvider(gibsOpts('MODIS_Terra_CorrectedReflectance_TrueColor')),
+            new Cesium.WebMapServiceImageryProvider(
+              gibsOpts('MODIS_Terra_CorrectedReflectance_TrueColor'),
+            ),
           );
-          modis.show = false; satLayers.push(modis);
+          modis.show = false;
+          satLayers.push(modis);
           const viirs = viewer.imageryLayers.addImageryProvider(
-            new Cesium.WebMapServiceImageryProvider(gibsOpts('VIIRS_SNPP_CorrectedReflectance_TrueColor')),
+            new Cesium.WebMapServiceImageryProvider(
+              gibsOpts('VIIRS_SNPP_CorrectedReflectance_TrueColor'),
+            ),
           );
-          viirs.show = false; satLayers.push(viirs);
+          viirs.show = false;
+          satLayers.push(viirs);
           viewer._satLayers = satLayers;
-        } catch (e) { console.warn('Satellite imagery layer error:', e); }
+        } catch (e) {
+          console.warn('Satellite imagery layer error:', e);
+        }
 
         // Copernicus 해빙 두께 (SITHICK) — /cop-proxy/ → wmts.marine.copernicus.eu
         try {
-          const copThick = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
-            url: '/cop-proxy/',
-            layers: 'ARCTIC_ANALYSISFORECAST_PHY_ICE_002_011/cmems_mod_arc_phy_anfc_6km_detided_P1D-m',
-            parameters: { transparent: 'true', format: 'image/png', TIME: gibsDate },
-            tileWidth: 512, tileHeight: 512, enablePickFeatures: false,
-          }));
-          copThick.alpha = 0.7; copThick.show = false;
+          const copThick = viewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapServiceImageryProvider({
+              url: '/cop-proxy/',
+              layers:
+                'ARCTIC_ANALYSISFORECAST_PHY_ICE_002_011/cmems_mod_arc_phy_anfc_6km_detided_P1D-m',
+              parameters: {
+                transparent: 'true',
+                format: 'image/png',
+                TIME: gibsDate,
+              },
+              tileWidth: 512,
+              tileHeight: 512,
+              enablePickFeatures: false,
+            }),
+          );
+          copThick.alpha = 0.7;
+          copThick.show = false;
           layers.copThick = copThick;
-        } catch (e) { console.warn('Copernicus thick layer error:', e); }
+        } catch (e) {
+          console.warn('Copernicus thick layer error:', e);
+        }
 
         // NSIDC 해빙 경계선 (GIBS Sea_Ice_Brightness_Temp)
         try {
-          const nsidcEdge = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
-            url: 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi',
-            layers: 'AMSRU2_Sea_Ice_Brightness_Temp_6km_89H',
-            parameters: { transparent: 'true', format: 'image/png', TIME: gibsDate },
-            tileWidth: 512, tileHeight: 512, enablePickFeatures: false, credit: 'NASA GIBS',
-          }));
-          nsidcEdge.alpha = 0.7; nsidcEdge.show = false;
+          const nsidcEdge = viewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapServiceImageryProvider({
+              url: 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi',
+              layers: 'AMSRU2_Sea_Ice_Brightness_Temp_6km_89H',
+              parameters: {
+                transparent: 'true',
+                format: 'image/png',
+                TIME: gibsDate,
+              },
+              tileWidth: 512,
+              tileHeight: 512,
+              enablePickFeatures: false,
+              credit: 'NASA GIBS',
+            }),
+          );
+          nsidcEdge.alpha = 0.7;
+          nsidcEdge.show = false;
           layers.nsidcEdge = nsidcEdge;
-        } catch (e) { console.warn('NSIDC edge layer error:', e); }
+        } catch (e) {
+          console.warn('NSIDC edge layer error:', e);
+        }
 
         // ESA Sentinel-1 SAR — /sentinel-proxy/ → Copernicus Data Space
         try {
-          const esaSar = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
-            url: '/sentinel-proxy/',
-            layers: 'SAR-URBAN',
-            parameters: { transparent: 'true', format: 'image/png', MAXCC: '40' },
-            tileWidth: 512, tileHeight: 512, enablePickFeatures: false,
-          }));
-          esaSar.alpha = 0.8; esaSar.show = false;
+          const esaSar = viewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapServiceImageryProvider({
+              url: '/sentinel-proxy/',
+              layers: 'SAR-URBAN',
+              parameters: {
+                transparent: 'true',
+                format: 'image/png',
+                MAXCC: '40',
+              },
+              tileWidth: 512,
+              tileHeight: 512,
+              enablePickFeatures: false,
+            }),
+          );
+          esaSar.alpha = 0.8;
+          esaSar.show = false;
           layers.esaSar = esaSar;
-        } catch (e) { console.warn('ESA SAR layer error:', e); }
+        } catch (e) {
+          console.warn('ESA SAR layer error:', e);
+        }
 
         // Sentinel-2 자연색 (TRUE_COLOR) — /sentinel-proxy/
         try {
-          const s2True = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
-            url: '/sentinel-proxy/',
-            layers: 'TRUE-COLOR',
-            parameters: { transparent: 'true', format: 'image/png', MAXCC: '30' },
-            tileWidth: 512, tileHeight: 512, enablePickFeatures: false,
-          }));
-          s2True.alpha = 0.85; s2True.show = false;
+          const s2True = viewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapServiceImageryProvider({
+              url: '/sentinel-proxy/',
+              layers: 'TRUE-COLOR',
+              parameters: {
+                transparent: 'true',
+                format: 'image/png',
+                MAXCC: '30',
+              },
+              tileWidth: 512,
+              tileHeight: 512,
+              enablePickFeatures: false,
+            }),
+          );
+          s2True.alpha = 0.85;
+          s2True.show = false;
           layers.s2True = s2True;
-        } catch (e) { console.warn('S2 true color layer error:', e); }
+        } catch (e) {
+          console.warn('S2 true color layer error:', e);
+        }
 
         // Sentinel-2 NDSI 해빙 탐지 — /sentinel-proxy/
         try {
-          const s2Ndsi = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
-            url: '/sentinel-proxy/',
-            layers: 'INDEX-NDSI',
-            parameters: { transparent: 'true', format: 'image/png', MAXCC: '30' },
-            tileWidth: 512, tileHeight: 512, enablePickFeatures: false,
-          }));
-          s2Ndsi.alpha = 0.8; s2Ndsi.show = false;
+          const s2Ndsi = viewer.imageryLayers.addImageryProvider(
+            new Cesium.WebMapServiceImageryProvider({
+              url: '/sentinel-proxy/',
+              layers: 'INDEX-NDSI',
+              parameters: {
+                transparent: 'true',
+                format: 'image/png',
+                MAXCC: '30',
+              },
+              tileWidth: 512,
+              tileHeight: 512,
+              enablePickFeatures: false,
+            }),
+          );
+          s2Ndsi.alpha = 0.8;
+          s2Ndsi.show = false;
           layers.s2Ndsi = s2Ndsi;
-        } catch (e) { console.warn('S2 NDSI layer error:', e); }
+        } catch (e) {
+          console.warn('S2 NDSI layer error:', e);
+        }
         viewer._apiLayers = layers;
 
         drawRoute(viewer, currentRouteKey, activeWaypoints);
 
-        const initWps = activeWaypoints || ROUTES[currentRouteKey] || ROUTES.NSR;
+        const initWps =
+          activeWaypoints || ROUTES[currentRouteKey] || ROUTES.NSR;
         const startPt = initWps[0] || { lon: 129.04, lat: 35.1 };
         viewer.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(startPt.lon, startPt.lat, 13000000),
-          orientation: { heading: 0, pitch: Cesium.Math.toRadians(-50), roll: 0 },
+          destination: Cesium.Cartesian3.fromDegrees(
+            startPt.lon,
+            startPt.lat,
+            13000000,
+          ),
+          orientation: {
+            heading: 0,
+            pitch: Cesium.Math.toRadians(-50),
+            roll: 0,
+          },
           duration: 2,
         });
 
         viewerRef.current = viewer;
         if (onViewerReady) onViewerReady(viewer);
-      } catch (err) { console.warn('Cesium init fail:', err); }
+      } catch (err) {
+        console.warn('Cesium init fail:', err);
+      }
     }
     init();
-    return () => { destroyed = true; if (viewerRef.current) viewerRef.current.destroy(); };
+    return () => {
+      destroyed = true;
+      if (viewerRef.current) viewerRef.current.destroy();
+    };
   }, []);
 
   useEffect(() => {
     if (viewerRef.current && !viewerRef.current.isDestroyed()) {
-      drawRoute(viewerRef.current, currentRouteKey, activeWaypoints, routeVisibility, generatedRoutes);
+      drawRoute(
+        viewerRef.current,
+        currentRouteKey,
+        activeWaypoints,
+        routeVisibility,
+        generatedRoutes,
+      );
     }
-  }, [currentRouteKey, activeWaypoints, routeVisibility, generatedRoutes, drawRoute]);
+  }, [
+    currentRouteKey,
+    activeWaypoints,
+    routeVisibility,
+    generatedRoutes,
+    drawRoute,
+  ]);
 
   return <div id="cesium-wrap" ref={containerRef} />;
 });

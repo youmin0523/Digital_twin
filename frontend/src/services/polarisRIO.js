@@ -40,33 +40,90 @@ export function deriveIceConditions(lon, lat, sampleIceConcentration) {
 
   if (lat > 82) {
     // 극고위도: 다년생 빙(MY) + 압퇴빙 지배
-    if (conc * 0.6 > 0) conditions.push({ type: 'Multi-Year (MY)', concentration_tenths: conc * 0.6 });
-    if (conc * 0.3 > 0) conditions.push({ type: 'Ridged/Hummocked', concentration_tenths: conc * 0.3 });
-    if (conc * 0.1 > 0) conditions.push({ type: 'Thick First-Year (FY)', concentration_tenths: conc * 0.1 });
+    if (conc * 0.6 > 0)
+      conditions.push({
+        type: 'Multi-Year (MY)',
+        concentration_tenths: conc * 0.6,
+      });
+    if (conc * 0.3 > 0)
+      conditions.push({
+        type: 'Ridged/Hummocked',
+        concentration_tenths: conc * 0.3,
+      });
+    if (conc * 0.1 > 0)
+      conditions.push({
+        type: 'Thick First-Year (FY)',
+        concentration_tenths: conc * 0.1,
+      });
   } else if (lat > 78) {
     // 고위도: 후기 1년생 + 다년생
-    if (conc * 0.5 > 0) conditions.push({ type: 'Thick First-Year (FY)', concentration_tenths: conc * 0.5 });
-    if (conc * 0.35 > 0) conditions.push({ type: 'Multi-Year (MY)', concentration_tenths: conc * 0.35 });
-    if (conc * 0.15 > 0) conditions.push({ type: 'Ridged/Hummocked', concentration_tenths: conc * 0.15 });
+    if (conc * 0.5 > 0)
+      conditions.push({
+        type: 'Thick First-Year (FY)',
+        concentration_tenths: conc * 0.5,
+      });
+    if (conc * 0.35 > 0)
+      conditions.push({
+        type: 'Multi-Year (MY)',
+        concentration_tenths: conc * 0.35,
+      });
+    if (conc * 0.15 > 0)
+      conditions.push({
+        type: 'Ridged/Hummocked',
+        concentration_tenths: conc * 0.15,
+      });
   } else if (lat > 74) {
     // 중위도: 중간 두께 1년생 빙 지배
-    if (conc * 0.6 > 0) conditions.push({ type: 'Medium First-Year (FY)', concentration_tenths: conc * 0.6 });
-    if (conc * 0.3 > 0) conditions.push({ type: 'Thin First-Year (FY)', concentration_tenths: conc * 0.3 });
-    if (conc * 0.1 > 0) conditions.push({ type: 'Grey-White Ice', concentration_tenths: conc * 0.1 });
+    if (conc * 0.6 > 0)
+      conditions.push({
+        type: 'Medium First-Year (FY)',
+        concentration_tenths: conc * 0.6,
+      });
+    if (conc * 0.3 > 0)
+      conditions.push({
+        type: 'Thin First-Year (FY)',
+        concentration_tenths: conc * 0.3,
+      });
+    if (conc * 0.1 > 0)
+      conditions.push({
+        type: 'Grey-White Ice',
+        concentration_tenths: conc * 0.1,
+      });
   } else if (lat > 68) {
     // 저위도 북극 주변부: 얇은 1년생 빙
-    if (conc * 0.7 > 0) conditions.push({ type: 'Thin First-Year (FY)', concentration_tenths: conc * 0.7 });
-    if (conc * 0.2 > 0) conditions.push({ type: 'Grey-White Ice', concentration_tenths: conc * 0.2 });
-    if (conc * 0.1 > 0) conditions.push({ type: 'Grey Ice', concentration_tenths: conc * 0.1 });
+    if (conc * 0.7 > 0)
+      conditions.push({
+        type: 'Thin First-Year (FY)',
+        concentration_tenths: conc * 0.7,
+      });
+    if (conc * 0.2 > 0)
+      conditions.push({
+        type: 'Grey-White Ice',
+        concentration_tenths: conc * 0.2,
+      });
+    if (conc * 0.1 > 0)
+      conditions.push({ type: 'Grey Ice', concentration_tenths: conc * 0.1 });
   } else {
     // 개빙수역
-    if (conc * 0.5 > 0) conditions.push({ type: 'Grey Ice', concentration_tenths: conc * 0.5 });
-    if (conc * 0.5 > 0) conditions.push({ type: 'Grey-White Ice', concentration_tenths: conc * 0.5 });
+    if (conc * 0.5 > 0)
+      conditions.push({ type: 'Grey Ice', concentration_tenths: conc * 0.5 });
+    if (conc * 0.5 > 0)
+      conditions.push({
+        type: 'Grey-White Ice',
+        concentration_tenths: conc * 0.5,
+      });
   }
 
-  if (openWater > 0) conditions.push({ type: 'Open Water', concentration_tenths: openWater });
+  if (openWater > 0)
+    conditions.push({ type: 'Open Water', concentration_tenths: openWater });
   return conditions;
 }
+
+// //* [Modified Code] UI 가이드 및 재사용을 위해 핵심 기항 상수를 상단으로 추출 및 Export
+export const NSR_MAX_DRAFT = 12.5;
+export const NSR_MAX_BEAM = 35.0;
+export const MIN_RESCUE_DAYS = 5;
+export const MIN_TEMP_MARGIN = 10.0;
 
 /**
  * 5-step sequential routing decision tree.
@@ -84,31 +141,29 @@ export function deriveIceConditions(lon, lat, sampleIceConcentration) {
  * @returns {Object} { status: string, reason: string, rioScore: number|null }
  */
 export function evaluateRouting(shipData) {
-  const NSR_MAX_DRAFT = 12.5;
-  const NSR_MAX_BEAM = 35.0;
-  const MIN_RESCUE_DAYS = 5;
-  const MIN_TEMP_MARGIN = 10.0;
-
   // ── Step 1: 지정학·행정·환경 규제 필터 ─────────────────────────────
   if (shipData.isSanctionedCountry) {
     return {
       status: 'REROUTE_CAPE',
-      reason: '[Step 1a] 선박 국적이 대러시아 제재 참여국입니다. NSR 통과 시 국제 제재 위반 및 선박·화물 압류 위험 → 희망봉(CAPE) 우회.',
-      rioScore: null
+      reason:
+        '[Step 1a] 선박 국적이 대러시아 제재 참여국입니다. NSR 통과 시 국제 제재 위반 및 선박·화물 압류 위험 → 희망봉(CAPE) 우회.',
+      rioScore: null,
     };
   }
   if (!shipData.hasNsraPermit) {
     return {
       status: 'REROUTE_SUEZ',
-      reason: '[Step 1b] NSRA(러시아 북극항로청) 사전 운항 허가 미취득. NSR은 45일 전 신청 필수 → 수에즈 우회.',
-      rioScore: null
+      reason:
+        '[Step 1b] NSRA(러시아 북극항로청) 사전 운항 허가 미취득. NSR은 45일 전 신청 필수 → 수에즈 우회.',
+      rioScore: null,
     };
   }
   if (!shipData.hasPwom) {
     return {
       status: 'REROUTE_SUEZ',
-      reason: '[Step 1b] 극지해역 운항 매뉴얼(PWOM) 미비치. IMO Polar Code 필수 문서 → 수에즈 우회.',
-      rioScore: null
+      reason:
+        '[Step 1b] 극지해역 운항 매뉴얼(PWOM) 미비치. IMO Polar Code 필수 문서 → 수에즈 우회.',
+      rioScore: null,
     };
   }
   const fuelType = shipData.fuelType || 'MGO';
@@ -116,8 +171,9 @@ export function evaluateRouting(shipData) {
   if (fuelType === 'HFO' && !hasHfoExemption) {
     return {
       status: 'REROUTE_SUEZ',
-      reason: '[Step 1c] HFO(중질유) 사용·적재 선박으로 IMO 북극해 HFO 금지 규정(MARPOL Annex I) 위반. 면제 인증 미보유 → 수에즈 우회.',
-      rioScore: null
+      reason:
+        '[Step 1c] HFO(중질유) 사용·적재 선박으로 IMO 북극해 HFO 금지 규정(MARPOL Annex I) 위반. 면제 인증 미보유 → 수에즈 우회.',
+      rioScore: null,
     };
   }
 
@@ -126,14 +182,14 @@ export function evaluateRouting(shipData) {
     return {
       status: 'REROUTE_SUEZ',
       reason: `[Step 2a] 흘수 ${shipData.draft.toFixed(1)}m > NSR 수심 제한 ${NSR_MAX_DRAFT}m (빌키츠키·사니코프 해협). 수에즈 우회.`,
-      rioScore: null
+      rioScore: null,
     };
   }
   if (shipData.beam > NSR_MAX_BEAM) {
     return {
       status: 'REROUTE_SUEZ',
       reason: `[Step 2b] 선폭 ${shipData.beam.toFixed(1)}m > 쇄빙선 수로 허용 ${NSR_MAX_BEAM}m. 에스코트 불가 → 수에즈 우회.`,
-      rioScore: null
+      rioScore: null,
     };
   }
 
@@ -142,14 +198,17 @@ export function evaluateRouting(shipData) {
     return {
       status: 'REROUTE_SUEZ',
       reason: `[Step 3a] 생존 장비 ${shipData.maxRescueDays}일 < KR Polar Code 최소 기준 ${MIN_RESCUE_DAYS}일. SAR 대응 지연 시 승무원 안전 불보장 → 수에즈 우회.`,
-      rioScore: null
+      rioScore: null,
     };
   }
-  if (shipData.isTempBelowMinus10 && shipData.designTempMargin < MIN_TEMP_MARGIN) {
+  if (
+    shipData.isTempBelowMinus10 &&
+    shipData.designTempMargin < MIN_TEMP_MARGIN
+  ) {
     return {
       status: 'REROUTE_SUEZ',
       reason: `[Step 3b] 저온 해역(-10°C↓) 운항 시 설계 온도 여유 ${shipData.designTempMargin}°C < 권고 기준 ${MIN_TEMP_MARGIN}°C. 구조 취성 파괴 위험 → 수에즈 우회.`,
-      rioScore: null
+      rioScore: null,
     };
   }
   const missing = [];
@@ -161,7 +220,7 @@ export function evaluateRouting(shipData) {
     return {
       status: 'REROUTE_SUEZ',
       reason: `[Step 3c] Polar Code 필수 설비/인력 미비: ${missing.join(', ')}. KR 이행 가이드 9~12장 요건 미충족 → 수에즈 우회.`,
-      rioScore: null
+      rioScore: null,
     };
   }
   const latitude = shipData.latitude ?? 70.0;
@@ -170,7 +229,7 @@ export function evaluateRouting(shipData) {
     return {
       status: 'REROUTE_SUEZ',
       reason: `[Step 3d] 항로 최고 위도 ${latitude.toFixed(1)}°N ≥ 75° — GEO 위성 앙각 부족으로 통신 불가 구간 발생. Iridium/Starlink 등 LEO 통신 필수 (현재: ${commsType}) → 수에즈 우회.`,
-      rioScore: null
+      rioScore: null,
     };
   }
 
@@ -185,14 +244,14 @@ export function evaluateRouting(shipData) {
       return {
         status: 'REROUTE_SUEZ',
         reason: `[Step 4a] 컨테이너선 한계 파고 초과: 유의 파고 ${waveHeight.toFixed(1)}m > 4.0m. 갑판 적재 컨테이너 유실(Cargo Loss) 및 구조 손상 위험 → 수에즈 우회.`,
-        rioScore: null
+        rioScore: null,
       };
     }
     if (shipData.isTempBelowMinus10 && waveHeight > 2.5) {
       return {
         status: 'REROUTE_SUEZ',
         reason: `[Step 4b] 컨테이너선 착빙(Vessel Icing) 위험: 기온 -10°C 미만 + 파고 ${waveHeight.toFixed(1)}m > 2.5m. 치명적 선체 착빙 예상, 복원력 상실 위험 → 수에즈 우회.`,
-        rioScore: null
+        rioScore: null,
       };
     }
   } else if (shipType === 'LNG Carrier') {
@@ -215,7 +274,11 @@ export function evaluateRouting(shipData) {
   if (rio >= 0) {
     const baseReason = `[Step 5a] POLARIS RIO +${rio.toFixed(2)}. 모든 기준 충족, 현재 빙상 조건에서 NSR 정상 통과 승인.`;
     if (weatherWarning) {
-      return { status: 'NSR_RESTRICTED', reason: `${baseReason} | ${weatherWarning}`, rioScore: rio };
+      return {
+        status: 'NSR_RESTRICTED',
+        reason: `${baseReason} | ${weatherWarning}`,
+        rioScore: rio,
+      };
     }
     return { status: 'NSR_APPROVED', reason: baseReason, rioScore: rio };
   }
@@ -224,12 +287,12 @@ export function evaluateRouting(shipData) {
     return {
       status: 'NSR_RESTRICTED',
       reason: weatherWarning ? `${baseReason} | ${weatherWarning}` : baseReason,
-      rioScore: rio
+      rioScore: rio,
     };
   }
   return {
     status: 'REROUTE_SUEZ',
     reason: `[Step 5c] RIO ${rio.toFixed(2)} < -10. POLARIS 특별 고려 대상 해역(빙하·다년생 빙 지배). 선박 설계 한계 초과, 안전 항해 계획 불가 → 수에즈 우회.`,
-    rioScore: rio
+    rioScore: rio,
   };
 }

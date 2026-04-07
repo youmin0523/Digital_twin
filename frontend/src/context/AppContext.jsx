@@ -64,6 +64,8 @@ const initialState = {
     temp: '+2.1\u00B0C',
     rfi: '0.0',
     hs: '\u2014',
+    // //* [Modified Code] 가시거리 필드 추가 (위도 기반 추정값)
+    vis: '10.0 km',
     roll: '+0.0\u00B0',
     pitch: '+0.0\u00B0',
     seaLabel: '\u2014',

@@ -40,9 +40,15 @@ export default function WeatherHud({ shipPos, weatherData, currentRouteKey, isMo
 
   if (!nearest) return null;
 
-  const wave = nearest.wave_height_m;
-  const vis = nearest.visibility_km;
-  const temp = nearest.temperature_c;
+  // //* [Modified Code] null fallback: API 데이터 없을 시 위도 기반 추정값 사용
+  const lat = nearest.lat ?? shipPos.lat;
+  const fallbackWave = lat > 78 ? 0.6 : lat > 68 ? 1.5 : lat > 50 ? 2.8 : 1.8;
+  const fallbackVis = lat > 80 ? 2.0 : lat > 74 ? 5.0 : lat > 68 ? 8.0 : lat > 55 ? 12.0 : 15.0;
+  const fallbackTemp = lat > 80 ? -1.8 : lat > 70 ? -0.5 : lat > 60 ? 2.1 : 8.5;
+
+  const wave = nearest.wave_height_m ?? fallbackWave;
+  const vis = nearest.visibility_km ?? fallbackVis;
+  const temp = nearest.temperature_c ?? fallbackTemp;
 
   // 파고 위험도 색상
   const waveColor = wave == null ? '#64748b'

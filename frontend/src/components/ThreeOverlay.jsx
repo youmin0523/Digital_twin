@@ -1,11 +1,17 @@
-import React, { useRef, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react';
+import React, {
+  useRef,
+  useEffect,
+  useImperativeHandle,
+  forwardRef,
+  useCallback,
+} from 'react';
 import * as THREE from 'three';
 // 테스트 주석
 // ── Constants ────────────────────────────────────────────────────────────────
 const MOUSE_SENS = 0.0004;
 const MAX_ROT = 0.03;
-const ZOOM_MIN = -80;
-const ZOOM_MAX = 500;
+const ZOOM_MIN = 300;
+const ZOOM_MAX = 5000;
 
 const BASE_GM = 3.2;
 const BASE_OMEGA_R = 0.176;
@@ -29,11 +35,46 @@ const SHIP_BASE_Y = 5; // 선체 기본 수선 높이 (수면 위로 올리기)
 
 // //* [Modified Code] 현실적인 스케일에 맞춘 빙상 스케일 및 무작위성 부여(난수 분산)
 const ICE_TYPES = [
-  { name: 'tabular', prob: 0.10, w: [400, 900], d: [300, 800], h: [40, 80],   subRatio: 5 },
-  { name: 'large',   prob: 0.15, w: [200, 450], d: [150, 400], h: [60, 140],  subRatio: 6 },
-  { name: 'medium',  prob: 0.25, w: [80,  200], d: [60,  180], h: [25, 60],   subRatio: 7 },
-  { name: 'small',   prob: 0.35, w: [25,  80],  d: [20,  60],  h: [10, 25],   subRatio: 5 },
-  { name: 'growler', prob: 0.15, w: [6,   25],  d: [5,   20],  h: [2,  8],    subRatio: 4 },
+  {
+    name: 'tabular',
+    prob: 0.1,
+    w: [400, 900],
+    d: [300, 800],
+    h: [40, 80],
+    subRatio: 5,
+  },
+  {
+    name: 'large',
+    prob: 0.15,
+    w: [200, 450],
+    d: [150, 400],
+    h: [60, 140],
+    subRatio: 6,
+  },
+  {
+    name: 'medium',
+    prob: 0.25,
+    w: [80, 200],
+    d: [60, 180],
+    h: [25, 60],
+    subRatio: 7,
+  },
+  {
+    name: 'small',
+    prob: 0.35,
+    w: [25, 80],
+    d: [20, 60],
+    h: [10, 25],
+    subRatio: 5,
+  },
+  {
+    name: 'growler',
+    prob: 0.15,
+    w: [6, 25],
+    d: [5, 20],
+    h: [2, 8],
+    subRatio: 4,
+  },
 ];
 
 // ── Utility ──────────────────────────────────────────────────────────────────
@@ -42,7 +83,8 @@ function rng(a, b) {
 }
 
 function pickType() {
-  let r = Math.random(), cum = 0;
+  let r = Math.random(),
+    cum = 0;
   for (const t of ICE_TYPES) {
     cum += t.prob;
     if (r < cum) return t;
@@ -52,10 +94,11 @@ function pickType() {
 
 function mulberry32(a) {
   return function () {
-    a |= 0; a = a + 0x6D2B79F5 | 0;
-    let t = Math.imul(a ^ a >>> 15, 1 | a);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
 
@@ -80,22 +123,34 @@ function depthToRGB(d) {
   let r, g, b;
   if (d < 50) {
     const t = d / 50;
-    r = 255; g = 51 + t * 119; b = 0;
+    r = 255;
+    g = 51 + t * 119;
+    b = 0;
   } else if (d < 200) {
     const t = (d - 50) / 150;
-    r = 255 - t * 51; g = 170 + t * 85; b = 0;
+    r = 255 - t * 51;
+    g = 170 + t * 85;
+    b = 0;
   } else if (d < 1000) {
     const t = (d - 200) / 800;
-    r = 204 - t * 204; g = 255 - t * 51; b = t * 102;
+    r = 204 - t * 204;
+    g = 255 - t * 51;
+    b = t * 102;
   } else if (d < 2000) {
     const t = (d - 1000) / 1000;
-    r = 0; g = 204 - t * 51; b = 102 + t * 153;
+    r = 0;
+    g = 204 - t * 51;
+    b = 102 + t * 153;
   } else if (d < 4000) {
     const t = (d - 2000) / 2000;
-    r = 0; g = 153 - t * 153; b = 255;
+    r = 0;
+    g = 153 - t * 153;
+    b = 255;
   } else {
     const t = Math.min(1, (d - 4000) / 2000);
-    r = t * 102; g = 0; b = 255 - t * 51;
+    r = t * 102;
+    g = 0;
+    b = 255 - t * 51;
   }
   return [r / 255, g / 255, b / 255];
 }
@@ -107,9 +162,9 @@ function naturalIceRGBA(conc) {
     return [0, 0, 0, 0];
   }
   // 15%~100% → 반투명 회백색 → 불투명 순백
-  const t = (conc - 0.15) / 0.85;           // 0.0 ~ 1.0 정규화
+  const t = (conc - 0.15) / 0.85; // 0.0 ~ 1.0 정규화
   const alpha = Math.round((0.4 + t * 0.6) * 255); // 102 ~ 255
-  const brightness = Math.round(200 + t * 55);      // 200 ~ 255
+  const brightness = Math.round(200 + t * 55); // 200 ~ 255
   return [brightness, brightness, brightness, alpha];
 }
 
@@ -141,7 +196,8 @@ function edgeToRGB(conc) {
 function getSeaState(lat) {
   if (lat > 78) return { Hs: 0.6, Tp: 8, label: 'icy waters - low waves' };
   if (lat > 68) return { Hs: 1.5, Tp: 10, label: 'ice edge - moderate waves' };
-  if (lat > 50) return { Hs: 2.8, Tp: 12, label: 'arctic open ocean - high waves' };
+  if (lat > 50)
+    return { Hs: 2.8, Tp: 12, label: 'arctic open ocean - high waves' };
   return { Hs: 1.8, Tp: 9, label: 'coastal waters' };
 }
 
@@ -159,25 +215,41 @@ function hash3(ix, iy, iz) {
   h = (h ^ (h >> 13)) * 1103515245;
   return ((h ^ (h >> 16)) >>> 0) / 4294967296;
 }
-function lerp(a, b, t) { return a + (b - a) * t; }
-function smoothstep(t) { return t * t * (3 - 2 * t); }
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+function smoothstep(t) {
+  return t * t * (3 - 2 * t);
+}
 
 function noise3D(x, y, z) {
-  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
-  const fx = smoothstep(x - ix), fy = smoothstep(y - iy), fz = smoothstep(z - iz);
+  const ix = Math.floor(x),
+    iy = Math.floor(y),
+    iz = Math.floor(z);
+  const fx = smoothstep(x - ix),
+    fy = smoothstep(y - iy),
+    fz = smoothstep(z - iz);
   return lerp(
     lerp(
-      lerp(hash3(ix, iy, iz),     hash3(ix+1, iy, iz),     fx),
-      lerp(hash3(ix, iy+1, iz),   hash3(ix+1, iy+1, iz),   fx), fy),
+      lerp(hash3(ix, iy, iz), hash3(ix + 1, iy, iz), fx),
+      lerp(hash3(ix, iy + 1, iz), hash3(ix + 1, iy + 1, iz), fx),
+      fy,
+    ),
     lerp(
-      lerp(hash3(ix, iy, iz+1),   hash3(ix+1, iy, iz+1),   fx),
-      lerp(hash3(ix, iy+1, iz+1), hash3(ix+1, iy+1, iz+1), fx), fy),
-    fz);
+      lerp(hash3(ix, iy, iz + 1), hash3(ix + 1, iy, iz + 1), fx),
+      lerp(hash3(ix, iy + 1, iz + 1), hash3(ix + 1, iy + 1, iz + 1), fx),
+      fy,
+    ),
+    fz,
+  );
 }
 
 // 다중 옥타브 fBm 노이즈 — 자연스러운 불규칙 표면 생성
 function fbm3D(x, y, z, octaves) {
-  let val = 0, amp = 1, freq = 1, total = 0;
+  let val = 0,
+    amp = 1,
+    freq = 1,
+    total = 0;
   for (let o = 0; o < octaves; o++) {
     val += noise3D(x * freq, y * freq, z * freq) * amp;
     total += amp;
@@ -192,10 +264,22 @@ function makeIceGeo(typeName, w, h, d) {
   // 세그먼트 — 불규칙 표면을 표현하려면 충분한 해상도 필요
   let wSegs, hSegs;
   switch (typeName) {
-    case 'tabular': wSegs = 20; hSegs = 10; break;
-    case 'large':   wSegs = 18; hSegs = 14; break;
-    case 'growler': wSegs = 12; hSegs = 8;  break;
-    default:        wSegs = 16; hSegs = 12; break; // medium, small
+    case 'tabular':
+      wSegs = 20;
+      hSegs = 10;
+      break;
+    case 'large':
+      wSegs = 18;
+      hSegs = 14;
+      break;
+    case 'growler':
+      wSegs = 12;
+      hSegs = 8;
+      break;
+    default:
+      wSegs = 16;
+      hSegs = 12;
+      break; // medium, small
   }
 
   const g = new THREE.SphereGeometry(1, wSegs, hSegs);
@@ -205,23 +289,25 @@ function makeIceGeo(typeName, w, h, d) {
   const rand = mulberry32(((w * 7.13 + h * 13.37 + d * 19.91) * 1000) | 0);
 
   // ── 난수로 프로파일 파라미터 자체를 생성 (정형화 제거) ──
-  const peakT     = 0.15 + rand() * 0.30;        // 최대 폭 높이 (0.15~0.45)
-  const topTaper  = 0.3 + rand() * 0.5;           // 상단 좁아지는 정도 (0.3~0.8)
-  const topPow    = 1.0 + rand() * 1.5;           // 상단 커브 지수 (1.0~2.5)
-  const baseWidth = 0.4 + rand() * 0.5;           // 바닥 폭 비율 (0.4~0.9)
-  const asymX     = (rand() - 0.5) * 0.4;         // 좌우 비대칭 (-0.2~0.2)
-  const asymZ     = (rand() - 0.5) * 0.4;         // 전후 비대칭
-  const flatTop   = typeName === 'tabular' ? 0.7 + rand() * 0.25 : rand() * 0.15;
-  const warpAmt   = 0.08 + rand() * 0.20;         // 대규모 뒤틀림 강도
-  const noiseScale = 1.5 + rand() * 3.0;          // 노이즈 주파수
+  const peakT = 0.15 + rand() * 0.3; // 최대 폭 높이 (0.15~0.45)
+  const topTaper = 0.3 + rand() * 0.5; // 상단 좁아지는 정도 (0.3~0.8)
+  const topPow = 1.0 + rand() * 1.5; // 상단 커브 지수 (1.0~2.5)
+  const baseWidth = 0.4 + rand() * 0.5; // 바닥 폭 비율 (0.4~0.9)
+  const asymX = (rand() - 0.5) * 0.4; // 좌우 비대칭 (-0.2~0.2)
+  const asymZ = (rand() - 0.5) * 0.4; // 전후 비대칭
+  const flatTop = typeName === 'tabular' ? 0.7 + rand() * 0.25 : rand() * 0.15;
+  const warpAmt = 0.08 + rand() * 0.2; // 대규모 뒤틀림 강도
+  const noiseScale = 1.5 + rand() * 3.0; // 노이즈 주파수
   // //! [Original Code] 노이즈 강도 설정 (비교적 밋밋한 표면)
   // const noiseAmt  = 0.08 + rand() * 0.18;         // 노이즈 강도
 
   // //* [Modified Code] 지형 노이즈를 강하게 주어 빙하 표면이 울퉁불퉁하도록 상향 조정
-  const noiseAmt  = 0.20 + rand() * 0.35;         // 노이즈 강도 대폭 상향
+  const noiseAmt = 0.2 + rand() * 0.35; // 노이즈 강도 대폭 상향
 
   // 빙하별 고유 3D 노이즈 오프셋 (같은 함수여도 완전 다른 결과)
-  const ox = rand() * 100, oy = rand() * 100, oz = rand() * 100;
+  const ox = rand() * 100,
+    oy = rand() * 100,
+    oz = rand() * 100;
 
   // 랜덤 돌기/능선 최대 4개
   const bumpCount = Math.floor(rand() * 4) + 1;
@@ -231,7 +317,7 @@ function makeIceGeo(typeName, w, h, d) {
       angle: rand() * Math.PI * 2,
       tCenter: 0.3 + rand() * 0.5,
       width: 0.15 + rand() * 0.3,
-      height: 0.05 + rand() * 0.20,
+      height: 0.05 + rand() * 0.2,
     });
   }
 
@@ -264,12 +350,13 @@ function makeIceGeo(typeName, w, h, d) {
       // 바닥 → 최대폭 구간
       const s = (t - 0.05) / (peakT - 0.05);
       rProfile = baseWidth + (1.0 - baseWidth) * smoothstep(s);
-    } else if (flatTop > 0.3 && t > (1.0 - flatTop * 0.3)) {
+    } else if (flatTop > 0.3 && t > 1.0 - flatTop * 0.3) {
       // 평평한 상단 (tabular에서 강하게, 나머지는 약하게)
       const edge = 1.0 - flatTop * 0.3;
       const s = (t - edge) / (1.0 - edge);
-      rProfile = (1.0 - topTaper * Math.pow((edge - peakT) / (1.0 - peakT), topPow))
-                 * (1.0 - s * 0.15);
+      rProfile =
+        (1.0 - topTaper * Math.pow((edge - peakT) / (1.0 - peakT), topPow)) *
+        (1.0 - s * 0.15);
     } else {
       // 최대폭 → 상단 테이퍼
       const s = (t - peakT) / (1.0 - peakT);
@@ -281,17 +368,18 @@ function makeIceGeo(typeName, w, h, d) {
     const asymFactor = 1.0 + asymX * Math.cos(theta) + asymZ * Math.sin(theta);
 
     // ── 3) 대규모 뒤틀림 (저주파 변형) ──
-    const warp = fbm3D(
-      x * 2.0 + ox, y * 2.0 + oy, z * 2.0 + oz, 2
-    ) * 2.0 - 1.0;
+    const warp = fbm3D(x * 2.0 + ox, y * 2.0 + oy, z * 2.0 + oz, 2) * 2.0 - 1.0;
 
     // ── 4) 다중 옥타브 표면 노이즈 (미세한 불규칙) ──
-    const surfNoise = fbm3D(
-      x * noiseScale + ox + 50,
-      y * noiseScale + oy + 50,
-      z * noiseScale + oz + 50,
-      4
-    ) * 2.0 - 1.0;
+    const surfNoise =
+      fbm3D(
+        x * noiseScale + ox + 50,
+        y * noiseScale + oy + 50,
+        z * noiseScale + oz + 50,
+        4,
+      ) *
+        2.0 -
+      1.0;
 
     // ── 5) 돌기 (bumps) ──
     let bumpVal = 0;
@@ -309,16 +397,20 @@ function makeIceGeo(typeName, w, h, d) {
     for (const ridge of ridges) {
       let angleDiff = Math.abs(theta - ridge.angle);
       if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
-      const falloff = Math.exp(-angleDiff * angleDiff / (ridge.spread * ridge.spread));
-      ridgeVal += ridge.strength * falloff * (0.5 + 0.5 * Math.sin(t * Math.PI));
+      const falloff = Math.exp(
+        (-angleDiff * angleDiff) / (ridge.spread * ridge.spread),
+      );
+      ridgeVal +=
+        ridge.strength * falloff * (0.5 + 0.5 * Math.sin(t * Math.PI));
     }
 
     // ── 최종 반경 합산 ──
-    const rFinal = rProfile * asymFactor
-                   + warp * warpAmt
-                   + surfNoise * noiseAmt
-                   + bumpVal
-                   + ridgeVal;
+    const rFinal =
+      rProfile * asymFactor +
+      warp * warpAmt +
+      surfNoise * noiseAmt +
+      bumpVal +
+      ridgeVal;
 
     // XZ 평면 적용
     const r0 = Math.sqrt(x * x + z * z) || 0.001;
@@ -335,9 +427,10 @@ function makeIceGeo(typeName, w, h, d) {
     }
 
     // Y 방향 노이즈 (표면 울퉁불퉁)
-    const yNoise = fbm3D(
-      x * 0.02 + ox + 200, y * 0.02 + oy + 200, z * 0.02 + oz + 200, 3
-    ) * 2.0 - 1.0;
+    const yNoise =
+      fbm3D(x * 0.02 + ox + 200, y * 0.02 + oy + 200, z * 0.02 + oz + 200, 3) *
+        2.0 -
+      1.0;
     y += yNoise * h * 0.06 * Math.sin(t * Math.PI);
 
     pos.setXYZ(i, x, y, z);
@@ -351,7 +444,10 @@ function makeIceGeo(typeName, w, h, d) {
 // =============================================================================
 // ThreeOverlay Component
 // =============================================================================
-const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, specs, mode, baseRef }, ref) {
+const ThreeOverlay = forwardRef(function ThreeOverlay(
+  { visible, shipState, specs, mode, baseRef },
+  ref,
+) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
 
@@ -469,7 +565,9 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
   // -- Ocean --
   const buildOcean = useCallback(() => {
     const { scene } = ctx.current;
-    const waveGeo = trackDisposable(new THREE.PlaneGeometry(80000, 80000, 128, 128));
+    const waveGeo = trackDisposable(
+      new THREE.PlaneGeometry(80000, 80000, 128, 128),
+    );
     waveGeo.rotateX(-Math.PI / 2);
     const mat = trackDisposable(
       new THREE.MeshPhongMaterial({
@@ -511,7 +609,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
       // const d = dBase * sizeJitter * (0.5 + Math.random() * 1.0);
 
       // //* [Modified Code] 무작위 난수 범위를 확장하여 보다 다양한 형태, 크기의 빙산 표현
-      const sizeJitter = 0.4 + Math.random() * 1.2;  // 0.4~1.6 크기 변동 (범위 확장)
+      const sizeJitter = 0.4 + Math.random() * 1.2; // 0.4~1.6 크기 변동 (범위 확장)
       const ratioJitter = 0.4 + Math.random() * 1.5; // 0.4~1.9 높이 종횡비 변동
       const w = wBase * sizeJitter * (0.8 + Math.random() * 0.4);
       const h = hBase * sizeJitter * ratioJitter * (0.6 + Math.random() * 0.8);
@@ -525,7 +623,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
       mesh.rotation.y = Math.random() * Math.PI * 2;
       // 모든 타입에 불규칙 기울기 (tabular 포함)
       mesh.rotation.z = (Math.random() - 0.5) * 0.12;
-      mesh.rotation.x = (Math.random() - 0.5) * 0.10;
+      mesh.rotation.x = (Math.random() - 0.5) * 0.1;
       placeOnWater(mesh, ox, oz);
 
       const grp = new THREE.Group();
@@ -542,7 +640,11 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
         grp.add(disc);
         // Foam ring at waterline
         const ringGeo = trackDisposable(
-          new THREE.RingGeometry(rr * 0.93, rr * 1.09, type.name === 'tabular' ? 20 : 14),
+          new THREE.RingGeometry(
+            rr * 0.93,
+            rr * 1.09,
+            type.name === 'tabular' ? 20 : 14,
+          ),
         );
         const ring = new THREE.Mesh(ringGeo, ringMat);
         ring.rotation.x = -Math.PI / 2;
@@ -607,19 +709,22 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
 
     const bRefLat = baseRef?.lat ?? 35.1;
     const bRefLon = baseRef?.lon ?? 129.0;
-    const mPerDegLon = 111319.491 * Math.cos(bRefLat * Math.PI / 180);
+    const mPerDegLon = 111319.491 * Math.cos((bRefLat * Math.PI) / 180);
     const VISIBLE_RANGE = 50000; // 50km
 
     // 실시간 빙산의 로컬 좌표 변환: 출발항 기준 고정 월드 축 사용
     for (const berg of bergs) {
-      const x = (berg.lon - bRefLon) * mPerDegLon / 1.5;
-      const z = -(berg.lat - bRefLat) * METERS_PER_DEGREE_LAT / 1.5;
-      const dist = Math.sqrt(Math.pow(x - ctx.current.shipGroup3?.position.x || x, 2) + Math.pow(z - ctx.current.shipGroup3?.position.z || z, 2));
+      const x = ((berg.lon - bRefLon) * mPerDegLon) / 1.5;
+      const z = (-(berg.lat - bRefLat) * METERS_PER_DEGREE_LAT) / 1.5;
+      const dist = Math.sqrt(
+        Math.pow(x - ctx.current.shipGroup3?.position.x || x, 2) +
+          Math.pow(z - ctx.current.shipGroup3?.position.z || z, 2),
+      );
       if (dist > VISIBLE_RANGE) continue;
 
       const size = Math.max(berg.size || 5000, 500);
       const h = size * 0.15;
-      const bw = size * 0.3 / 1.5 * 2;
+      const bw = ((size * 0.3) / 1.5) * 2;
       const bd = bw * 0.85;
       const geo = makeIceGeo('medium', bw, h, bd);
       const mesh = new THREE.Mesh(geo, realBergMat);
@@ -633,185 +738,250 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
   }, []);
 
   // -- Ship --
-  const buildShip = useCallback((shipType = 'icebreaker') => {
-    const { scene } = ctx.current;
-    if (ctx.current.shipGroup3) {
-      scene.remove(ctx.current.shipGroup3);
-    }
-
-    const shipGroup3 = new THREE.Group();
-    const shipMesh3 = new THREE.Group();
-    const shipUpper3 = new THREE.Group(); // 상부구조 — BRIDGE 모드에서 숨김
-    const cameraPivot3 = new THREE.Object3D();
-
-    // 선체 파트를 shipMesh3에 직접 추가 (BRIDGE 모드에서도 표시)
-    const mkH = (geo, mat, px, py, pz, rx = 0, ry = 0) => {
-      trackDisposable(geo);
-      trackDisposable(mat);
-      const m = new THREE.Mesh(geo, mat);
-      m.position.set(px, py, pz);
-      m.rotation.x = rx;
-      m.rotation.y = ry;
-      m.castShadow = true;
-      m.receiveShadow = true;
-      shipMesh3.add(m);
-    };
-    // 상부구조 파트를 shipUpper3에 추가 (BRIDGE 모드에서 숨김)
-    const mkU = (geo, mat, px, py, pz, rx = 0, ry = 0) => {
-      trackDisposable(geo);
-      trackDisposable(mat);
-      const m = new THREE.Mesh(geo, mat);
-      m.position.set(px, py, pz);
-      m.rotation.x = rx;
-      m.rotation.y = ry;
-      m.castShadow = true;
-      m.receiveShadow = true;
-      shipUpper3.add(m);
-    };
-
-    // ── 프리미엄 머티리얼 팔레트 (Standard Material + Environment Reflection) ──
-    const matScale = (c, met = 0.5, rog = 0.4) => {
-      const m = new THREE.MeshStandardMaterial({ 
-        color: c, 
-        metalness: met, 
-        roughness: rog,
-        envMapIntensity: 1.2
-      });
-      trackDisposable(m);
-      return m;
-    };
-
-    const C = {
-      iceRed:   matScale(0x9b1c1c, 0.6, 0.3), 
-      iceDark:  matScale(0x4a1212, 0.7, 0.2),
-      lngHull:  matScale(0x1e3a8a, 0.5, 0.4), 
-      conHull:  matScale(0x334155, 0.4, 0.5),
-      white:    matScale(0xf8fafc, 0.2, 0.1),
-      deck:     matScale(0x334155, 0.3, 0.6),
-      window:   matScale(0x0f172a, 0.9, 0.1), // 반사율 높은 창문
-      tank:     matScale(0xe2e8f0, 0.4, 0.3),
-      tankPipe: matScale(0x64748b, 0.8, 0.2),
-      box1:     matScale(0x0284c7, 0.3, 0.6),
-      box2:     matScale(0xd97706, 0.3, 0.6),
-      box3:     matScale(0x059669, 0.3, 0.6),
-      dark:     matScale(0x0f172a, 0.8, 0.1),
-      gold:     matScale(0xb45309, 0.9, 0.1), // 안테나/센서용
-    };
-
-    if (shipType === 'icebreaker') {
-      // 🧊 [ICEBREAKER] 육중하고 강인한 쇄빙선
-      // 선체 보정: 더 날카로운 선수와 육중한 볼륨
-      mkH(new THREE.BoxGeometry(32, 12, 170), C.iceRed, 0, 0, 10); 
-      mkH(new THREE.BoxGeometry(33, 5, 175), C.iceDark, 0, -6, 5);
-      
-      // 쇄빙용 특수 선수 (Spoon Bow 스타일)
-      for (let i = 0; i < 5; i++) {
-        const s = 1 - i * 0.15;
-        mkH(new THREE.BoxGeometry(32 * s, 3, 15), C.iceRed, 0, -1 - i * 1.5, -80 - i * 4);
-      }
-      mkH(new THREE.CylinderGeometry(0, 18, 30, 4), C.iceRed, 0, 0, -95, 0, Math.PI / 4);
-
-      // 상부 구조물: 레이어드 디자인
-      mkU(new THREE.BoxGeometry(26, 12, 60), C.white, 0, 12, -30);
-      mkU(new THREE.BoxGeometry(24, 8, 40), C.white, 0, 22, -35); // 2단
-      mkU(new THREE.BoxGeometry(30, 6, 20), C.white, 0, 28, -45); // 브릿지 윙 확장
-      mkU(new THREE.BoxGeometry(28, 4, 18), C.window, 0, 28.5, -46); // 파노라마 창
-
-      // 정밀 마스트 및 레이더
-      mkU(new THREE.CylinderGeometry(0.8, 1.2, 25, 8), C.dark, 0, 40, -40);
-      for (let i = 0; i < 3; i++) {
-        mkU(new THREE.BoxGeometry(10 - i * 2, 0.5, 3), C.dark, 0, 35 + i * 5, -40); // 마스트 횡단보도
-      }
-      // 회전 레이더 가이드
-      mkU(new THREE.BoxGeometry(8, 1, 2), C.gold, 0, 52, -40);
-
-      // 선미 헬기 데크 및 안전 난간
-      mkH(new THREE.BoxGeometry(30, 1, 50), C.deck, 0, 6.5, 60);
-      mkH(new THREE.BoxGeometry(20, 0.1, 20), C.white, 0, 7.1, 60, 0, Math.PI / 4); // 정교한 H
-      for (let i = -1; i <= 1; i += 2) {
-        mkH(new THREE.BoxGeometry(0.5, 2, 50), C.dark, 14.5 * i, 8, 60); // 난간
+  const buildShip = useCallback(
+    (shipType = 'icebreaker') => {
+      const { scene } = ctx.current;
+      if (ctx.current.shipGroup3) {
+        scene.remove(ctx.current.shipGroup3);
       }
 
-      // 대형 크레인 (Hydraulic 스타일)
-      mkU(new THREE.CylinderGeometry(2, 2.5, 6, 12), C.dark, 8, 8, 20);
-      mkU(new THREE.BoxGeometry(1.5, 1.5, 45), C.dark, 8, 18, 40, 0.5);
-    } 
-    else if (shipType === 'lng') {
-      // 🛢 [LNG CARRIER] 압도적인 크기의 에너지 운반선
-      // 거대 선체 (Freeboard가 높음)
-      mkH(new THREE.BoxGeometry(48, 22, 320), C.lngHull, 0, 0, 0);
-      mkH(new THREE.BoxGeometry(49, 8, 322), C.dark, 0, -12, 0);
-      
-      // LNG 탱크 보호 커버 (Membrane 돔 스타일)
-      for (let i = 0; i < 4; i++) {
-        const pz = -120 + i * 75;
-        mkH(new THREE.SphereGeometry(22, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), C.tank, 0, 11, pz);
-        // 탱크 베이스 사각형 구조
-        mkH(new THREE.BoxGeometry(44, 5, 60), C.white, 0, 12, pz);
-        // 파이프 라인 시스템
-        mkH(new THREE.CylinderGeometry(1.2, 1.2, 310, 8), C.tankPipe, 12, 16, 0, Math.PI / 2);
-        mkH(new THREE.CylinderGeometry(0.8, 0.8, 44, 8), C.tankPipe, 0, 18, pz, 0, 0, Math.PI / 2);
-      }
+      const shipGroup3 = new THREE.Group();
+      const shipMesh3 = new THREE.Group();
+      const shipUpper3 = new THREE.Group(); // 상부구조 — BRIDGE 모드에서 숨김
+      const cameraPivot3 = new THREE.Object3D();
 
-      // 거주구역 (고층 빌딩 스타일)
-      mkU(new THREE.BoxGeometry(44, 35, 60), C.white, 0, 28, 130);
-      for (let i = 0; i < 5; i++) {
-        mkU(new THREE.BoxGeometry(44.5, 2, 55), C.deck, 0, 15 + i * 7, 130); // 층간 구분선
-      }
-      mkU(new THREE.BoxGeometry(40, 8, 30), C.white, 0, 50, 120); // 최상단 브릿지
-      mkU(new THREE.BoxGeometry(42, 4, 28), C.window, 0, 51, 108); // 전면 대형창
+      // 선체 파트를 shipMesh3에 직접 추가 (BRIDGE 모드에서도 표시)
+      const mkH = (geo, mat, px, py, pz, rx = 0, ry = 0) => {
+        trackDisposable(geo);
+        trackDisposable(mat);
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(px, py, pz);
+        m.rotation.x = rx;
+        m.rotation.y = ry;
+        m.castShadow = true;
+        m.receiveShadow = true;
+        shipMesh3.add(m);
+      };
+      // 상부구조 파트를 shipUpper3에 추가 (BRIDGE 모드에서 숨김)
+      const mkU = (geo, mat, px, py, pz, rx = 0, ry = 0) => {
+        trackDisposable(geo);
+        trackDisposable(mat);
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(px, py, pz);
+        m.rotation.x = rx;
+        m.rotation.y = ry;
+        m.castShadow = true;
+        m.receiveShadow = true;
+        shipUpper3.add(m);
+      };
 
-      // 트윈 연돌 (웅장함 강조)
-      mkU(new THREE.BoxGeometry(8, 25, 12), C.dark, -10, 55, 145);
-      mkU(new THREE.BoxGeometry(8, 25, 12), C.dark, 10, 55, 145);
-    }
-    else {
-      // 📦 [CONTAINER SHIP] 촘촘하고 빈틈없는 적재 위용
-      mkH(new THREE.BoxGeometry(42, 16, 280), C.conHull, 0, 0, 0);
-      mkH(new THREE.BoxGeometry(44, 1, 280), C.deck, 0, 8.5, 0);
+      // ── 프리미엄 머티리얼 팔레트 (Standard Material + Environment Reflection) ──
+      const matScale = (c, met = 0.5, rog = 0.4) => {
+        const m = new THREE.MeshStandardMaterial({
+          color: c,
+          metalness: met,
+          roughness: rog,
+          envMapIntensity: 1.2,
+        });
+        trackDisposable(m);
+        return m;
+      };
 
-      // 컨테이너 멀티 스택 (박스 수 대폭 증가 -> 하지만 시야 확보를 위해 층수 제한)
-      const colors = [C.box1, C.box2, C.box3];
-      for (let row = 0; row < 8; row++) {
-        const pz = -120 + row * 34;
-        if (row === 5) continue; // 브릿지 공간 비움
-        for (let col = -1; col <= 1; col++) {
-          // //* [Modified Code] 최대 4층(2 + (0~2))으로 제한하여 선교에서 뱃머리를 볼 때 가리지 않도록 물리량 하향
-          const height = 2 + Math.floor(Math.random() * 3); 
-          for (let h = 0; h < height; h++) {
-            const color = colors[(row + col + h) % 3];
-            mkH(new THREE.BoxGeometry(12, 6, 30), color, col * 13, 11.5 + h * 6.2, pz);
+      const C = {
+        iceRed: matScale(0x9b1c1c, 0.6, 0.3),
+        iceDark: matScale(0x4a1212, 0.7, 0.2),
+        lngHull: matScale(0x1e3a8a, 0.5, 0.4),
+        conHull: matScale(0x334155, 0.4, 0.5),
+        white: matScale(0xf8fafc, 0.2, 0.1),
+        deck: matScale(0x334155, 0.3, 0.6),
+        window: matScale(0x0f172a, 0.9, 0.1), // 반사율 높은 창문
+        tank: matScale(0xe2e8f0, 0.4, 0.3),
+        tankPipe: matScale(0x64748b, 0.8, 0.2),
+        box1: matScale(0x0284c7, 0.3, 0.6),
+        box2: matScale(0xd97706, 0.3, 0.6),
+        box3: matScale(0x059669, 0.3, 0.6),
+        dark: matScale(0x0f172a, 0.8, 0.1),
+        gold: matScale(0xb45309, 0.9, 0.1), // 안테나/센서용
+      };
+
+      if (shipType === 'icebreaker') {
+        // 🧊 [ICEBREAKER] 육중하고 강인한 쇄빙선
+        // 선체 보정: 더 날카로운 선수와 육중한 볼륨
+        mkH(new THREE.BoxGeometry(32, 12, 170), C.iceRed, 0, 0, 10);
+        mkH(new THREE.BoxGeometry(33, 5, 175), C.iceDark, 0, -6, 5);
+
+        // 쇄빙용 특수 선수 (Spoon Bow 스타일)
+        for (let i = 0; i < 5; i++) {
+          const s = 1 - i * 0.15;
+          mkH(
+            new THREE.BoxGeometry(32 * s, 3, 15),
+            C.iceRed,
+            0,
+            -1 - i * 1.5,
+            -80 - i * 4,
+          );
+        }
+        mkH(
+          new THREE.CylinderGeometry(0, 18, 30, 4),
+          C.iceRed,
+          0,
+          0,
+          -95,
+          0,
+          Math.PI / 4,
+        );
+
+        // 상부 구조물: 레이어드 디자인
+        mkU(new THREE.BoxGeometry(26, 12, 60), C.white, 0, 12, -30);
+        mkU(new THREE.BoxGeometry(24, 8, 40), C.white, 0, 22, -35); // 2단
+        mkU(new THREE.BoxGeometry(30, 6, 20), C.white, 0, 28, -45); // 브릿지 윙 확장
+        mkU(new THREE.BoxGeometry(28, 4, 18), C.window, 0, 28.5, -46); // 파노라마 창
+
+        // 정밀 마스트 및 레이더
+        mkU(new THREE.CylinderGeometry(0.8, 1.2, 25, 8), C.dark, 0, 40, -40);
+        for (let i = 0; i < 3; i++) {
+          mkU(
+            new THREE.BoxGeometry(10 - i * 2, 0.5, 3),
+            C.dark,
+            0,
+            35 + i * 5,
+            -40,
+          ); // 마스트 횡단보도
+        }
+        // 회전 레이더 가이드
+        mkU(new THREE.BoxGeometry(8, 1, 2), C.gold, 0, 52, -40);
+
+        // 선미 헬기 데크 및 안전 난간
+        mkH(new THREE.BoxGeometry(30, 1, 50), C.deck, 0, 6.5, 60);
+        mkH(
+          new THREE.BoxGeometry(20, 0.1, 20),
+          C.white,
+          0,
+          7.1,
+          60,
+          0,
+          Math.PI / 4,
+        ); // 정교한 H
+        for (let i = -1; i <= 1; i += 2) {
+          mkH(new THREE.BoxGeometry(0.5, 2, 50), C.dark, 14.5 * i, 8, 60); // 난간
+        }
+
+        // 대형 크레인 (Hydraulic 스타일)
+        mkU(new THREE.CylinderGeometry(2, 2.5, 6, 12), C.dark, 8, 8, 20);
+        mkU(new THREE.BoxGeometry(1.5, 1.5, 45), C.dark, 8, 18, 40, 0.5);
+      } else if (shipType === 'lng') {
+        // 🛢 [LNG CARRIER] 압도적인 크기의 에너지 운반선
+        // 거대 선체 (Freeboard가 높음)
+        mkH(new THREE.BoxGeometry(48, 22, 320), C.lngHull, 0, 0, 0);
+        mkH(new THREE.BoxGeometry(49, 8, 322), C.dark, 0, -12, 0);
+
+        // LNG 탱크 보호 커버 (Membrane 돔 스타일)
+        for (let i = 0; i < 4; i++) {
+          const pz = -120 + i * 75;
+          mkH(
+            new THREE.SphereGeometry(
+              22,
+              32,
+              16,
+              0,
+              Math.PI * 2,
+              0,
+              Math.PI / 2,
+            ),
+            C.tank,
+            0,
+            11,
+            pz,
+          );
+          // 탱크 베이스 사각형 구조
+          mkH(new THREE.BoxGeometry(44, 5, 60), C.white, 0, 12, pz);
+          // 파이프 라인 시스템
+          mkH(
+            new THREE.CylinderGeometry(1.2, 1.2, 310, 8),
+            C.tankPipe,
+            12,
+            16,
+            0,
+            Math.PI / 2,
+          );
+          mkH(
+            new THREE.CylinderGeometry(0.8, 0.8, 44, 8),
+            C.tankPipe,
+            0,
+            18,
+            pz,
+            0,
+            0,
+            Math.PI / 2,
+          );
+        }
+
+        // 거주구역 (고층 빌딩 스타일)
+        mkU(new THREE.BoxGeometry(44, 35, 60), C.white, 0, 28, 130);
+        for (let i = 0; i < 5; i++) {
+          mkU(new THREE.BoxGeometry(44.5, 2, 55), C.deck, 0, 15 + i * 7, 130); // 층간 구분선
+        }
+        mkU(new THREE.BoxGeometry(40, 8, 30), C.white, 0, 50, 120); // 최상단 브릿지
+        mkU(new THREE.BoxGeometry(42, 4, 28), C.window, 0, 51, 108); // 전면 대형창
+
+        // 트윈 연돌 (웅장함 강조)
+        mkU(new THREE.BoxGeometry(8, 25, 12), C.dark, -10, 55, 145);
+        mkU(new THREE.BoxGeometry(8, 25, 12), C.dark, 10, 55, 145);
+      } else {
+        // 📦 [CONTAINER SHIP] 촘촘하고 빈틈없는 적재 위용
+        mkH(new THREE.BoxGeometry(42, 16, 280), C.conHull, 0, 0, 0);
+        mkH(new THREE.BoxGeometry(44, 1, 280), C.deck, 0, 8.5, 0);
+
+        // 컨테이너 멀티 스택 (박스 수 대폭 증가 -> 하지만 시야 확보를 위해 층수 제한)
+        const colors = [C.box1, C.box2, C.box3];
+        for (let row = 0; row < 8; row++) {
+          const pz = -120 + row * 34;
+          if (row === 5) continue; // 브릿지 공간 비움
+          for (let col = -1; col <= 1; col++) {
+            // //* [Modified Code] 최대 4층(2 + (0~2))으로 제한하여 선교에서 뱃머리를 볼 때 가리지 않도록 물리량 하향
+            const height = 2 + Math.floor(Math.random() * 3);
+            for (let h = 0; h < height; h++) {
+              const color = colors[(row + col + h) % 3];
+              mkH(
+                new THREE.BoxGeometry(12, 6, 30),
+                color,
+                col * 13,
+                11.5 + h * 6.2,
+                pz,
+              );
+            }
           }
         }
+
+        // 거주구역 (중앙 집중형)
+        mkU(new THREE.BoxGeometry(40, 45, 35), C.white, 0, 30, 50);
+        mkU(new THREE.BoxGeometry(46, 6, 25), C.white, 0, 48, 45); // 브릿지 윙
+        mkU(new THREE.BoxGeometry(45, 3.5, 23), C.window, 0, 48.5, 44);
+
+        // 대형 마스트 및 통신 그리드
+        mkU(new THREE.BoxGeometry(2, 20, 2), C.dark, 0, 60, 55);
+        mkU(new THREE.BoxGeometry(20, 1, 1), C.dark, 0, 65, 55);
+        mkU(new THREE.BoxGeometry(15, 1, 1), C.dark, 0, 72, 55);
       }
 
-      // 거주구역 (중앙 집중형)
-      mkU(new THREE.BoxGeometry(40, 45, 35), C.white, 0, 30, 50);
-      mkU(new THREE.BoxGeometry(46, 6, 25), C.white, 0, 48, 45); // 브릿지 윙
-      mkU(new THREE.BoxGeometry(45, 3.5, 23), C.window, 0, 48.5, 44);
-      
-      // 대형 마스트 및 통신 그리드
-      mkU(new THREE.BoxGeometry(2, 20, 2), C.dark, 0, 60, 55);
-      mkU(new THREE.BoxGeometry(20, 1, 1), C.dark, 0, 65, 55);
-      mkU(new THREE.BoxGeometry(15, 1, 1), C.dark, 0, 72, 55);
-    }
+      // //! [Original Code] 작은 선박 스케일
+      // shipMesh3.scale.set(1.4, 1.4, 1.4);
 
-    // //! [Original Code] 작은 선박 스케일
-    // shipMesh3.scale.set(1.4, 1.4, 1.4);
+      // //* [Modified Code] 주변 배경(빙하 등)에 대비되어 너무 작게 느껴지지 않도록 선박 크기 상향 커스텀
+      shipMesh3.scale.set(2.8, 2.8, 2.8);
+      shipMesh3.position.y = SHIP_BASE_Y;
+      shipMesh3.add(shipUpper3);
+      shipGroup3.add(shipMesh3);
+      shipGroup3.add(cameraPivot3);
+      scene.add(shipGroup3);
 
-    // //* [Modified Code] 주변 배경(빙하 등)에 대비되어 너무 작게 느껴지지 않도록 선박 크기 상향 커스텀
-    shipMesh3.scale.set(2.8, 2.8, 2.8);
-    shipMesh3.position.y = SHIP_BASE_Y;
-    shipMesh3.add(shipUpper3);
-    shipGroup3.add(shipMesh3);
-    shipGroup3.add(cameraPivot3);
-    scene.add(shipGroup3);
-
-    ctx.current.shipGroup3 = shipGroup3;
-    ctx.current.shipMesh3 = shipMesh3;
-    ctx.current.shipUpper3 = shipUpper3;
-    ctx.current.cameraPivot3 = cameraPivot3;
-  }, [trackDisposable]);
+      ctx.current.shipGroup3 = shipGroup3;
+      ctx.current.shipMesh3 = shipMesh3;
+      ctx.current.shipUpper3 = shipUpper3;
+      ctx.current.cameraPivot3 = cameraPivot3;
+    },
+    [trackDisposable],
+  );
 
   // -- Foam wake particles --
   const buildFoam = useCallback(() => {
@@ -863,7 +1033,9 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
         const d = Math.abs(p2.z - p1.z);
         if (w < 100 || d < 100) return;
         const geo = trackDisposable(new THREE.BoxGeometry(w, h, d));
-        const mat = trackDisposable(new THREE.MeshPhongMaterial({ color, shininess: 5 }));
+        const mat = trackDisposable(
+          new THREE.MeshPhongMaterial({ color, shininess: 5 }),
+        );
         const m = new THREE.Mesh(geo, mat);
         m.position.set((p1.x + p2.x) / 2, h / 2, (p1.z + p2.z) / 2);
         m.receiveShadow = true;
@@ -934,90 +1106,106 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
   // updateOceanOverlay: DataTexture 방식 — GPU 선형 필터로 부드러운 그라데이션
   const ICE_TEX_SIZE = 256;
 
-  const updateOceanOverlay = useCallback((colorMode, shipLon, shipLat, sampleIceConcentrationFn) => {
-    const { waveGeo, waveMesh } = ctx.current;
-    if (!waveMesh || !waveGeo) return;
+  const updateOceanOverlay = useCallback(
+    (colorMode, shipLon, shipLat, sampleIceConcentrationFn) => {
+      const { waveGeo, waveMesh } = ctx.current;
+      if (!waveMesh || !waveGeo) return;
 
-    const modeChanged = ctx.current.oceanColorMode !== colorMode;
-    ctx.current.oceanColorMode = colorMode;
-    ctx.current.overlayFrame++;
-    if (!modeChanged && ctx.current.overlayFrame % 120 !== 0) return;
+      const modeChanged = ctx.current.oceanColorMode !== colorMode;
+      ctx.current.oceanColorMode = colorMode;
+      ctx.current.overlayFrame++;
+      if (!modeChanged && ctx.current.overlayFrame % 120 !== 0) return;
 
-    console.log('[OceanOverlay]', colorMode, 'lat:', shipLat?.toFixed(1), 'lon:', shipLon?.toFixed(1));
-
-    const mat = waveMesh.material;
-    if (!mat) return;
-
-    // ── none 모드: 텍스처 제거, 원래 바다색 복원 ──
-    if (colorMode === 'none') {
-      mat.map = null;
-      mat.vertexColors = false;
-      mat.color.setHex(0x0d4f8b);
-      mat.needsUpdate = true;
-      return;
-    }
-
-    // ── ice/depth 모드: DataTexture 생성 또는 재사용 ──
-    if (!ctx.current.iceTexData) {
-      ctx.current.iceTexData = new Uint8Array(ICE_TEX_SIZE * ICE_TEX_SIZE * 4);
-      ctx.current.iceTex = new THREE.DataTexture(
-        ctx.current.iceTexData, ICE_TEX_SIZE, ICE_TEX_SIZE,
+      console.log(
+        '[OceanOverlay]',
+        colorMode,
+        'lat:',
+        shipLat?.toFixed(1),
+        'lon:',
+        shipLon?.toFixed(1),
       );
-      ctx.current.iceTex.magFilter = THREE.LinearFilter;
-      ctx.current.iceTex.minFilter = THREE.LinearFilter;
-      ctx.current.iceTex.wrapS = THREE.ClampToEdgeWrapping;
-      ctx.current.iceTex.wrapT = THREE.ClampToEdgeWrapping;
-    }
 
-    const data = ctx.current.iceTexData;
-    const tex = ctx.current.iceTex;
-    const metersPerDeg = 111320;
-    const cosLat = Math.cos((shipLat * Math.PI) / 180);
-    // 바다 메시 크기 80000 × 80000, 스케일 1.5
-    const halfSize = 40000;
+      const mat = waveMesh.material;
+      if (!mat) return;
 
-    for (let ty = 0; ty < ICE_TEX_SIZE; ty++) {
-      for (let tx = 0; tx < ICE_TEX_SIZE; tx++) {
-        // 텍셀 → 로컬 좌표 → 위경도
-        const localX = (tx / (ICE_TEX_SIZE - 1) - 0.5) * 2 * halfSize;
-        const localZ = (ty / (ICE_TEX_SIZE - 1) - 0.5) * 2 * halfSize;
-        const vLon = shipLon + (localX * 1.5) / (metersPerDeg * cosLat);
-        const vLat = shipLat - (localZ * 1.5) / metersPerDeg;
+      // ── none 모드: 텍스처 제거, 원래 바다색 복원 ──
+      if (colorMode === 'none') {
+        mat.map = null;
+        mat.vertexColors = false;
+        mat.color.setHex(0x0d4f8b);
+        mat.needsUpdate = true;
+        return;
+      }
 
-        const conc = sampleIceConcentrationFn ? sampleIceConcentrationFn(vLon, vLat) : 0;
-        const idx = (ty * ICE_TEX_SIZE + tx) * 4;
+      // ── ice/depth 모드: DataTexture 생성 또는 재사용 ──
+      if (!ctx.current.iceTexData) {
+        ctx.current.iceTexData = new Uint8Array(
+          ICE_TEX_SIZE * ICE_TEX_SIZE * 4,
+        );
+        ctx.current.iceTex = new THREE.DataTexture(
+          ctx.current.iceTexData,
+          ICE_TEX_SIZE,
+          ICE_TEX_SIZE,
+        );
+        ctx.current.iceTex.magFilter = THREE.LinearFilter;
+        ctx.current.iceTex.minFilter = THREE.LinearFilter;
+        ctx.current.iceTex.wrapS = THREE.ClampToEdgeWrapping;
+        ctx.current.iceTex.wrapT = THREE.ClampToEdgeWrapping;
+      }
 
-        if (colorMode === 'ice') {
-          // 자연색 모드: naturalIceRGBA가 RGBA 직접 반환
-          const [r, g, b, a] = naturalIceRGBA(conc || 0);
-          data[idx]     = r;
-          data[idx + 1] = g;
-          data[idx + 2] = b;
-          data[idx + 3] = a;
-        } else {
-          let rgb;
-          if (colorMode === 'thickness') {
-            const thickM = (conc || 0) * 5.0;
-            rgb = thicknessToRGB(thickM);
-          } else if (colorMode === 'edge') {
-            rgb = edgeToRGB(conc || 0);
+      const data = ctx.current.iceTexData;
+      const tex = ctx.current.iceTex;
+      const metersPerDeg = 111320;
+      const cosLat = Math.cos((shipLat * Math.PI) / 180);
+      // 바다 메시 크기 80000 × 80000, 스케일 1.5
+      const halfSize = 40000;
+
+      for (let ty = 0; ty < ICE_TEX_SIZE; ty++) {
+        for (let tx = 0; tx < ICE_TEX_SIZE; tx++) {
+          // 텍셀 → 로컬 좌표 → 위경도
+          const localX = (tx / (ICE_TEX_SIZE - 1) - 0.5) * 2 * halfSize;
+          const localZ = (ty / (ICE_TEX_SIZE - 1) - 0.5) * 2 * halfSize;
+          const vLon = shipLon + (localX * 1.5) / (metersPerDeg * cosLat);
+          const vLat = shipLat - (localZ * 1.5) / metersPerDeg;
+
+          const conc = sampleIceConcentrationFn
+            ? sampleIceConcentrationFn(vLon, vLat)
+            : 0;
+          const idx = (ty * ICE_TEX_SIZE + tx) * 4;
+
+          if (colorMode === 'ice') {
+            // 자연색 모드: naturalIceRGBA가 RGBA 직접 반환
+            const [r, g, b, a] = naturalIceRGBA(conc || 0);
+            data[idx] = r;
+            data[idx + 1] = g;
+            data[idx + 2] = b;
+            data[idx + 3] = a;
           } else {
-            rgb = depthToRGB(estimateBathymetry(vLon, vLat));
+            let rgb;
+            if (colorMode === 'thickness') {
+              const thickM = (conc || 0) * 5.0;
+              rgb = thicknessToRGB(thickM);
+            } else if (colorMode === 'edge') {
+              rgb = edgeToRGB(conc || 0);
+            } else {
+              rgb = depthToRGB(estimateBathymetry(vLon, vLat));
+            }
+            data[idx] = Math.round(rgb[0] * 255);
+            data[idx + 1] = Math.round(rgb[1] * 255);
+            data[idx + 2] = Math.round(rgb[2] * 255);
+            data[idx + 3] = 255;
           }
-          data[idx]     = Math.round(rgb[0] * 255);
-          data[idx + 1] = Math.round(rgb[1] * 255);
-          data[idx + 2] = Math.round(rgb[2] * 255);
-          data[idx + 3] = 255;
         }
       }
-    }
 
-    tex.needsUpdate = true;
-    mat.map = tex;
-    mat.vertexColors = false;
-    mat.color.setHex(0xffffff);
-    mat.needsUpdate = true;
-  }, []);
+      tex.needsUpdate = true;
+      mat.map = tex;
+      mat.vertexColors = false;
+      mat.color.setHex(0xffffff);
+      mat.needsUpdate = true;
+    },
+    [],
+  );
 
   // updateFoam: animate bow-spray particles
   const updateFoam = useCallback((dt, heading, speedMS, shipPosVec) => {
@@ -1088,11 +1276,17 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
     const aH = st.Hs * 0.3 * Math.sin(c.motionWavePhase * 0.9 + 0.7);
 
     c.shipRollVel +=
-      (-2 * zetaR * c.omegaR * c.shipRollVel - c.omegaR * c.omegaR * c.shipRoll + aR) * dt;
+      (-2 * zetaR * c.omegaR * c.shipRollVel -
+        c.omegaR * c.omegaR * c.shipRoll +
+        aR) *
+      dt;
     c.shipRoll += c.shipRollVel * dt;
 
     c.shipPitchVel +=
-      (-2 * zetaP * c.omegaP * c.shipPitchVel - c.omegaP * c.omegaP * c.shipPitch + aP) * dt;
+      (-2 * zetaP * c.omegaP * c.shipPitchVel -
+        c.omegaP * c.omegaP * c.shipPitch +
+        aP) *
+      dt;
     c.shipPitch += c.shipPitchVel * dt;
 
     c.shipHeaveVel +=
@@ -1149,31 +1343,35 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
   }, []);
 
   // syncThreeIcebergs: show/hide icebergs based on ice concentration
-  const syncThreeIcebergs = useCallback((conc, shipPosVec, headingFn, cachedIceData) => {
-    const c = ctx.current;
-    const activeCount = Math.floor(conc * MAX_LOCAL_ICEBERGS);
+  const syncThreeIcebergs = useCallback(
+    (conc, shipPosVec, headingFn, cachedIceData) => {
+      const c = ctx.current;
+      const activeCount = Math.floor(conc * MAX_LOCAL_ICEBERGS);
 
-    for (let i = 0; i < c.tIcebergs.length; i++) {
-      const ice = c.tIcebergs[i];
-      ice.grp.visible = i < activeCount;
+      for (let i = 0; i < c.tIcebergs.length; i++) {
+        const ice = c.tIcebergs[i];
+        ice.grp.visible = i < activeCount;
 
-      if (ice.grp.visible && shipPosVec) {
-        const dx = ice.cx - shipPosVec.x;
-        const dz = ice.cz - shipPosVec.z;
-        const heading = typeof headingFn === 'function' ? headingFn() : headingFn;
-        const dotFwd = dx * Math.sin(heading) + -dz * Math.cos(heading);
+        if (ice.grp.visible && shipPosVec) {
+          const dx = ice.cx - shipPosVec.x;
+          const dz = ice.cz - shipPosVec.z;
+          const heading =
+            typeof headingFn === 'function' ? headingFn() : headingFn;
+          const dotFwd = dx * Math.sin(heading) + -dz * Math.cos(heading);
 
-        if (dotFwd < -8000 || Math.sqrt(dx * dx + dz * dz) > 25000) {
-          const angle = (Math.random() - 0.5) * Math.PI * 0.8;
-          const h = heading + angle;
-          const spawnDist = rng(8000, 20000);
-          ice.cx = shipPosVec.x + Math.sin(h) * spawnDist;
-          ice.cz = shipPosVec.z - Math.cos(h) * spawnDist;
-          ice.grp.position.set(ice.cx, 0, ice.cz);
+          if (dotFwd < -8000 || Math.sqrt(dx * dx + dz * dz) > 25000) {
+            const angle = (Math.random() - 0.5) * Math.PI * 0.8;
+            const h = heading + angle;
+            const spawnDist = rng(8000, 20000);
+            ice.cx = shipPosVec.x + Math.sin(h) * spawnDist;
+            ice.cz = shipPosVec.z - Math.cos(h) * spawnDist;
+            ice.grp.position.set(ice.cx, 0, ice.cz);
+          }
         }
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
   // checkAutoCollisions: iceberg collision detection
   const checkAutoCollisions = useCallback((shipPosVec, collisionOffset) => {
@@ -1222,7 +1420,15 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
 
   // computeFovTarget
   const computeFovTarget = useCallback(
-    (currentModeStr, isManual, binocularsActive, shipSpeedVal, shipThrottleVal, fovSliderOverride, fovBaseVal) => {
+    (
+      currentModeStr,
+      isManual,
+      binocularsActive,
+      shipSpeedVal,
+      shipThrottleVal,
+      fovSliderOverride,
+      fovBaseVal,
+    ) => {
       const c = ctx.current;
       if (!isManual || currentModeStr !== 'BRIDGE') return 90;
       if (binocularsActive) return 15;
@@ -1249,13 +1455,27 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
   useImperativeHandle(
     ref,
     () => ({
-      get scene() { return ctx.current.scene; },
-      get camera() { return ctx.current.camera; },
-      get renderer() { return ctx.current.renderer; },
-      get shipPivot() { return ctx.current.shipGroup3; },
-      get shipMesh() { return ctx.current.shipMesh3; },
-      get cameraPivot() { return ctx.current.cameraPivot3; },
-      get tIcebergs() { return ctx.current.tIcebergs; },
+      get scene() {
+        return ctx.current.scene;
+      },
+      get camera() {
+        return ctx.current.camera;
+      },
+      get renderer() {
+        return ctx.current.renderer;
+      },
+      get shipPivot() {
+        return ctx.current.shipGroup3;
+      },
+      get shipMesh() {
+        return ctx.current.shipMesh3;
+      },
+      get cameraPivot() {
+        return ctx.current.cameraPivot3;
+      },
+      get tIcebergs() {
+        return ctx.current.tIcebergs;
+      },
       get motionState() {
         const c = ctx.current;
         return {
@@ -1308,7 +1528,11 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
     if (!canvas) return;
 
     // Renderer
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: false,
+    });
     renderer.setClearColor(0x1a3a5c, 1);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -1335,7 +1559,10 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
     // IBL environment map (arctic sky gradient for iceberg reflections)
     const pmrem = new THREE.PMREMGenerator(renderer);
     pmrem.compileEquirectangularShader();
-    const cv = Object.assign(document.createElement('canvas'), { width: 64, height: 32 });
+    const cv = Object.assign(document.createElement('canvas'), {
+      width: 64,
+      height: 32,
+    });
     const cvCtx = cv.getContext('2d');
     const g = cvCtx.createLinearGradient(0, 0, 0, 32);
     g.addColorStop(0, '#07101e');
@@ -1370,7 +1597,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
       flatShading: true,
     });
     ctx.current.realBergMat = new THREE.MeshStandardMaterial({
-      color: 0xFFCC00,
+      color: 0xffcc00,
       roughness: 0.7,
       metalness: 0.0,
       envMapIntensity: 0.4,
@@ -1445,7 +1672,16 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
       ctx.current.scene = null;
       ctx.current.camera = null;
     };
-  }, [buildSky, buildLighting, buildOcean, buildIcebergs, buildShip, buildFoam, buildLandMasses, specs.type]);
+  }, [
+    buildSky,
+    buildLighting,
+    buildOcean,
+    buildIcebergs,
+    buildShip,
+    buildFoam,
+    buildLandMasses,
+    specs.type,
+  ]);
 
   // ── Update ship position/heading from props ───────────────────────────────
   useEffect(() => {
@@ -1464,23 +1700,34 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
   }, [shipState, mode]);
 
   // ── FOLLOW 줌 상태 (스크롤) ──────────────────────────────────────────────
-  const followZoomTargetRef = useRef(220);
-  const followZoomCurrentRef = useRef(220);
+  const followZoomTargetRef = useRef(600);
+  const followZoomCurrentRef = useRef(600);
 
   useEffect(() => {
     function handleWheel(e) {
       if (mode !== 'FOLLOW') return;
       e.preventDefault();
       const delta = e.deltaY > 0 ? 50 : -50;
-      followZoomTargetRef.current = Math.max(60, Math.min(2000, followZoomTargetRef.current + delta));
+      followZoomTargetRef.current = Math.max(
+        ZOOM_MIN,
+        Math.min(ZOOM_MAX, followZoomTargetRef.current + delta),
+      );
     }
     const el = wrapRef.current;
     if (el) el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => { if (el) el.removeEventListener('wheel', handleWheel); };
+    return () => {
+      if (el) el.removeEventListener('wheel', handleWheel);
+    };
   }, [mode]);
 
   // ── FOLLOW 오빗 상태 (드래그 회전) ────────────────────────────────────────
-  const orbitRef = useRef({ yaw: 0, pitch: 0.06, dragging: false, lastX: 0, lastY: 0 });
+  const orbitRef = useRef({
+    yaw: 0,
+    pitch: 0.06,
+    dragging: false,
+    lastX: 0,
+    lastY: 0,
+  });
 
   useEffect(() => {
     if (mode !== 'FOLLOW') return;
@@ -1498,8 +1745,8 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
       if (!orbit.dragging) return;
       const dx = e.clientX - orbit.lastX;
       const dy = e.clientY - orbit.lastY;
-      orbit.yaw   -= dx * 0.006;
-      orbit.pitch  = Math.max(-0.05, Math.min(0.9, orbit.pitch - dy * 0.004));
+      orbit.yaw -= dx * 0.006;
+      orbit.pitch = Math.max(-0.05, Math.min(0.9, orbit.pitch - dy * 0.004));
       orbit.lastX = e.clientX;
       orbit.lastY = e.clientY;
     };
@@ -1532,12 +1779,20 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
       camera.lookAt(0, 15, -500);
       camera.updateProjectionMatrix();
     } else if (mode === 'FOLLOW') {
-      followZoomTargetRef.current = 220;
-      followZoomCurrentRef.current = 220;
+      // //! [Original Code]
+      //       followZoomTargetRef.current = 220;
+      //       followZoomCurrentRef.current = 220;
+      // //* [Modified Code] 대형 상선(Scale 2.8)에 맞춰 초기 선미 추적 거리를 대폭 확장
+      let defaultDist = 600;
+      if (specs?.type === 'lng') defaultDist = 1200;
+      else if (specs?.type === 'container') defaultDist = 1000;
+
+      followZoomTargetRef.current = defaultDist;
+      followZoomCurrentRef.current = defaultDist;
       camera.fov = 75;
-      camera.near = 0.1;
-      camera.position.set(0, 80, 300);
-      camera.lookAt(0, 10, -100);
+      camera.near = 0.5; // Near clipping plane 조정
+      camera.position.set(0, 150, defaultDist);
+      camera.lookAt(0, 30, -100);
       camera.updateProjectionMatrix();
     }
   }, [mode]);
@@ -1557,7 +1812,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
 
         // 배 heading 부드러운 보간 (FOLLOW/자동 모드)
         if (shipGroup3 && shipState) {
-          const headingRad = -(shipState.heading || 0) * Math.PI / 180;
+          const headingRad = (-(shipState.heading || 0) * Math.PI) / 180;
           let diff = headingRad - shipGroup3.rotation.y;
           while (diff < -Math.PI) diff += Math.PI * 2;
           while (diff > Math.PI) diff -= Math.PI * 2;
@@ -1568,19 +1823,39 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
         if (mode === 'BRIDGE' && camera && shipGroup3) {
           const pos = shipGroup3.position;
           const ry = shipGroup3.rotation.y;
-          
-          // //* [Modified Code] 대형 컨테이너나 상부구조물이 뱃머리(Bow)를 가리지 않으면서, 뱃머리를 시야 하단에 담기 위해 고도 및 하향 앵글 각도 조정
-          let localY = 32; 
-          let localZ = -46;  
+
+          // //! [Original Code]
+          //           let localY = 32;
+          //           let localZ = -46;
+          //           if (specs?.type === 'lng') {
+          //             localY = 55; localZ = 110;
+          //           } else if (specs?.type === 'container') {
+          //             localY = 58; localZ = 50;
+          //           } else {
+          //             localY = 36; localZ = -20; // 쇄빙선도 마스트에 가리지 않도록 약간 뒤로 후퇴
+          //           }
+          //           localY *= 1.4;
+          //           localZ *= 1.4;
+          // //! [Original Code]
+          //           let localY = 45;
+          //           let localZ = -30;
+          //           if (specs?.type === 'lng') {
+          //             localY = 75; localZ = 150;
+          //           } else if (specs?.type === 'container') {
+          //             localY = 80; localZ = 70;
+          //           }
+          // //* [Modified Code] 사용자의 요청에 따라 선교 시점을 뱃머리(Bow) 쪽으로 더 전진 배치 (localZ 상향 조정)
+          let localY = 45;
+          let localZ = -60;
           if (specs?.type === 'lng') {
-            localY = 55; localZ = 110;
+            localY = 75;
+            localZ = 110;
           } else if (specs?.type === 'container') {
-            localY = 58; localZ = 50; 
-          } else {
-            localY = 36; localZ = -20; // 쇄빙선도 마스트에 가리지 않도록 약간 뒤로 후퇴 
+            localY = 80;
+            localZ = 20;
           }
-          localY *= 1.4;
-          localZ *= 1.4;
+          localY *= 2.0;
+          localZ *= 2.0;
 
           const bx = pos.x + localZ * Math.sin(ry);
           const bz = pos.z + localZ * Math.cos(ry);
@@ -1594,7 +1869,8 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
 
         // FOLLOW 카메라 — 오빗 드래그 + 부드러운 줌
         if (mode === 'FOLLOW' && camera && shipGroup3) {
-          followZoomCurrentRef.current += (followZoomTargetRef.current - followZoomCurrentRef.current) * 0.06;
+          followZoomCurrentRef.current +=
+            (followZoomTargetRef.current - followZoomCurrentRef.current) * 0.06;
           const dist = followZoomCurrentRef.current;
           const shipPos = shipGroup3.position;
           const ry = shipGroup3.rotation.y; // 선박 회전각
@@ -1605,22 +1881,45 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
           const angle = ry + orbit.yaw;
           const pitch = orbit.pitch; // 0=수평, 양수=위
 
-          // //* [Modified Code] 선미 추적 모드에서도 선종에 따라 기본 카메라 고도를 높여 대형 컨테이너 등 시야 확보
-          let followHeightOffset = 8;
-          let lookAtYOffset = 20;
+          // //! [Original Code]
+          //           let followHeightOffset = 15;
+          //           let lookAtYOffset = 35;
+          //           if (specs?.type === 'lng') {
+          //             followHeightOffset = 55; lookAtYOffset = 80;
+          //           } else if (specs?.type === 'container') {
+          //             followHeightOffset = 70; lookAtYOffset = 75;
+          //           }
+          // //* [Modified Code] 선미 추적 모드 시점(높이 및 주시점) 2차 상향 조정 (쾌적한 시야 확보)
+          let followHeightOffset = 50;
+          let lookAtYOffset = 60;
           if (specs?.type === 'lng') {
-            followHeightOffset = 30; lookAtYOffset = 50;
+            followHeightOffset = 120;
+            lookAtYOffset = 180;
           } else if (specs?.type === 'container') {
-            followHeightOffset = 40; lookAtYOffset = 45;
+            followHeightOffset = 100;
+            lookAtYOffset = 140;
           }
 
           const MathMax = Math.max;
           const camX = shipPos.x + Math.sin(angle) * dist * Math.cos(pitch);
           const camZ = shipPos.z + Math.cos(angle) * dist * Math.cos(pitch);
-          const camY = shipPos.y + SHIP_BASE_Y + dist * 0.04 + followHeightOffset + Math.sin(pitch) * dist * 0.5;
+          const camY =
+            shipPos.y +
+            SHIP_BASE_Y +
+            dist * 0.04 +
+            followHeightOffset +
+            Math.sin(pitch) * dist * 0.5;
 
-          camera.position.set(camX, MathMax(SHIP_BASE_Y + followHeightOffset * 0.5, camY), camZ);
-          camera.lookAt(shipPos.x, shipPos.y + SHIP_BASE_Y * 1.4 + lookAtYOffset, shipPos.z);
+          camera.position.set(
+            camX,
+            MathMax(SHIP_BASE_Y + followHeightOffset * 0.5, camY),
+            camZ,
+          );
+          camera.lookAt(
+            shipPos.x,
+            shipPos.y + SHIP_BASE_Y * 1.4 + lookAtYOffset,
+            shipPos.z,
+          );
 
           const pitchLerp = Math.min(1, dist / 1500);
           camera.fov = 75 - pitchLerp * 20;
@@ -1628,7 +1927,9 @@ const ThreeOverlay = forwardRef(function ThreeOverlay({ visible, shipState, spec
         }
 
         renderer.render(scene, camera);
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
     }
     rafId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId);
