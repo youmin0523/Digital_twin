@@ -40,3 +40,23 @@
 2026-04-08 08:02:31,987 [INFO] Archive already exists, skipping: C:\Hijin\pjbingha\Digital_twin\backend\pipeline\fetchers\..\..\data\archive\realIceData_20260407.json
 2026-04-08 08:02:32,191 [INFO] Copied to: C:\Hijin\pjbingha\Digital_twin\backend\pipeline\fetchers\realIceData_latest.json
 2026-04-08 08:02:32,192 [INFO] Done! 128201 cells saved.
+2026-04-08 09:26:20,149 [INFO] Target date: 2026-04-07
+2026-04-08 09:26:20,150 [INFO] Opening dataset: cmems_mod_arc_phy_anfc_6km_detided_P1D-m
+2026-04-08 09:26:30,546 [INFO] Selected dataset version: "202311"
+2026-04-08 09:26:30,546 [INFO] Selected dataset part: "default"
+2026-04-08 09:26:37,828 [INFO] Variable: siconc
+2026-04-08 09:26:43,408 [INFO] Cells extracted: 128201
+2026-04-08 09:26:45,094 [INFO] Saved: C:\Hijin\pjbingha\Digital_twin\backend\pipeline\fetchers\..\..\data\realIceData_latest.json (7049 KB, 128201 cells)
+2026-04-08 09:26:45,096 [INFO] Archive already exists, skipping: C:\Hijin\pjbingha\Digital_twin\backend\pipeline\fetchers\..\..\data\archive\realIceData_20260407.json
+2026-04-08 09:26:45,211 [INFO] Copied to: C:\Hijin\pjbingha\Digital_twin\backend\pipeline\fetchers\realIceData_latest.json
+2026-04-08 09:26:45,211 [INFO] Done! 128201 cells saved.
+2026-04-08 09:35:37,793 [INFO] Target date: 2026-04-07
+2026-04-08 09:35:37,794 [INFO] Opening dataset: cmems_mod_arc_phy_anfc_6km_detided_P1D-m
+2026-04-08 09:35:47,850 [INFO] Selected dataset version: "202311"
+2026-04-08 09:35:47,850 [INFO] Selected dataset part: "default"
+2026-04-08 09:35:56,295 [INFO] Variable: siconc
+2026-04-08 09:36:01,015 [INFO] Cells extracted: 128201
+2026-04-08 09:36:02,249 [INFO] Saved: C:\Hijin\pjbingha\Digital_twin\backend\pipeline\fetchers\..\..\data\realIceData_latest.json (7049 KB, 128201 cells)
+2026-04-08 09:36:02,249 [INFO] Archive already exists, skipping: C:\Hijin\pjbingha\Digital_twin\backend\pipeline\fetchers\..\..\data\archive\realIceData_20260407.json
+2026-04-08 09:36:02,255 [INFO] Copied to: C:\Hijin\pjbingha\Digital_twin\backend\pipeline\fetchers\realIceData_latest.json
+2026-04-08 09:36:02,256 [INFO] Done! 128201 cells saved.

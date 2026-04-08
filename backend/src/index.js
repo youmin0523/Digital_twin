@@ -2,8 +2,9 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const schedule = require('node-schedule');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const iceRouter = require('./routes/ice');
 const icebergRouter = require('./routes/iceberg');
@@ -45,6 +46,71 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// ── RL Pipeline 내부 프로세스 관리 + 프록시 ──────────────────
+const RL_PORT = 8001;
+const RL_VENV_PYTHON = path.join(
+  __dirname, '..', '..', 'rl-pipeline', 'venv',
+  process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
+);
+
+let rlProcess = null;
+let rlRestartCount = 0;
+const RL_MAX_RESTARTS = 3;
+
+function startRLServer() {
+  const fs = require('fs');
+  if (!fs.existsSync(RL_VENV_PYTHON)) {
+    console.warn('[RL] Python venv not found at', RL_VENV_PYTHON);
+    console.warn('[RL] RL pipeline disabled. Run: cd rl-pipeline && python -m venv venv && venv/Scripts/pip install -r requirements.txt');
+    return;
+  }
+
+  console.log('[RL] Starting Python RL server on internal port', RL_PORT);
+  rlProcess = spawn(RL_VENV_PYTHON, [
+    '-m', 'uvicorn', 'server:app',
+    '--host', '127.0.0.1',
+    '--port', String(RL_PORT),
+  ], {
+    cwd: path.join(__dirname, '..', '..', 'rl-pipeline'),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  rlProcess.stdout.on('data', (data) => {
+    const msg = data.toString().trim();
+    if (msg) console.log('[RL]', msg);
+  });
+
+  rlProcess.stderr.on('data', (data) => {
+    const msg = data.toString().trim();
+    if (msg) console.error('[RL]', msg);
+  });
+
+  rlProcess.on('close', (code) => {
+    console.warn(`[RL] Python process exited with code ${code}`);
+    rlProcess = null;
+    if (code !== 0 && rlRestartCount < RL_MAX_RESTARTS) {
+      rlRestartCount++;
+      console.log(`[RL] Restarting... (attempt ${rlRestartCount}/${RL_MAX_RESTARTS})`);
+      setTimeout(startRLServer, 3000);
+    }
+  });
+}
+
+// /api/rl/* → 내부 Python 서버로 프록시
+app.use('/api/rl', createProxyMiddleware({
+  target: `http://127.0.0.1:${RL_PORT}`,
+  changeOrigin: true,
+  timeout: 30000,
+  proxyTimeout: 30000,
+  onError: (_err, _req, res) => {
+    res.status(503).json({
+      error: 'RL 서버에 연결할 수 없습니다.',
+      fallback: true,
+      detail: rlProcess ? 'RL 서버 시작 중...' : 'RL 서버가 비활성화되어 있습니다.',
+    });
+  },
+}));
 
 // ── Iceberg pipeline scheduler ──────────────────────────────────
 const SCRIPT_PATH = path.join(__dirname, '..', 'scripts', 'update_icebergs.py');
@@ -154,4 +220,11 @@ setTimeout(runSentinel1Fetcher, 150000);
 app.listen(PORT, () => {
   console.log(`[Server] Arctic Digital Twin API running on http://localhost:${PORT}`);
   console.log(`[Scheduler] Sentinel-1: 01:00 UTC | Ice: 02:00 UTC | SAR: 03:00 UTC | Berg: 04:00 UTC | Weather: every 6h`);
+  // RL 파이프라인 자동 기동
+  startRLServer();
 });
+
+// 프로세스 종료 시 RL 서버도 정리
+process.on('exit', () => { if (rlProcess) rlProcess.kill(); });
+process.on('SIGINT', () => { if (rlProcess) rlProcess.kill(); process.exit(); });
+process.on('SIGTERM', () => { if (rlProcess) rlProcess.kill(); process.exit(); });

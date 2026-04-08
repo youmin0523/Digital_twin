@@ -117,6 +117,14 @@ function reducer(state, action) {
     case 'SET_GENERATED_WAYPOINTS':
       return { ...state, generatedWaypoints: action.payload };
 
+    case 'SET_GENERATED_WAYPOINTS_WITH_PROGRESS':
+      return {
+        ...state,
+        generatedWaypoints: action.payload.waypoints,
+        simProgress: action.payload.progress,
+        simElapsed: action.payload.elapsed,
+      };
+
     case 'SET_REROUTING':
       return { ...state, isRerouting: action.payload };
 
