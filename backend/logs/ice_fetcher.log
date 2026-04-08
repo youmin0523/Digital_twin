@@ -8,3 +8,13 @@
 2026-04-08 05:24:28,149 [INFO] Archived: C:\Users\Codelab\Desktop\PROJECT\Portfolio\Digital Twin\backend\pipeline\fetchers\..\..\data\archive\realIceData_20260407.json
 2026-04-08 05:24:28,153 [INFO] Copied to: C:\Users\Codelab\Desktop\PROJECT\Portfolio\Digital Twin\backend\pipeline\fetchers\realIceData_latest.json
 2026-04-08 05:24:28,153 [INFO] Done! 128201 cells saved.
+2026-04-08 06:44:43,740 [INFO] Target date: 2026-04-07
+2026-04-08 06:44:43,741 [INFO] Opening dataset: cmems_mod_arc_phy_anfc_6km_detided_P1D-m
+2026-04-08 06:44:50,970 [INFO] Selected dataset version: "202311"
+2026-04-08 06:44:50,970 [INFO] Selected dataset part: "default"
+2026-04-08 06:44:55,882 [INFO] Variable: siconc
+2026-04-08 06:44:59,706 [INFO] Cells extracted: 128201
+2026-04-08 06:45:00,294 [INFO] Saved: C:\Users\Codelab\Desktop\PROJECT\Portfolio\Digital Twin\backend\pipeline\fetchers\..\..\data\realIceData_latest.json (7049 KB, 128201 cells)
+2026-04-08 06:45:00,294 [INFO] Archive already exists, skipping: C:\Users\Codelab\Desktop\PROJECT\Portfolio\Digital Twin\backend\pipeline\fetchers\..\..\data\archive\realIceData_20260407.json
+2026-04-08 06:45:00,298 [INFO] Copied to: C:\Users\Codelab\Desktop\PROJECT\Portfolio\Digital Twin\backend\pipeline\fetchers\realIceData_latest.json
+2026-04-08 06:45:00,298 [INFO] Done! 128201 cells saved.
