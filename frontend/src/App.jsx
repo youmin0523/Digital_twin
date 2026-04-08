@@ -60,6 +60,7 @@ import {
   checkRouteAhead,
   rerouteAroundIceberg,
 } from './services/icebergAvoidance';
+import { createRLAvoidanceController } from './services/rlAvoidanceController';
 
 function AppInner() {
   const state = useAppState();
@@ -336,51 +337,38 @@ function AppInner() {
     };
   }, [state.departurePort, state.arrivalPort, state.currentRouteKey]);
 
-  // ── 시뮬레이션 중 빙산 회피 체크 (10초 간격) ──────────────────
+  // ── RL 기반 빙산 회피 컨트롤러 (2초 간격) ──────────────────────
+  const rlControllerRef = useRef(null);
+
   useEffect(() => {
-    if (!state.isSimulating || state.manualMode) return;
-    if (realBergsRef.current.length === 0) return;
-
-    const interval = setInterval(async () => {
-      const wps = activeWaypoints;
-      const progress = state.simProgress;
-      const currentSeg = Math.floor(progress * (wps.length - 1));
-
-      const { blocked, dangerIdx } = checkRouteAhead(
-        wps,
-        currentSeg,
-        realBergsRef.current,
-        10,
-        15,
-      );
-
-      if (blocked && state.cachedIceData) {
-        showToast('빙산 감지! 우회 경로 계산 중...', 5000);
-        dispatch({ type: 'SET_REROUTING', payload: true });
-        try {
-          const { rerouted, newWaypoints } = await rerouteAroundIceberg(
-            wps,
-            dangerIdx,
-            state.cachedIceData,
-            realBergsRef.current,
-          );
-          if (rerouted) {
-            dispatch({
-              type: 'SET_GENERATED_WAYPOINTS',
-              payload: newWaypoints,
-            });
-            showToast('빙산 우회 경로 적용 완료');
-          }
-        } catch (e) {
-          console.error('[App] 빙산 우회 실패:', e);
-        } finally {
-          dispatch({ type: 'SET_REROUTING', payload: false });
-        }
+    if (!state.isSimulating || state.manualMode) {
+      if (rlControllerRef.current) {
+        rlControllerRef.current.stop();
       }
-    }, 10000); // 10초마다
+      return;
+    }
 
-    return () => clearInterval(interval);
-  }, [state.isSimulating, state.manualMode, state.simProgress]);
+    // RL 회피 컨트롤러 생성 (기존 A* 폴백 포함)
+    const controller = createRLAvoidanceController({
+      getShipState: () => state.shipState,
+      getIcebergs: () => realBergsRef.current,
+      getActiveWps: () => activeWpRef.current,
+      getProgress: () => state.simProgress,
+      getIceData: () => state.cachedIceData,
+      getWeather: () => ({
+        visibility_km: parseFloat(state.hud.vis) || 10,
+        wave_height_m: parseFloat(state.hud.hs) || 1,
+      }),
+      getIceClass: () => state.shipSpecs?.iceClass || 'PC5',
+      dispatch,
+      showToast,
+    });
+
+    rlControllerRef.current = controller;
+    controller.start();
+
+    return () => controller.stop();
+  }, [state.isSimulating, state.manualMode]);
 
   // ── 메인 애니메이션 루프 ──────────────────────────────────────
   useEffect(() => {
@@ -949,6 +937,33 @@ function AppInner() {
         payload: mode === 'BRIDGE' || mode === 'FOLLOW',
       });
 
+      // BRIDGE/FOLLOW 전환 시 선박 위치 동기화 + 빙산 즉시 갱신
+      if (mode === 'BRIDGE' || mode === 'FOLLOW') {
+        const { lon, lat } = state.shipState;
+        const three = threeRef.current;
+        console.log('[ModeSwitch]', mode, 'shipState:', lat, lon,
+          'realBergs:', realBergsRef.current.length,
+          'threeRef:', !!three, 'shipPivot:', !!three?.shipPivot);
+        if (three?.shipPivot) {
+          const depPort = PORTS[state.departurePort] || PORTS.BUSAN;
+          const METERS_PER_DEGREE_LAT = 111132.954;
+          const mPerDegLon =
+            111319.491 * Math.cos((depPort.lat * Math.PI) / 180);
+          three.shipPivot.position.x =
+            ((lon - depPort.lon) * mPerDegLon) / 1.5;
+          three.shipPivot.position.z =
+            (-(lat - depPort.lat) * METERS_PER_DEGREE_LAT) / 1.5;
+          console.log('[ModeSwitch] shipPivot set to:',
+            three.shipPivot.position.x.toFixed(1),
+            three.shipPivot.position.z.toFixed(1));
+        }
+        if (realBergsRef.current.length > 0) {
+          three?.updateRealBergs(realBergsRef.current, lat, lon);
+        } else {
+          console.warn('[ModeSwitch] realBergsRef is EMPTY!');
+        }
+      }
+
       // SATELLITE/WIDE 전환 시 카메라를 선박 위치로 이동
       if (mode === 'SATELLITE' || mode === 'WIDE') {
         const { lon, lat } = state.shipState;
@@ -984,7 +999,7 @@ function AppInner() {
         }
       }
     },
-    [dispatch, state.shipState],
+    [dispatch, state.shipState, state.departurePort],
   );
 
   const handleManualToggle = useCallback(() => {
@@ -1109,6 +1124,14 @@ function AppInner() {
             (-(pos.lat - depPort.lat) * METERS_PER_DEGREE_LAT) / 1.5;
           if (threeRef.current.updateShipMotion)
             threeRef.current.updateShipMotion(0, pos.lat);
+          // 타임라인 변경 시 빙산 위치도 즉시 갱신
+          if (realBergsRef.current.length > 0) {
+            threeRef.current.updateRealBergs(
+              realBergsRef.current,
+              pos.lat,
+              pos.lon,
+            );
+          }
         }
       }
     },
@@ -1313,7 +1336,8 @@ function AppInner() {
             viewer._bergClickHandler = handler;
           }
 
-          // ThreeOverlay용: 항상 북극(lat>60) 고농도(≥0.8) 셀 사용 (NIC 데이터는 남반구라 불가)
+          // ThreeOverlay용: bergList(실측 빙산) + 고농도 해빙 셀(대리 빙산) 병합
+          // — 실측 빙산은 주로 북대서양, 고농도 셀은 북극 전역을 커버
           const BERG_MAX_THREE = 300;
           const highConcCells = icePoints.filter(
             (c) => c.lat > 60 && c.weight >= 0.8,
@@ -1322,7 +1346,7 @@ function AppInner() {
             highConcCells.length > BERG_MAX_THREE
               ? Math.floor(highConcCells.length / BERG_MAX_THREE)
               : 1;
-          realBergsRef.current = highConcCells
+          const surrogateIce = highConcCells
             .filter((_, i) => i % threeStep === 0)
             .slice(0, BERG_MAX_THREE)
             .map((c) => ({
@@ -1330,10 +1354,29 @@ function AppInner() {
               lat: c.lat,
               size: 8000 + c.weight * 15000,
             }));
-        }
+          const trackedBergs = bergList.map((b) => ({
+            lon: b.lon,
+            lat: b.lat,
+            size: b.length_m || 5000,
+          }));
+          // 실측 빙산 우선, 고농도 셀 보충 (중복 위치 제거)
+          const seen = new Set(trackedBergs.map((b) => `${b.lat.toFixed(2)},${b.lon.toFixed(2)}`));
+          const merged = [...trackedBergs];
+          for (const s of surrogateIce) {
+            const key = `${s.lat.toFixed(2)},${s.lon.toFixed(2)}`;
+            if (!seen.has(key)) {
+              merged.push(s);
+              seen.add(key);
+            }
+          }
+          realBergsRef.current = merged;
 
-        // DeckOverlay 업데이트 (보조)
-        deckRef.current?.updateLayers({ iceData: icePoints, realBergData: [] });
+          // DeckOverlay 업데이트 — bergList를 realBergData로 전달
+          deckRef.current?.updateLayers({ iceData: icePoints, realBergData: bergList });
+        } else {
+          // viewer 없어도 DeckOverlay는 업데이트
+          deckRef.current?.updateLayers({ iceData: icePoints, realBergData: [] });
+        }
 
         // BRIDGE / FOLLOW 모드: 현재 선박 위치 기준 초기 반영
         const { lat, lon } = state.shipState;
@@ -1842,6 +1885,11 @@ function AppInner() {
         // 수동 조종 목표 Heading도 현재 heading으로 초기화
         manualHeadingRef.current = (state.shipState.heading * Math.PI) / 180;
         three.shipPivot.rotation.y = -manualHeadingRef.current;
+
+        // 텔레포트 후 빙산 위치 즉시 갱신
+        if (realBergsRef.current.length > 0) {
+          three.updateRealBergs?.(realBergsRef.current, lat, lon);
+        }
       }
 
       console.log(`[Teleport] → ${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`);

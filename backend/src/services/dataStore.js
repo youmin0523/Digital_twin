@@ -86,6 +86,26 @@ async function getCopernicusIcebergData() {
   return copDataCache;
 }
 
+// Sentinel-1 IW 빙하 아카이브 카탈로그 (파일 변경 감지로 자동 갱신)
+const S1_FILE = path.join(DATA_DIR, 'sentinel1_catalog_latest.json');
+let s1DataCache = null;
+let s1FileMtime = 0;
+
+async function getSentinel1Catalog() {
+  try {
+    const stat = await fs.promises.stat(S1_FILE);
+    const mtime = stat.mtimeMs;
+    if (!s1DataCache || mtime > s1FileMtime) {
+      s1DataCache = await readJsonFile(S1_FILE);
+      s1FileMtime = mtime;
+      if (s1DataCache) console.log(`[DataStore] sentinel1_catalog reloaded (${s1DataCache.product_count || '?'} products)`);
+    }
+  } catch {
+    // 파일 아직 생성 전
+  }
+  return s1DataCache;
+}
+
 // 기상 데이터 (Open-Meteo — weather_fetcher.py 수집, 5개 항로)
 // 6시간마다 갱신되므로 캐시 TTL을 30분으로 설정
 const WEATHER_CACHE_TTL = 30 * 60 * 1000;
@@ -103,4 +123,4 @@ async function getWeatherData() {
   return data;
 }
 
-module.exports = { getIceData, getIcebergData, getCopernicusIcebergData, getWeatherData };
+module.exports = { getIceData, getIcebergData, getCopernicusIcebergData, getWeatherData, getSentinel1Catalog };
