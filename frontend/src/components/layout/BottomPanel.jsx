@@ -213,6 +213,8 @@ function DesignInfoPanel({
   onPresetLoad,
   onApply,
   onRecenter,
+  currentRoute,
+  onRouteChange,
 }) {
   const [rescueDays, setRescueDays] = useState(7);
   const [tempMargin, setTempMargin] = useState(12);
@@ -375,6 +377,21 @@ function DesignInfoPanel({
       </div>
       <div className="bp-divider" />
       <div className="bp-content__col bp-content__col--actions">
+        <div className="bp-design__route-selector">
+          <span className="bp-design__route-label">목표 항로</span>
+          <select
+            className="bp-design__route-select"
+            value={currentRoute}
+            onChange={e => onRouteChange(e.target.value)}
+          >
+            <option value="NSR">북동항로 (NSR)</option>
+            <option value="NWP">북서항로 (NWP)</option>
+            <option value="TSR">북극횡단항로 (TSR)</option>
+            <option value="SUEZ">수에즈 운하 (SUEZ)</option>
+            <option value="CAPE">희망봉 우회 (CAPE)</option>
+            <option value="ETC">직항 (ETC)</option>
+          </select>
+        </div>
         <button
           className="bp-design__btn bp-design__btn--primary"
           onClick={handleApplyClick}
@@ -681,6 +698,7 @@ export default function BottomPanel({
   onRecenter,
   evaluationResult,
   currentRoute,
+  onRouteChange,
   onReset,
 }) {
   return (
@@ -705,6 +723,8 @@ export default function BottomPanel({
             onPresetLoad={onPresetLoad}
             onApply={onApply}
             onRecenter={onRecenter}
+            currentRoute={currentRoute}
+            onRouteChange={onRouteChange}
           />
         </div>
         <div className="bp-divider" />

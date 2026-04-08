@@ -119,10 +119,12 @@ schedule.scheduleJob('30 */6 * * *', runWeatherPipeline);
 
 // 서버 시작 30초 후 Copernicus SAR 빙산 파이프라인 1회 실행
 setTimeout(runIcebergPipeline, 30000);
-// 서버 시작 90초 후 NIC/NSIDC berg fetcher 1회 실행
-setTimeout(runBergFetcher, 90000);
 // 서버 시작 60초 후 기상 파이프라인 1회 실행
 setTimeout(runWeatherPipeline, 60000);
+// 서버 시작 90초 후 NIC/NSIDC berg fetcher 1회 실행
+setTimeout(runBergFetcher, 90000);
+// 서버 시작 120초 후 해빙 농도 fetcher 1회 실행
+setTimeout(runIceFetcher, 120000);
 
 app.listen(PORT, () => {
   console.log(`[Server] Arctic Digital Twin API running on http://localhost:${PORT}`);

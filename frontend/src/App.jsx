@@ -1885,8 +1885,6 @@ function AppInner() {
       {/* ═══ Main Area (Sidebar + Viewport) ═══ */}
       <div className="dt-main">
         <Sidebar
-          currentRoute={state.currentRouteKey}
-          onRouteChange={handleRouteChange}
           routeVisibility={routeVisibility}
           onRouteVisibilityChange={handleRouteVisibilityChange}
           currentMode={state.currentMode}
@@ -2030,6 +2028,7 @@ function AppInner() {
         evaluationResult={evaluationResult}
         onEvaluate={handleEvaluate}
         currentRoute={state.currentRouteKey}
+        onRouteChange={handleRouteChange}
         onReset={handleResetEvaluation}
       />
 

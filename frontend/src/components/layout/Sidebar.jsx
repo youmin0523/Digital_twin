@@ -33,8 +33,6 @@ const WMS_LAYERS = [
 
 
 export default function Sidebar({
-  currentRoute,
-  onRouteChange,
   routeVisibility,
   onRouteVisibilityChange,
   currentMode,
@@ -138,23 +136,6 @@ export default function Sidebar({
         >
           &#x21C5; 출발/도착 반전
         </button>
-      </section>
-
-      {/* ── 목표 항로 ── */}
-      <section className="dt-sidebar__section">
-        <label className="dt-sidebar__label">목표 항로</label>
-        <select
-          className="dt-sidebar__select"
-          value={currentRoute}
-          onChange={e => onRouteChange(e.target.value)}
-        >
-          <option value="NSR">북동항로 (NSR)</option>
-          <option value="NWP">북서항로 (NWP)</option>
-          <option value="TSR">북극횡단항로 (TSR)</option>
-          <option value="SUEZ">수에즈 운하 (SUEZ)</option>
-          <option value="CAPE">희망봉 우회 (CAPE)</option>
-          <option value="ETC">직항 (ETC)</option>
-        </select>
       </section>
 
       {/* ── Routes ── */}
