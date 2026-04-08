@@ -6,12 +6,12 @@ Runs daily at 03:00 UTC via node-schedule or standalone cron.
 """
 
 import os
-import sys
 import json
 import logging
 import tempfile
 import shutil
-from datetime import datetime, timedelta, timezone
+import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 # ── Logging ──────────────────────────────────────────────────────
@@ -60,7 +60,6 @@ def download_dataset(dataset_id: str, output_dir: str) -> str | None:
         result = cm.get(
             dataset_id=dataset_id,
             output_directory=output_dir,
-            force_download=True,
             overwrite=True,
         )
         log.info(f"  → Download result: {result}")
@@ -68,6 +67,20 @@ def download_dataset(dataset_id: str, output_dir: str) -> str | None:
     except Exception as e:
         log.warning(f"  → Download failed for {dataset_id}: {e}")
         return None
+
+
+def extract_zips(directory: str):
+    """Extract all .zip files found in directory tree."""
+    for root, _dirs, files in os.walk(directory):
+        for f in files:
+            if f.endswith(".zip"):
+                zip_path = os.path.join(root, f)
+                try:
+                    with zipfile.ZipFile(zip_path, "r") as zf:
+                        zf.extractall(root)
+                    log.info(f"  Extracted: {zip_path}")
+                except Exception as e:
+                    log.warning(f"  Failed to extract {zip_path}: {e}")
 
 
 def find_shapefiles(directory: str) -> list[str]:
@@ -154,6 +167,7 @@ def main():
             if result is None:
                 continue
 
+            extract_zips(ds_dir)
             shp_files = find_shapefiles(ds_dir)
             if not shp_files:
                 log.warning(f"  No .shp files found for {ds['id']}")

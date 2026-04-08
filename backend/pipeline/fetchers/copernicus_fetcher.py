@@ -19,10 +19,24 @@ Copernicus Marine Service - Arctic Sea Ice 자동 수집 파이프라인
 
 import argparse
 import json
+import logging
 import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+
+# ─── 로깅 설정 ────────────────────────────────────────────────────
+LOG_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_DIR / "ice_fetcher.log", encoding="utf-8"),
+        logging.StreamHandler(),
+    ],
+)
+log = logging.getLogger("ice_fetcher")
 
 # ─── 설정 ────────────────────────────────────────────────────────────
 DATASET_ID = "cmems_mod_arc_phy_anfc_6km_detided_P1D-m"
@@ -43,7 +57,11 @@ ARCHIVE_DIR = os.path.join(OUTPUT_DIR, "archive")
 
 
 def check_credentials():
-    """Copernicus Marine 인증 상태 확인."""
+    """Copernicus Marine 인증 상태 확인 (env var 또는 파일)."""
+    # Node.js 스케줄러가 주입하는 env var 방식
+    if os.environ.get("COPERNICUSMARINE_SERVICE_USERNAME"):
+        return True
+    # CLI login으로 저장된 파일 방식
     cred_paths = [
         Path.home() / ".copernicusmarine" / ".copernicusmarine-credentials",
         Path.home() / ".copernicusmarine" / "credentials",
@@ -96,8 +114,7 @@ def fetch_copernicus(target_date=None, step=STEP, dry_run=False):
     try:
         import copernicusmarine
     except ImportError:
-        print("[ERROR] copernicusmarine not installed.")
-        print("  pip install copernicusmarine")
+        log.error("copernicusmarine not installed. Run: pip install copernicusmarine")
         sys.exit(1)
 
     if not check_credentials():
@@ -115,19 +132,14 @@ def fetch_copernicus(target_date=None, step=STEP, dry_run=False):
 
     date_str = dt.strftime("%Y-%m-%d")
     date_compact = dt.strftime("%Y%m%d")
-    print(f"[Copernicus] target date: {date_str}")
+    log.info(f"Target date: {date_str}")
 
     if dry_run:
-        print("[DRY-RUN] Would fetch:")
-        print(f"  dataset: {DATASET_ID}")
-        print(f"  variable: {VARIABLE}")
-        print(f"  date: {date_str}")
-        print(f"  lat >= {MIN_LAT}")
-        print(f"  step: {step} (~{6*step}km)")
+        log.info(f"[DRY-RUN] dataset={DATASET_ID} variable={VARIABLE} date={date_str} lat>={MIN_LAT} step={step}(~{6*step}km)")
         return None
 
     # 데이터셋 열기
-    print(f"[Copernicus] opening dataset: {DATASET_ID}")
+    log.info(f"Opening dataset: {DATASET_ID}")
     try:
         ds = copernicusmarine.open_dataset(
             dataset_id=DATASET_ID,
@@ -141,8 +153,8 @@ def fetch_copernicus(target_date=None, step=STEP, dry_run=False):
     except Exception as e:
         err_msg = str(e)
         # 변수명이 달라서 실패했을 수 있음 — 변수 지정 없이 재시도
-        print(f"[Copernicus] first attempt failed: {err_msg}")
-        print("[Copernicus] retrying without variable filter...")
+        log.warning(f"First attempt failed: {err_msg}")
+        log.info("Retrying without variable filter...")
         try:
             ds = copernicusmarine.open_dataset(
                 dataset_id=DATASET_ID,
@@ -151,11 +163,11 @@ def fetch_copernicus(target_date=None, step=STEP, dry_run=False):
                 end_datetime=f"{date_str}T23:59:59",
             )
         except Exception as e2:
-            print(f"[ERROR] Failed to open dataset: {e2}")
+            log.error(f"Failed to open dataset: {e2}")
             return None
 
     var_name = find_variable(ds)
-    print(f"[Copernicus] variable: {var_name}")
+    log.info(f"Variable: {var_name}")
 
     conc = ds[var_name].values
     # 차원 정리 (time, depth, y, x) → (y, x)
@@ -201,7 +213,7 @@ def fetch_copernicus(target_date=None, step=STEP, dry_run=False):
     }
 
     ds.close()
-    print(f"[Copernicus] cells: {len(cells)}")
+    log.info(f"Cells extracted: {len(cells)}")
     return result
 
 
@@ -217,16 +229,16 @@ def save_json(data, output_dir=OUTPUT_DIR, archive_dir=ARCHIVE_DIR):
     with open(latest_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)
     size_kb = os.path.getsize(latest_path) / 1024
-    print(f"[saved] {latest_path} ({size_kb:.0f} KB, {data['cell_count']} cells)")
+    log.info(f"Saved: {latest_path} ({size_kb:.0f} KB, {data['cell_count']} cells)")
 
     # 날짜별 아카이브 (기존 파일 보존)
     archive_path = os.path.join(archive_dir, f"realIceData_{date_str}.json")
     if not os.path.exists(archive_path):
         with open(archive_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
-        print(f"[archived] {archive_path}")
+        log.info(f"Archived: {archive_path}")
     else:
-        print(f"[skip] archive already exists: {archive_path}")
+        log.info(f"Archive already exists, skipping: {archive_path}")
 
     return latest_path
 
@@ -241,7 +253,7 @@ def run_once(target_date=None, step=STEP, dry_run=False):
         html_latest = os.path.join(html_dir, "realIceData_latest.json")
         import shutil
         shutil.copy2(path, html_latest)
-        print(f"[copied] {html_latest}")
+        log.info(f"Copied to: {html_latest}")
     return data
 
 
@@ -251,12 +263,10 @@ def run_scheduled():
         import schedule
         import time
     except ImportError:
-        print("[ERROR] schedule not installed.")
-        print("  pip install schedule")
+        log.error("schedule not installed. Run: pip install schedule")
         sys.exit(1)
 
-    print("[scheduler] Starting daily fetch at 06:00 UTC")
-    print("[scheduler] Press Ctrl+C to stop")
+    log.info("Starting daily fetch at 06:00 UTC (press Ctrl+C to stop)")
 
     # 시작 시 1회 즉시 실행
     run_once()
@@ -296,9 +306,9 @@ def main():
     else:
         data = run_once(target_date=args.date, step=args.step, dry_run=args.dry_run)
         if data:
-            print(f"\nDone! {data['cell_count']} cells saved.")
+            log.info(f"Done! {data['cell_count']} cells saved.")
         elif not args.dry_run:
-            print("\nFetch failed. Check credentials and network.")
+            log.error("Fetch failed. Check credentials and network.")
             sys.exit(1)
 
 

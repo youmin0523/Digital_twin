@@ -283,6 +283,40 @@
   height: 11px;
 }
 
+.bp-design__route-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+.bp-design__route-label {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.bp-design__route-select {
+  background: var(--bg-input);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 6px;
+  width: 100%;
+  font-family: inherit;
+  appearance: auto;
+  cursor: pointer;
+}
+.bp-design__route-select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(95, 168, 245, 0.25);
+}
+
 .bp-design__btn {
   background: var(--bg-input);
   border: 1px solid var(--border);
