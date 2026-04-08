@@ -51,12 +51,16 @@ def main():
     parser.add_argument(
         "--weather-only", action="store_true", help="Open-Meteo 기상 데이터만 수집"
     )
+    parser.add_argument(
+        "--sentinel1-only", action="store_true", help="Sentinel-1 IW 빙하 아카이브만 수집"
+    )
     args = parser.parse_args()
 
     ensure_data_dir()
 
     run_all = not (
-        args.ice_only or args.berg_only or args.nsidc_only or args.weather_only
+        args.ice_only or args.berg_only or args.nsidc_only
+        or args.weather_only or args.sentinel1_only
     )
 
     results = []
@@ -78,6 +82,10 @@ def main():
     if run_all or args.weather_only:
         rc = run_script(FETCHERS_DIR / "weather_fetcher.py")
         results.append(("MET Norway Weather", rc))
+
+    if run_all or args.sentinel1_only:
+        rc = run_script(FETCHERS_DIR / "sentinel1_iw_fetcher.py")
+        results.append(("Sentinel-1 IW Glacier Archive", rc))
 
     # 결과 요약
     print(f"\n{'='*60}")

@@ -10,6 +10,7 @@ router.post('/run', async (req, res) => {
     const scriptName = task === 'all' ? 'run_pipeline.py' :
                        task === 'fetch_ice' ? 'fetchers/nsidc_pipeline.py' :
                        task === 'fetch_icebergs' ? 'fetchers/iceberg_fetcher.py' :
+                       task === 'fetch_sentinel1' ? 'fetchers/sentinel1_iw_fetcher.py' :
                        'run_pipeline.py';
 
     const result = await runPythonScript(scriptName, []);

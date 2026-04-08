@@ -49,6 +49,14 @@ export default function WeatherHud({ shipPos, weatherData, currentRouteKey, isMo
   const wave = nearest.wave_height_m ?? fallbackWave;
   const vis = nearest.visibility_km ?? fallbackVis;
   const temp = nearest.temperature_c ?? fallbackTemp;
+  const sst = nearest.sst_c ?? null;
+
+  // 해무 위험도: SST와 기온 차이 기반 (SST > 기온 → 해무 발생 가능)
+  const fogDiff = (sst != null && temp != null) ? sst - temp : null;
+  const fogRisk = fogDiff == null ? null
+    : fogDiff >= 5.0 ? '높음'
+    : fogDiff >= 2.0 ? '보통'
+    : '낮음';
 
   // 파고 위험도 색상
   const waveColor = wave == null ? '#64748b'
@@ -68,11 +76,23 @@ export default function WeatherHud({ shipPos, weatherData, currentRouteKey, isMo
     : temp < 0 ? '#60a5fa'
     : '#34d399';
 
+  // SST 색상
+  const sstColor = sst == null ? '#64748b'
+    : sst < 0 ? '#60a5fa'
+    : sst < 10 ? '#38bdf8'
+    : '#34d399';
+
+  // 해무 위험도 색상
+  const fogColor = fogRisk == null ? '#64748b'
+    : fogRisk === '높음' ? '#ef4444'
+    : fogRisk === '보통' ? '#f59e0b'
+    : '#34d399';
+
   return (
     <div style={{
       position: 'absolute',
       right: 10,
-      bottom: 385,
+      top: 60,
       width: 240,
       zIndex: 300,
       background: 'rgba(13, 19, 41, 0.92)',
@@ -150,6 +170,24 @@ export default function WeatherHud({ shipPos, weatherData, currentRouteKey, isMo
           color={tempColor}
           bar={temp != null ? Math.min(Math.max((temp + 30) / 60, 0), 1.0) : 0}
           barColor={tempColor}
+        />
+        {/* SST (해수면 온도) */}
+        <Row
+          icon="🌊"
+          label="해수면 온도"
+          value={sst != null ? `${sst > 0 ? '+' : ''}${sst.toFixed(1)} °C` : '—'}
+          color={sstColor}
+          bar={sst != null ? Math.min(Math.max((sst + 5) / 40, 0), 1.0) : 0}
+          barColor={sstColor}
+        />
+        {/* 해무 위험도 */}
+        <Row
+          icon="🌫"
+          label="해무 위험"
+          value={fogRisk ?? '—'}
+          color={fogColor}
+          bar={fogDiff != null ? Math.min(Math.max(fogDiff / 10, 0), 1.0) : 0}
+          barColor={fogColor}
         />
       </div>
     </div>
