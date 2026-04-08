@@ -23,5 +23,13 @@ backend/data/archive/
 # Build output
 frontend/dist
 
+# Logs
+backend/logs/
+
+# RL Pipeline
+rl-pipeline/venv/
+rl-pipeline/models/
+rl-pipeline/__pycache__/
+
 # Archive (old monolithic files)
 _archive/

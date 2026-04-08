@@ -60,6 +60,7 @@ import {
   checkRouteAhead,
   rerouteAroundIceberg,
 } from './services/icebergAvoidance';
+import { createRLAvoidanceController } from './services/rlAvoidanceController';
 
 function AppInner() {
   const state = useAppState();
@@ -336,51 +337,38 @@ function AppInner() {
     };
   }, [state.departurePort, state.arrivalPort, state.currentRouteKey]);
 
-  // ── 시뮬레이션 중 빙산 회피 체크 (10초 간격) ──────────────────
+  // ── RL 기반 빙산 회피 컨트롤러 (2초 간격) ──────────────────────
+  const rlControllerRef = useRef(null);
+
   useEffect(() => {
-    if (!state.isSimulating || state.manualMode) return;
-    if (realBergsRef.current.length === 0) return;
-
-    const interval = setInterval(async () => {
-      const wps = activeWaypoints;
-      const progress = state.simProgress;
-      const currentSeg = Math.floor(progress * (wps.length - 1));
-
-      const { blocked, dangerIdx } = checkRouteAhead(
-        wps,
-        currentSeg,
-        realBergsRef.current,
-        10,
-        15,
-      );
-
-      if (blocked && state.cachedIceData) {
-        showToast('빙산 감지! 우회 경로 계산 중...', 5000);
-        dispatch({ type: 'SET_REROUTING', payload: true });
-        try {
-          const { rerouted, newWaypoints } = await rerouteAroundIceberg(
-            wps,
-            dangerIdx,
-            state.cachedIceData,
-            realBergsRef.current,
-          );
-          if (rerouted) {
-            dispatch({
-              type: 'SET_GENERATED_WAYPOINTS',
-              payload: newWaypoints,
-            });
-            showToast('빙산 우회 경로 적용 완료');
-          }
-        } catch (e) {
-          console.error('[App] 빙산 우회 실패:', e);
-        } finally {
-          dispatch({ type: 'SET_REROUTING', payload: false });
-        }
+    if (!state.isSimulating || state.manualMode) {
+      if (rlControllerRef.current) {
+        rlControllerRef.current.stop();
       }
-    }, 10000); // 10초마다
+      return;
+    }
 
-    return () => clearInterval(interval);
-  }, [state.isSimulating, state.manualMode, state.simProgress]);
+    // RL 회피 컨트롤러 생성 (기존 A* 폴백 포함)
+    const controller = createRLAvoidanceController({
+      getShipState: () => state.shipState,
+      getIcebergs: () => realBergsRef.current,
+      getActiveWps: () => activeWpRef.current,
+      getProgress: () => state.simProgress,
+      getIceData: () => state.cachedIceData,
+      getWeather: () => ({
+        visibility_km: parseFloat(state.hud.vis) || 10,
+        wave_height_m: parseFloat(state.hud.hs) || 1,
+      }),
+      getIceClass: () => state.shipSpecs?.iceClass || 'PC5',
+      dispatch,
+      showToast,
+    });
+
+    rlControllerRef.current = controller;
+    controller.start();
+
+    return () => controller.stop();
+  }, [state.isSimulating, state.manualMode]);
 
   // ── 메인 애니메이션 루프 ──────────────────────────────────────
   useEffect(() => {
