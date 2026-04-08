@@ -8,3 +8,25 @@
 2026-04-08 05:24:28,149 [INFO] Archived: C:\Users\Codelab\Desktop\PROJECT\Portfolio\Digital Twin\backend\pipeline\fetchers\..\..\data\archive\realIceData_20260407.json
 2026-04-08 05:24:28,153 [INFO] Copied to: C:\Users\Codelab\Desktop\PROJECT\Portfolio\Digital Twin\backend\pipeline\fetchers\realIceData_latest.json
 2026-04-08 05:24:28,153 [INFO] Done! 128201 cells saved.
+2026-04-08 07:02:56,368 [INFO] Target date: 2026-04-07
+2026-04-08 07:02:56,369 [INFO] Opening dataset: cmems_mod_arc_phy_anfc_6km_detided_P1D-m
+2026-04-08 07:02:58,007 [WARNING] First attempt failed: Learn how to recover your credentials at: https://help.marine.copernicus.eu/en/articles/4444552-i-forgot-my-username-or-my-password-what-should-i-do
+2026-04-08 07:02:58,007 [INFO] Retrying without variable filter...
+2026-04-08 07:02:59,563 [ERROR] Failed to open dataset: Learn how to recover your credentials at: https://help.marine.copernicus.eu/en/articles/4444552-i-forgot-my-username-or-my-password-what-should-i-do
+2026-04-08 07:02:59,563 [ERROR] Fetch failed. Check credentials and network.
+2026-04-08 07:22:43,245 [INFO] Target date: 2026-04-07
+2026-04-08 07:22:43,246 [INFO] Opening dataset: cmems_mod_arc_phy_anfc_6km_detided_P1D-m
+2026-04-08 07:22:45,289 [WARNING] First attempt failed: Learn how to recover your credentials at: https://help.marine.copernicus.eu/en/articles/4444552-i-forgot-my-username-or-my-password-what-should-i-do
+2026-04-08 07:22:45,289 [INFO] Retrying without variable filter...
+2026-04-08 07:22:46,897 [ERROR] Failed to open dataset: Learn how to recover your credentials at: https://help.marine.copernicus.eu/en/articles/4444552-i-forgot-my-username-or-my-password-what-should-i-do
+2026-04-08 07:22:46,898 [ERROR] Fetch failed. Check credentials and network.
+2026-04-08 07:24:30,392 [INFO] Target date: 2026-04-07
+2026-04-08 07:24:30,393 [INFO] Opening dataset: cmems_mod_arc_phy_anfc_6km_detided_P1D-m
+2026-04-08 07:24:37,200 [INFO] Selected dataset version: "202311"
+2026-04-08 07:24:37,201 [INFO] Selected dataset part: "default"
+2026-04-08 07:24:42,456 [INFO] Variable: siconc
+2026-04-08 07:24:46,451 [INFO] Cells extracted: 128201
+2026-04-08 07:24:49,368 [INFO] Saved: C:\Hijin\pjbingha\Digital_twin\backend\pipeline\fetchers\..\..\data\realIceData_latest.json (7049 KB, 128201 cells)
+2026-04-08 07:24:51,284 [INFO] Archived: C:\Hijin\pjbingha\Digital_twin\backend\pipeline\fetchers\..\..\data\archive\realIceData_20260407.json
+2026-04-08 07:24:51,291 [INFO] Copied to: C:\Hijin\pjbingha\Digital_twin\backend\pipeline\fetchers\realIceData_latest.json
+2026-04-08 07:24:51,291 [INFO] Done! 128201 cells saved.

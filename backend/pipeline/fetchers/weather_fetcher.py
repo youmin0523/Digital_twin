@@ -33,6 +33,11 @@ try:
 except ImportError:
     _cop_fill_waves = None
 
+try:
+    from copernicus_sst_fallback import fill_sst as _cop_fill_sst
+except ImportError:
+    _cop_fill_sst = None
+
 
 def _ssl_context() -> ssl.SSLContext:
     """Return an SSL context using certifi CA bundle if available."""
@@ -357,7 +362,7 @@ def fetch_marine_batch(waypoints: list[dict]) -> list[float | None]:
     """Open-Meteo Marine API에서 유의파고(m)를 배치 조회."""
     lats = ",".join(str(wp["lat"]) for wp in waypoints)
     lons = ",".join(str(wp["lon"]) for wp in waypoints)
-    url = f"{MARINE_API}?latitude={lats}&longitude={lons}&current=wave_height"
+    url = f"{MARINE_API}?latitude={lats}&longitude={lons}&current=wave_height&cell_selection=nearest"
 
     data = _http_get(url)
     # 단일 좌표: dict 반환 / 다중 좌표: list 반환
@@ -376,7 +381,7 @@ def fetch_forecast_batch(waypoints: list[dict]) -> list[tuple[float | None, floa
     """Open-Meteo Forecast API에서 기온(°C)과 가시거리(km)를 배치 조회."""
     lats = ",".join(str(wp["lat"]) for wp in waypoints)
     lons = ",".join(str(wp["lon"]) for wp in waypoints)
-    url = f"{FORECAST_API}?latitude={lats}&longitude={lons}&current=temperature_2m,visibility"
+    url = f"{FORECAST_API}?latitude={lats}&longitude={lons}&current=temperature_2m,visibility&cell_selection=nearest"
 
     data = _http_get(url)
     if isinstance(data, dict):
@@ -477,6 +482,10 @@ def fetch_route_weather(route_key: str, waypoints: list[dict], dry_run: bool = F
     if _cop_fill_waves is not None:
         wp_results = _cop_fill_waves(wp_results)
 
+    # Copernicus SST (해수면 온도) 조회
+    if _cop_fill_sst is not None:
+        wp_results = _cop_fill_sst(wp_results)
+
     # 요약 출력
     summary = compute_route_summary(wp_results)
     print(f"    max_wave={summary['max_wave_height_m']}m  "
@@ -539,15 +548,20 @@ def compute_route_summary(waypoints: list[dict]) -> dict:
     waves = [w["wave_height_m"] for w in waypoints if w["wave_height_m"] is not None]
     temps = [w["temperature_c"] for w in waypoints if w["temperature_c"] is not None]
     visib = [w["visibility_km"] for w in waypoints if w["visibility_km"] is not None]
+    ssts = [w["sst_c"] for w in waypoints if w.get("sst_c") is not None]
 
     max_wave = round(max(waves), 2) if waves else None
     min_temp = round(min(temps), 1) if temps else None
     min_vis = round(min(visib), 2) if visib else None
+    min_sst = round(min(ssts), 1) if ssts else None
+    max_sst = round(max(ssts), 1) if ssts else None
 
     return {
         "max_wave_height_m": max_wave,
         "min_temperature_c": min_temp,
         "min_visibility_km": min_vis,
+        "min_sst_c": min_sst,
+        "max_sst_c": max_sst,
         "is_temp_below_minus_10": (min_temp < -10.0) if min_temp is not None else False,
     }
 

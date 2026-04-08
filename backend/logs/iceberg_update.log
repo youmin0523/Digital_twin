@@ -31238,3 +31238,23 @@
 2026-04-08 06:18:52,204 [INFO]   Reading C:\Users\Public\Documents\ESTsoft\CreatorTemp\cop_icebergs_9jmrjjf5\COP-IW\SEAICE_ARC_SEAICE_L4_NRT_OBSERVATIONS_011_007\cmems_sat-si_arc_berg-point_nrt_iw_d_202007\2026\04\satcov_poly_iw_mosaic_202603311013-202604071007.shp
 2026-04-08 06:18:52,254 [INFO]   → 161 features found
 2026-04-08 06:18:52,279 [INFO]   → 161 northern hemisphere icebergs
+2026-04-08 16:01:23,651 [INFO] ============================================================
+2026-04-08 16:01:23,652 [INFO] Arctic Iceberg Pipeline — Starting
+2026-04-08 16:01:23,653 [INFO] ============================================================
+2026-04-08 07:01:34,112 [INFO] Downloading cmems_obs-si_arc_phy_berg-point-mos-rcmln_nrt_l3_P1D_irr ...
+2026-04-08 07:01:37,863 [WARNING]   → Download failed for cmems_obs-si_arc_phy_berg-point-mos-rcmln_nrt_l3_P1D_irr: Learn how to recover your credentials at: https://help.marine.copernicus.eu/en/articles/4444552-i-forgot-my-username-or-my-password-what-should-i-do
+2026-04-08 07:01:37,864 [INFO] Downloading cmems_sat-si_arc_berg-point_nrt_ew_d ...
+2026-04-08 07:01:41,464 [WARNING]   → Download failed for cmems_sat-si_arc_berg-point_nrt_ew_d: Learn how to recover your credentials at: https://help.marine.copernicus.eu/en/articles/4444552-i-forgot-my-username-or-my-password-what-should-i-do
+2026-04-08 07:01:41,465 [INFO] Downloading cmems_sat-si_arc_berg-point_nrt_iw_d ...
+2026-04-08 07:01:44,721 [WARNING]   → Download failed for cmems_sat-si_arc_berg-point_nrt_iw_d: Learn how to recover your credentials at: https://help.marine.copernicus.eu/en/articles/4444552-i-forgot-my-username-or-my-password-what-should-i-do
+2026-04-08 07:01:44,722 [WARNING] No icebergs downloaded — keeping existing JSON file
+2026-04-08 16:19:32,220 [INFO] ============================================================
+2026-04-08 16:19:32,221 [INFO] Arctic Iceberg Pipeline — Starting
+2026-04-08 16:19:32,221 [INFO] ============================================================
+2026-04-08 07:19:36,469 [INFO] Downloading cmems_obs-si_arc_phy_berg-point-mos-rcmln_nrt_l3_P1D_irr ...
+2026-04-08 07:19:39,841 [WARNING]   → Download failed for cmems_obs-si_arc_phy_berg-point-mos-rcmln_nrt_l3_P1D_irr: Learn how to recover your credentials at: https://help.marine.copernicus.eu/en/articles/4444552-i-forgot-my-username-or-my-password-what-should-i-do
+2026-04-08 07:19:39,841 [INFO] Downloading cmems_sat-si_arc_berg-point_nrt_ew_d ...
+2026-04-08 07:19:42,859 [WARNING]   → Download failed for cmems_sat-si_arc_berg-point_nrt_ew_d: Learn how to recover your credentials at: https://help.marine.copernicus.eu/en/articles/4444552-i-forgot-my-username-or-my-password-what-should-i-do
+2026-04-08 07:19:42,859 [INFO] Downloading cmems_sat-si_arc_berg-point_nrt_iw_d ...
+2026-04-08 07:19:45,930 [WARNING]   → Download failed for cmems_sat-si_arc_berg-point_nrt_iw_d: Learn how to recover your credentials at: https://help.marine.copernicus.eu/en/articles/4444552-i-forgot-my-username-or-my-password-what-should-i-do
+2026-04-08 07:19:45,932 [WARNING] No icebergs downloaded — keeping existing JSON file

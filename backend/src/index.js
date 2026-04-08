@@ -12,6 +12,7 @@ const proxyRouter = require('./routes/proxy');
 const { legacyNsidcProxy, legacyCopProxy, legacySentinelProxy } = require('./routes/proxy');
 const pipelineRouter = require('./routes/pipeline');
 const weatherRouter = require('./routes/weather');
+const sentinel1Router = require('./routes/sentinel1');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -26,6 +27,7 @@ app.use('/api/icebergs', icebergRouter);
 app.use('/api/route', routingRouter);
 app.use('/api/pipeline', pipelineRouter);
 app.use('/api/weather', weatherRouter);
+app.use('/api/sentinel1', sentinel1Router);
 app.use('/proxy', proxyRouter);
 
 // 기존 arctic-hybrid.html 호환 프록시
@@ -94,6 +96,25 @@ function runIceFetcher() {
   });
 }
 
+// ── Sentinel-1 IW Glacier Archive scheduler ─────────────────────
+const SENTINEL1_FETCHER_PATH = path.join(
+  __dirname, '..', 'pipeline', 'fetchers', 'sentinel1_iw_fetcher.py'
+);
+
+function runSentinel1Fetcher() {
+  console.log('[Scheduler] Running sentinel1_iw_fetcher (glacier archive)...');
+  const env = {
+    ...process.env,
+    CDSE_USER: process.env.CDSE_USER,
+    CDSE_PASSWORD: process.env.CDSE_PASSWORD,
+  };
+  execFile('python', [SENTINEL1_FETCHER_PATH], { env, timeout: 1800000 }, (err, stdout, stderr) => {
+    if (err) console.error('[Scheduler] Sentinel-1 fetcher error:', err.message);
+    if (stdout) console.log('[Sentinel1]', stdout.trim().slice(-500));
+    if (stderr) console.error('[Sentinel1] stderr:', stderr.trim().slice(-200));
+  });
+}
+
 // ── Weather pipeline scheduler ───────────────────────────────────
 const WEATHER_SCRIPT_PATH = path.join(
   __dirname, '..', 'pipeline', 'fetchers', 'weather_fetcher.py'
@@ -108,6 +129,8 @@ function runWeatherPipeline() {
   });
 }
 
+// 매일 새벽 1시 UTC (Sentinel-1 IW 빙하 아카이브)
+schedule.scheduleJob('0 1 * * *', runSentinel1Fetcher);
 // 매일 새벽 2시 UTC (Copernicus 해빙 농도)
 schedule.scheduleJob('0 2 * * *', runIceFetcher);
 // 매일 새벽 3시 UTC (Copernicus SAR 빙산 파이프라인)
@@ -125,8 +148,10 @@ setTimeout(runWeatherPipeline, 60000);
 setTimeout(runBergFetcher, 90000);
 // 서버 시작 120초 후 해빙 농도 fetcher 1회 실행
 setTimeout(runIceFetcher, 120000);
+// 서버 시작 150초 후 Sentinel-1 빙하 아카이브 1회 실행
+setTimeout(runSentinel1Fetcher, 150000);
 
 app.listen(PORT, () => {
   console.log(`[Server] Arctic Digital Twin API running on http://localhost:${PORT}`);
-  console.log(`[Scheduler] Ice fetcher: 02:00 UTC | SAR pipeline: 03:00 UTC | Berg fetcher: 04:00 UTC | Weather: every 6h`);
+  console.log(`[Scheduler] Sentinel-1: 01:00 UTC | Ice: 02:00 UTC | SAR: 03:00 UTC | Berg: 04:00 UTC | Weather: every 6h`);
 });
