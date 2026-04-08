@@ -13,6 +13,9 @@ __pycache__
 *.pyc
 backend/pipeline/cache/*.nc
 
+# Logs
+backend/logs/*.log
+
 # Data (large files)
 backend/data/realIceData_latest.json
 backend/data/archive/
