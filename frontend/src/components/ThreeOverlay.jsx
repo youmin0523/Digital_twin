@@ -697,7 +697,10 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
   // -- Real iceberg data (yellow) --
   const updateRealBergs = useCallback((bergs, shipLat, shipLon) => {
     const { scene, realBergs, realBergMat } = ctx.current;
-    if (!scene || !realBergMat) return;
+    if (!scene || !realBergMat) {
+      console.warn('[updateRealBergs] SKIP: scene=', !!scene, 'realBergMat=', !!realBergMat);
+      return;
+    }
 
     // Remove previous real berg meshes
     for (const grp of realBergs) {
@@ -705,22 +708,34 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
     }
     realBergs.length = 0;
 
-    if (!bergs || bergs.length === 0) return;
+    if (!bergs || bergs.length === 0) {
+      console.warn('[updateRealBergs] SKIP: no bergs data');
+      return;
+    }
 
     const bRefLat = baseRef?.lat ?? 35.1;
     const bRefLon = baseRef?.lon ?? 129.0;
     const mPerDegLon = 111319.491 * Math.cos((bRefLat * Math.PI) / 180);
     const VISIBLE_RANGE = 50000; // 50km
 
+    const shipX = ctx.current.shipGroup3?.position.x ?? 0;
+    const shipZ = ctx.current.shipGroup3?.position.z ?? 0;
+    console.log('[updateRealBergs] bergs:', bergs.length,
+      'baseRef:', bRefLat, bRefLon,
+      'shipPos:', shipX.toFixed(1), shipZ.toFixed(1),
+      'shipLatLon:', shipLat, shipLon,
+      'first berg:', bergs[0]?.lat, bergs[0]?.lon);
+
+    let filteredCount = 0;
+
     // 실시간 빙산의 로컬 좌표 변환: 출발항 기준 고정 월드 축 사용
     for (const berg of bergs) {
       const x = ((berg.lon - bRefLon) * mPerDegLon) / 1.5;
       const z = (-(berg.lat - bRefLat) * METERS_PER_DEGREE_LAT) / 1.5;
       const dist = Math.sqrt(
-        Math.pow(x - ctx.current.shipGroup3?.position.x || x, 2) +
-          Math.pow(z - ctx.current.shipGroup3?.position.z || z, 2),
+        Math.pow(x - shipX, 2) + Math.pow(z - shipZ, 2),
       );
-      if (dist > VISIBLE_RANGE) continue;
+      if (dist > VISIBLE_RANGE) { filteredCount++; continue; }
 
       const size = Math.max(berg.size || 5000, 500);
       const h = size * 0.15;
@@ -735,6 +750,8 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
       scene.add(grp);
       realBergs.push(grp);
     }
+    console.log('[updateRealBergs] RESULT: added=', realBergs.length,
+      'filtered(>50km)=', filteredCount, 'of total=', bergs.length);
   }, []);
 
   // -- Ship --

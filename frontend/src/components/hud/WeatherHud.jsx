@@ -92,7 +92,7 @@ export default function WeatherHud({ shipPos, weatherData, currentRouteKey, isMo
     <div style={{
       position: 'absolute',
       right: 10,
-      bottom: 445,
+      top: 60,
       width: 240,
       zIndex: 300,
       background: 'rgba(13, 19, 41, 0.92)',
