@@ -1,2 +1,7 @@
 node_modules
 .env
+__pycache__
+*.log
+*.txt
+
+sentinel1_iw_fetcher.log

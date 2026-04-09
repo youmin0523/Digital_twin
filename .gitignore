@@ -13,9 +13,6 @@ __pycache__
 *.pyc
 backend/pipeline/cache/*.nc
 
-# Logs
-backend/logs/*.log
-
 # Data (large files)
 backend/data/realIceData_latest.json
 backend/data/archive/
@@ -33,3 +30,5 @@ rl-pipeline/__pycache__/
 
 # Archive (old monolithic files)
 _archive/
+backend/logs/sentinel1_iw_fetcher.log
+report-service/requirements.txt
