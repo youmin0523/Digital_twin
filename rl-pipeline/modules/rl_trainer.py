@@ -22,6 +22,7 @@ except ImportError:
 
 from .rl_agent import IcebergAvoidanceAgent
 from .rl_environment import IcebergAvoidanceEnv, Iceberg
+from .rl_reward import RewardWeights
 from .rl_ship_dynamics import approx_dist_km, bearing_deg, normalize_angle, km_per_deg_lon, KM_PER_DEG_LAT
 from .config import MAX_SAFE_CONCENTRATION
 
@@ -63,7 +64,8 @@ class RLTrainer:
         self.current_stage: Optional[str] = None
         self.training_log: list[dict] = []
 
-    def train_curriculum(self, stages: list[CurriculumStage] | None = None) -> dict:
+    def train_curriculum(self, stages: list[CurriculumStage] | None = None,
+                         reward_weights: RewardWeights | None = None) -> dict:
         stages = stages or CURRICULUM
         self.is_training = True
         self.stop_requested = False
@@ -77,9 +79,11 @@ class RLTrainer:
                 logger.info(f"[Trainer] === 커리큘럼 {i+1}/{len(stages)}: {stage.name} ===")
 
                 try:
-                    self.agent.create_env(difficulty=stage.difficulty)
+                    self.agent.create_env(difficulty=stage.difficulty,
+                                          reward_weights=reward_weights)
                     if self.agent.model is None:
-                        self.agent.build_model(difficulty=stage.difficulty)
+                        self.agent.build_model(difficulty=stage.difficulty,
+                                               reward_weights=reward_weights)
                     else:
                         self.agent.model.set_env(self.agent.env)
 
@@ -103,14 +107,15 @@ class RLTrainer:
             self.current_stage = None
         return {"stages": results, "total_stages": len(stages)}
 
-    def train_single(self, difficulty: str = "medium", timesteps: int = 100_000) -> dict:
+    def train_single(self, difficulty: str = "medium", timesteps: int = 100_000,
+                     reward_weights: RewardWeights | None = None) -> dict:
         self.is_training = True
         self.stop_requested = False
         self.current_stage = f"single_{difficulty}"
         try:
-            self.agent.create_env(difficulty=difficulty)
+            self.agent.create_env(difficulty=difficulty, reward_weights=reward_weights)
             if self.agent.model is None:
-                self.agent.build_model(difficulty=difficulty)
+                self.agent.build_model(difficulty=difficulty, reward_weights=reward_weights)
             else:
                 self.agent.model.set_env(self.agent.env)
 

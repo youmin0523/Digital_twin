@@ -24,6 +24,7 @@ Reward:
 """
 
 import logging
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 import gymnasium as gym
@@ -31,6 +32,14 @@ import numpy as np
 from gymnasium import spaces
 
 logger = logging.getLogger("report-service.rl.departure_env")
+
+@dataclass
+class DepartureRewardWeights:
+    """출항 최적화 RL 보상 가중치."""
+    prohibitive_penalty: float = -10.0   # 통행 불가 구간 페널티 (per segment)
+    success_bonus: float = 50.0          # 통행 불가 구간 없이 완전 통과 보너스
+    efficiency_penalty: float = -5.0     # 기준(14일) 초과 일수당 패널티
+
 
 ICE_CLASS_MAP = {
     "None": 0.0, "IC": 0.15, "IB": 0.25, "IA": 0.35, "IA Super": 0.45,
@@ -56,6 +65,7 @@ class DepartureSchedulingEnv(gym.Env):
         transit_days: int = 14,
         start_date: date = None,
         difficulty: str = "medium",
+        reward_weights: DepartureRewardWeights | None = None,
     ):
         super().__init__()
 
@@ -67,6 +77,7 @@ class DepartureSchedulingEnv(gym.Env):
         self.transit_days = transit_days
         self.start_date = start_date or date.today()
         self.difficulty = difficulty
+        self.reward_weights = reward_weights if reward_weights is not None else DepartureRewardWeights()
 
         # 관측 공간: 28차원 (month_sin/cos(2) + conc(7) + wave(7) + vis(7) + ice(1) + transit(1) + forecast(1) + dow_sin/cos(2) = 28)
         self.observation_space = spaces.Box(
@@ -190,14 +201,14 @@ class DepartureSchedulingEnv(gym.Env):
             for seg in day_score.segment_scores:
                 reward += seg.rio
                 if seg.rio < -10:
-                    reward -= 10
+                    reward += self.reward_weights.prohibitive_penalty
                     has_prohibitive = True
 
             if not has_prohibitive:
-                reward += 50
+                reward += self.reward_weights.success_bonus
 
         # 효율 패널티
-        reward -= max(0, self.transit_days - 14) * 5
+        reward += max(0, self.transit_days - 14) * self.reward_weights.efficiency_penalty
 
         self._episode_reward += reward
         self._current_day_offset = day_offset

@@ -45,6 +45,7 @@ from modules.trend_analyzer import TrendAnalyzer
 from modules.pdf_generator import PdfGenerator
 from modules.rl.departure_agent import DepartureAgent
 from modules.rl.departure_trainer import DepartureTrainer
+from modules.rl.departure_iterative_trainer import DepartureIterativeTrainer
 from modules.rl.prediction_calibrator import PredictionCalibrator
 from modules.rl import existing_rl_client
 
@@ -55,6 +56,7 @@ trend_analyzer = TrendAnalyzer()
 pdf_generator = PdfGenerator()
 departure_agent = DepartureAgent()
 departure_trainer = DepartureTrainer()
+departure_iterative_trainer = DepartureIterativeTrainer(departure_trainer=departure_trainer)
 calibrator = PredictionCalibrator()
 
 OUTPUT_DIR = Path(__file__).parent / "output"
@@ -101,6 +103,18 @@ class RLTrainRequest(BaseModel):
     curriculum: bool = True
     difficulty: str = "medium"
     timesteps: int = 100_000
+
+
+class DepartureIterativeTrainRequest(BaseModel):
+    ice_class: str = "PC5"
+    forecast_days: int = 30
+    transit_days: int = 14
+    base_timesteps: int = 100_000
+    max_iterations: int = 10
+    target_success_rate: float = 0.80
+    target_prohibitive_rate: float = 0.10
+    eval_episodes: int = 50
+    initial_weights: dict | None = None
 
 
 # ── 보고서 생성 파이프라인 ────────────────────────────────────
@@ -405,3 +419,58 @@ async def rl_model_info():
         "calibrator": calibrator.get_info(),
         "trainer": departure_trainer.get_status(),
     }
+
+
+# ── 출항 RL 반복 학습 Endpoints ───────────────────────────────
+@app.post("/api/report/rl/departure/train/iterative")
+async def departure_iterative_train(req: DepartureIterativeTrainRequest, bg: BackgroundTasks):
+    """출항 RL 자동화 반복 학습 시작 — 학습→평가→보상 조정→재학습 루프."""
+    if departure_trainer.is_training or departure_iterative_trainer.is_running:
+        return JSONResponse(status_code=409, content={"error": "이미 학습이 진행 중입니다."})
+
+    initial_weights = None
+    if req.initial_weights:
+        try:
+            from modules.rl.departure_env import DepartureRewardWeights
+            initial_weights = DepartureRewardWeights(**req.initial_weights)
+        except Exception as e:
+            return JSONResponse(status_code=400,
+                                content={"error": f"initial_weights 형식 오류: {e}"})
+
+    monthly_ice = data_loader.load_monthly_ice()
+    weather = data_loader.load_weather()
+
+    bg.add_task(
+        departure_iterative_trainer.run,
+        monthly_ice=monthly_ice,
+        weather_data=weather,
+        route_scorer=route_scorer,
+        ice_class=req.ice_class,
+        forecast_days=req.forecast_days,
+        transit_days=req.transit_days,
+        base_timesteps=req.base_timesteps,
+        max_iterations=req.max_iterations,
+        target_success_rate=req.target_success_rate,
+        target_prohibitive_rate=req.target_prohibitive_rate,
+        eval_episodes=req.eval_episodes,
+        initial_weights=initial_weights,
+    )
+    return {"message": "출항 RL 반복 학습 시작",
+            "max_iterations": req.max_iterations,
+            "target_success_rate": req.target_success_rate,
+            "target_prohibitive_rate": req.target_prohibitive_rate}
+
+
+@app.get("/api/report/rl/departure/train/iterative/status")
+async def departure_iterative_status():
+    """출항 RL 반복 학습 진행 상태 조회."""
+    return departure_iterative_trainer.get_status()
+
+
+@app.post("/api/report/rl/departure/train/iterative/stop")
+async def departure_iterative_stop():
+    """출항 RL 반복 학습 중단 요청."""
+    if not departure_iterative_trainer.is_running:
+        return JSONResponse(status_code=400, content={"error": "반복 학습이 실행 중이 아닙니다."})
+    departure_iterative_trainer.stop()
+    return {"message": "출항 RL 반복 학습 중단 요청됨"}

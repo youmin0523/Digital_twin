@@ -63,9 +63,10 @@ class DepartureTrainer:
         forecast_days: int = 30,
         transit_days: int = 14,
         base_timesteps: int = 100_000,
+        reward_weights=None,
     ):
         """3단계 커리큘럼 학습 실행."""
-        from modules.rl.departure_env import DepartureSchedulingEnv
+        from modules.rl.departure_env import DepartureSchedulingEnv, DepartureRewardWeights
         from modules.rl.departure_agent import DepartureAgent
 
         # 동적 타겟 설정
@@ -100,6 +101,7 @@ class DepartureTrainer:
                     transit_days=transit_days,
                     start_date=date.today(),
                     difficulty=stage["difficulty"],
+                    reward_weights=reward_weights,
                 )
 
                 try:
@@ -141,6 +143,7 @@ class DepartureTrainer:
         weather_data: dict,
         route_scorer,
         ice_class: str = "PC5",
+        reward_weights=None,
     ):
         """단일 난이도 학습."""
         from modules.rl.departure_env import DepartureSchedulingEnv
@@ -159,6 +162,7 @@ class DepartureTrainer:
             route_scorer=route_scorer,
             ice_class=ice_class,
             difficulty=difficulty,
+            reward_weights=reward_weights,
         )
 
         try:
