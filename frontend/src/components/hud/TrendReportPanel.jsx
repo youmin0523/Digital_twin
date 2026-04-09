@@ -21,8 +21,8 @@ function rlStageLabel(pct) {
   return 'COMPLETE';
 }
 
-export default function TrendReportPanel() {
-  const [collapsed, setCollapsed] = useState(true);
+export default function TrendReportPanel({ open, onToggle }) {
+  const collapsed = !open;
   const [route, setRoute] = useState('NSR');
   const [iceClass, setIceClass] = useState('PC5');
   const [departureDate, setDepartureDate] = useState('');
@@ -146,45 +146,34 @@ export default function TrendReportPanel() {
     }
   }, []);
 
-  if (collapsed) {
-    return (
-      <div
-        onClick={() => setCollapsed(false)}
-        style={{
-          position: 'absolute',
-          right: 10,
-          top: 320,
-          zIndex: 400,
-          background: 'rgba(13, 19, 41, 0.92)',
-          border: '1px solid #1a2a4a',
-          borderRadius: 8,
-          padding: '8px 14px',
-          cursor: 'pointer',
-          backdropFilter: 'blur(8px)',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
-          fontFamily: "'Segoe UI', system-ui, sans-serif",
-          fontSize: 12,
-          color: '#93c5fd',
-          letterSpacing: 0.5,
-        }}
-      >
-        TREND REPORT
-      </div>
-    );
-  }
+  if (collapsed) return null;
 
   return (
+    <>
+    {/* 딤 배경 */}
+    <div
+      onClick={onToggle}
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(0,0,0,0.45)',
+        zIndex: 499,
+        backdropFilter: 'blur(2px)',
+      }}
+    />
     <div style={{
-      position: 'absolute',
-      right: 10,
-      top: 320,
-      width: 290,
-      zIndex: 400,
-      background: 'rgba(13, 19, 41, 0.92)',
-      border: '1px solid #1a2a4a',
-      borderRadius: 8,
-      backdropFilter: 'blur(8px)',
-      boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      width: 320,
+      maxHeight: '80vh',
+      overflowY: 'auto',
+      zIndex: 500,
+      background: 'rgba(10, 15, 35, 0.97)',
+      border: '1px solid #1e3a8a',
+      borderRadius: 10,
+      backdropFilter: 'blur(16px)',
+      boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
       padding: '12px 16px',
       fontFamily: "'Segoe UI', system-ui, sans-serif",
     }}>
@@ -194,7 +183,7 @@ export default function TrendReportPanel() {
           TREND REPORT
         </div>
         <span
-          onClick={() => setCollapsed(true)}
+          onClick={onToggle}
           style={{ cursor: 'pointer', color: '#6b89b0', fontSize: 16, lineHeight: 1 }}
         >
           ×
@@ -422,5 +411,6 @@ export default function TrendReportPanel() {
         </button>
       )}
     </div>
+    </>
   );
 }

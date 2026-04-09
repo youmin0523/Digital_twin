@@ -700,9 +700,11 @@ export default function BottomPanel({
   currentRoute,
   onRouteChange,
   onReset,
+  trendReportOpen,
+  onTrendReportToggle,
 }) {
   return (
-    <div className="bp">
+    <div className="bp" style={{ position: 'relative' }}>
       <div className="bp-panel bp-panel--triple">
         {/* 좌: Ice & Weather */}
         <div className="bp-section">
@@ -731,6 +733,28 @@ export default function BottomPanel({
         {/* 우: Service */}
         <div className="bp-section">
           <div className="bp-section__title bp-section__title--centered">
+            {/* TREND REPORT 토글 — 타이틀 좌측 absolute */}
+            <button
+              onClick={onTrendReportToggle}
+              style={{
+                position: 'absolute',
+                left: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                padding: '2px 8px',
+                background: trendReportOpen ? 'rgba(37,99,235,0.35)' : 'transparent',
+                border: `1px solid ${trendReportOpen ? '#3b82f6' : '#1e3a8a'}`,
+                borderRadius: 3,
+                color: trendReportOpen ? '#93c5fd' : '#4a6490',
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: 0.5,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              TREND REPORT {trendReportOpen ? '▲' : '▼'}
+            </button>
             Ship Service Info
             {/* //* [Modified Code] 초기화 아이콘 버튼 */}
             <button

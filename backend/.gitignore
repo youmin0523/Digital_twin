@@ -5,3 +5,42 @@ __pycache__
 *.txt
 
 sentinel1_iw_fetcher.log
+
+
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE / Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Distribution / build
+dist/
+build/
+
+# Temporary files
+*.tmp
+tmp/
+
+# OS generated files
+.DS_Store
+Thumbs.db

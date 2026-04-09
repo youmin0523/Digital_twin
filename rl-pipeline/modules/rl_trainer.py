@@ -13,12 +13,29 @@ from typing import Optional
 
 import numpy as np
 
+try:
+    from stable_baselines3.common.callbacks import BaseCallback as _BaseCallback
+except ImportError:
+    class _BaseCallback:
+        def __init__(self, verbose=0): pass
+        def _on_step(self): return True
+
 from .rl_agent import IcebergAvoidanceAgent
 from .rl_environment import IcebergAvoidanceEnv, Iceberg
 from .rl_ship_dynamics import approx_dist_km, bearing_deg, normalize_angle, km_per_deg_lon, KM_PER_DEG_LAT
 from .config import MAX_SAFE_CONCENTRATION
 
 logger = logging.getLogger(__name__)
+
+
+class _StopCallback(_BaseCallback):
+    """stop_requested 플래그를 확인해 학습을 중단시키는 콜백."""
+    def __init__(self, trainer: "RLTrainer"):
+        super().__init__(verbose=0)
+        self.trainer = trainer
+
+    def _on_step(self) -> bool:
+        return not self.trainer.stop_requested
 
 
 @dataclass
@@ -42,61 +59,75 @@ class RLTrainer:
     def __init__(self, hyperparams: dict | None = None):
         self.agent = IcebergAvoidanceAgent(hyperparams)
         self.is_training = False
+        self.stop_requested = False
         self.current_stage: Optional[str] = None
         self.training_log: list[dict] = []
 
     def train_curriculum(self, stages: list[CurriculumStage] | None = None) -> dict:
         stages = stages or CURRICULUM
         self.is_training = True
+        self.stop_requested = False
         results = []
+        try:
+            for i, stage in enumerate(stages):
+                if self.stop_requested:
+                    logger.info("[Trainer] 학습 중단 요청으로 커리큘럼 중단")
+                    break
+                self.current_stage = stage.name
+                logger.info(f"[Trainer] === 커리큘럼 {i+1}/{len(stages)}: {stage.name} ===")
 
-        for i, stage in enumerate(stages):
-            self.current_stage = stage.name
-            logger.info(f"[Trainer] === 커리큘럼 {i+1}/{len(stages)}: {stage.name} ===")
+                try:
+                    self.agent.create_env(difficulty=stage.difficulty)
+                    if self.agent.model is None:
+                        self.agent.build_model(difficulty=stage.difficulty)
+                    else:
+                        self.agent.model.set_env(self.agent.env)
 
-            self.agent.create_env(difficulty=stage.difficulty)
-            if self.agent.model is None:
-                self.agent.build_model(difficulty=stage.difficulty)
-            else:
-                self.agent.model.set_env(self.agent.env)
+                    start_time = time.time()
+                    metrics = self.agent.train(total_timesteps=stage.timesteps, extra_callback=_StopCallback(self))
+                    elapsed = time.time() - start_time
 
-            start_time = time.time()
-            metrics = self.agent.train(total_timesteps=stage.timesteps)
-            elapsed = time.time() - start_time
-
-            result = {
-                "stage": stage.name, "difficulty": stage.difficulty,
-                "timesteps": stage.timesteps, "elapsed_seconds": elapsed,
-                "metrics": metrics,
-            }
-            results.append(result)
-            self.training_log.append(result)
-
-        self.is_training = False
-        self.current_stage = None
+                    result = {
+                        "stage": stage.name, "difficulty": stage.difficulty,
+                        "timesteps": stage.timesteps, "elapsed_seconds": elapsed,
+                        "metrics": metrics,
+                    }
+                    results.append(result)
+                    self.training_log.append(result)
+                except Exception as e:
+                    logger.error(f"[Trainer] 스테이지 {stage.name} 실패 (다음 스테이지 계속): {e}", exc_info=True)
+                    if self.stop_requested:
+                        break
+        finally:
+            self.is_training = False
+            self.current_stage = None
         return {"stages": results, "total_stages": len(stages)}
 
     def train_single(self, difficulty: str = "medium", timesteps: int = 100_000) -> dict:
         self.is_training = True
+        self.stop_requested = False
         self.current_stage = f"single_{difficulty}"
+        try:
+            self.agent.create_env(difficulty=difficulty)
+            if self.agent.model is None:
+                self.agent.build_model(difficulty=difficulty)
+            else:
+                self.agent.model.set_env(self.agent.env)
 
-        self.agent.create_env(difficulty=difficulty)
-        if self.agent.model is None:
-            self.agent.build_model(difficulty=difficulty)
-        else:
-            self.agent.model.set_env(self.agent.env)
+            start_time = time.time()
+            metrics = self.agent.train(total_timesteps=timesteps, extra_callback=_StopCallback(self))
+            elapsed = time.time() - start_time
 
-        start_time = time.time()
-        metrics = self.agent.train(total_timesteps=timesteps)
-        elapsed = time.time() - start_time
-
-        self.is_training = False
-        self.current_stage = None
-
-        result = {"difficulty": difficulty, "timesteps": timesteps,
-                  "elapsed_seconds": elapsed, "metrics": metrics}
-        self.training_log.append(result)
-        return result
+            result = {"difficulty": difficulty, "timesteps": timesteps,
+                      "elapsed_seconds": elapsed, "metrics": metrics}
+            self.training_log.append(result)
+            return result
+        except Exception as e:
+            logger.error(f"[Trainer] 단일 학습 실패: {e}", exc_info=True)
+            return {"error": str(e)}
+        finally:
+            self.is_training = False
+            self.current_stage = None
 
     def evaluate(self, n_episodes: int = 100, difficulty: str = "medium") -> dict:
         if self.agent.model is None:
@@ -143,36 +174,39 @@ class RLTrainer:
                 return {"error": "모델이 로드되지 않았습니다.", "fallback": True}
 
         env = IcebergAvoidanceEnv(difficulty="medium")
-        env.reset()
+        try:
+            env.reset()
 
-        obs = self._build_obs_from_real_data(ship_state, icebergs, ice_data, weather)
-        action, value = self.agent.predict(obs, deterministic=True)
+            obs = self._build_obs_from_real_data(ship_state, icebergs, ice_data, weather)
+            action, value = self.agent.predict(obs, deterministic=True)
 
-        # 미래 경로 예측용 환경 구성
-        env.ship.lon = ship_state["lon"]
-        env.ship.lat = ship_state["lat"]
-        env.ship.heading = ship_state.get("heading", 0)
-        env.ship.speed_knots = ship_state.get("speed_knots", 14)
-        env.ice_concentration = ice_data.get("concentration", 0)
-        env.visibility_km = weather.get("visibility_km", 10)
-        env.icebergs = [
-            Iceberg(lat=b["lat"], lon=b["lon"], length_m=b.get("length_m", 5000))
-            for b in icebergs
-        ]
+            # 미래 경로 예측용 환경 구성
+            env.ship.lon = ship_state["lon"]
+            env.ship.lat = ship_state["lat"]
+            env.ship.heading = ship_state.get("heading", 0)
+            env.ship.speed_knots = ship_state.get("speed_knots", 14)
+            env.ice_concentration = ice_data.get("concentration", 0)
+            env.visibility_km = weather.get("visibility_km", 10)
+            env.icebergs = [
+                Iceberg(lat=b["lat"], lon=b["lon"], length_m=b.get("length_m", 5000))
+                for b in icebergs
+            ]
 
-        sequence = self.agent.predict_sequence(obs, env, n_steps=20)
-        projected_path = [{"lon": s["lon"], "lat": s["lat"]} for s in sequence]
-        confidence = min(1.0, max(0.0, (value + 50) / 100.0))
+            sequence = self.agent.predict_sequence(obs, env, n_steps=20)
+            projected_path = [{"lon": s["lon"], "lat": s["lat"]} for s in sequence]
+            confidence = min(1.0, max(0.0, (value + 50) / 100.0))
 
-        return {
-            "action": action.tolist(),
-            "heading_delta": float(action[0]),
-            "speed_factor": float(action[1]),
-            "confidence": confidence,
-            "value_estimate": value,
-            "projected_path": projected_path,
-            "fallback": confidence < 0.3,
-        }
+            return {
+                "action": action.tolist(),
+                "heading_delta": float(action[0]),
+                "speed_factor": float(action[1]),
+                "confidence": confidence,
+                "value_estimate": value,
+                "projected_path": projected_path,
+                "fallback": confidence < 0.3,
+            }
+        finally:
+            env.close()
 
     def _build_obs_from_real_data(self, ship_state: dict, icebergs: list[dict],
                                   ice_data: dict, weather: dict) -> np.ndarray:

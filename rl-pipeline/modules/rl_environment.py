@@ -26,6 +26,7 @@ from .rl_reward import (
     RewardContext, RewardWeights, compute_reward,
     compute_dynamic_safety_radius,
 )
+from .rl_land_mask import LandMask
 from .config import ROUTE_WAYPOINTS, MAX_SAFE_CONCENTRATION
 
 
@@ -153,6 +154,7 @@ class IcebergAvoidanceEnv(gym.Env):
         self.wave_height_m: float = 1.0
         self.step_count: int = 0
         self.prev_progress: float = 0.0
+        self.land_mask = LandMask()
 
     def _get_difficulty_params(self) -> dict:
         if self.difficulty == "easy":
@@ -334,6 +336,10 @@ class IcebergAvoidanceEnv(gym.Env):
             collision_r = max(self.COLLISION_RADIUS_KM, berg.length_m / 1000.0 / 2.0)
             if d < collision_r:
                 collision = True
+        
+        # 육지 충돌 체크
+        if not collision and self.land_mask.is_land(self.ship.lat, self.ship.lon):
+            collision = True
 
         current_progress = self._get_progress()
         delta_progress = current_progress - self.prev_progress

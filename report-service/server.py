@@ -250,7 +250,7 @@ def _run_rl_training(job_id: str, req: RLTrainRequest):
                 monthly_ice=monthly_ice,
                 weather_data=weather,
                 route_scorer=route_scorer,
-                ice_class="PC5",
+                base_timesteps=req.timesteps,
             )
         else:
             departure_trainer.train_single(
@@ -263,10 +263,14 @@ def _run_rl_training(job_id: str, req: RLTrainRequest):
 
         # 모델 리로드
         departure_agent._try_load()
-        rl_train_jobs[job_id] = {"status": "completed", "progress": 100}
+        if job_id in rl_train_jobs:
+            rl_train_jobs[job_id]["status"] = "completed"
+            rl_train_jobs[job_id]["progress"] = 100
     except Exception as e:
-        logger.error("RL 학습 실패: %s", e, exc_info=True)
-        rl_train_jobs[job_id] = {"status": "failed", "error": str(e)}
+        logger.error(f"학습 실패 (Job {job_id}): {e}", exc_info=True)
+        if job_id in rl_train_jobs:
+            rl_train_jobs[job_id]["status"] = "failed"
+            rl_train_jobs[job_id]["error"] = str(e)
 
 
 # ── Endpoints ─────────────────────────────────────────────────
@@ -341,6 +345,21 @@ async def rl_train_status(job_id: str):
         info.update(departure_trainer.get_status())
         return info
     return JSONResponse(status_code=404, content={"error": "Job not found"})
+
+
+@app.get("/api/report/rl/status")
+async def rl_status_general():
+    """전체 RL(A) 학습 상태 조회 (프론드엔트 HUD용)."""
+    return departure_trainer.get_status()
+
+
+@app.post("/api/report/rl/stop")
+async def rl_stop():
+    """진행 중인 RL(A) 학습 중단 요청."""
+    if not departure_trainer.is_training:
+        return JSONResponse(status_code=400, content={"error": "학습 중이 아닙니다."})
+    departure_trainer.stop_requested = True
+    return {"message": "학습 중단 요청됨"}
 
 
 @app.post("/api/report/rl/calibrate")

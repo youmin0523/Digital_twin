@@ -52,6 +52,8 @@ class DepartureAgent:
         """학습 실행."""
         if self.model is None:
             self.create_model(env)
+        else:
+            self.model.set_env(env)
         self.model.learn(total_timesteps=timesteps, callback=callback)
         self.save()
         self.is_trained = True

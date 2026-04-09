@@ -18,6 +18,7 @@ import TeleportOverlay from './components/hud/TeleportOverlay';
 import Minimap from './components/hud/Minimap';
 import WeatherHud from './components/hud/WeatherHud';
 import RLProgressOverlay from './components/hud/RLProgressOverlay';
+import TrendReportProgressOverlay from './components/hud/TrendReportProgressOverlay';
 import TrendReportPanel from './components/hud/TrendReportPanel';
 import Header from './components/layout/Header';
 import Sidebar from './components/layout/Sidebar';
@@ -81,6 +82,8 @@ function AppInner() {
 
   // 텔레포트 오버레이 상태
   const [teleportOpen, setTeleportOpen] = useState(false);
+  // Trend Report 패널 상태
+  const [trendReportOpen, setTrendReportOpen] = useState(false);
 
   // 토스트 알림 상태
   const [toastMsg, setToastMsg] = useState('');
@@ -2056,9 +2059,8 @@ function AppInner() {
 
           {/* RL 커리큘럼 학습 진행 오버레이 */}
           <RLProgressOverlay />
-
-          {/* 동향보고서 패널 */}
-          <TrendReportPanel />
+          <TrendReportProgressOverlay />
+          <TrendReportPanel open={trendReportOpen} onToggle={() => setTrendReportOpen(o => !o)} />
 
           {/* //* [Modified Code] 레이더(미니맵)을 메인 뷰포트 영역 내부 우측 하단에 부착하여 패널에 가려지지 않게 함 */}
           <Minimap
@@ -2086,6 +2088,8 @@ function AppInner() {
         currentRoute={state.currentRouteKey}
         onRouteChange={handleRouteChange}
         onReset={handleResetEvaluation}
+        trendReportOpen={trendReportOpen}
+        onTrendReportToggle={() => setTrendReportOpen(o => !o)}
       />
 
       {/* Ship Specs Summary Modal */}

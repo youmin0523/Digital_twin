@@ -3,7 +3,7 @@ departure_env.py — (A) 출항 스케줄링 RL 환경
 =============================================
 Gymnasium 환경: 최적 출항 날짜를 선택하는 연속 액션 RL.
 
-State (27-dim):
+State (28-dim):
   - month_sin, month_cos (2)
   - segment_conc × 7 (7)
   - segment_wave × 7 (7)
@@ -68,9 +68,9 @@ class DepartureSchedulingEnv(gym.Env):
         self.start_date = start_date or date.today()
         self.difficulty = difficulty
 
-        # 관측 공간: 27차원
+        # 관측 공간: 28차원 (month_sin/cos(2) + conc(7) + wave(7) + vis(7) + ice(1) + transit(1) + forecast(1) + dow_sin/cos(2) = 28)
         self.observation_space = spaces.Box(
-            low=-1.0, high=1.0, shape=(27,), dtype=np.float32
+            low=-1.0, high=1.0, shape=(28,), dtype=np.float32
         )
         # 행동 공간: 출항 날짜 오프셋 [-1, 1]
         self.action_space = spaces.Box(
