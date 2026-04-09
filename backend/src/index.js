@@ -72,6 +72,7 @@ function startRLServer() {
     '-m', 'uvicorn', 'server:app',
     '--host', '127.0.0.1',
     '--port', String(RL_PORT),
+    '--reload',
   ], {
     cwd: path.join(__dirname, '..', '..', 'rl-pipeline'),
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -98,8 +99,8 @@ function startRLServer() {
   });
 }
 
-// /api/rl/* → 내부 Python 서버로 프록시
-app.use('/api/rl', createProxyMiddleware({
+// /api/rl/* → 내부 Python 서버로 프록시 (마운트 경로 보존을 위해 필터 방식으로 변경)
+app.use(createProxyMiddleware('/api/rl', {
   target: `http://127.0.0.1:${RL_PORT}`,
   changeOrigin: true,
   timeout: 30000,
@@ -148,6 +149,7 @@ function startReportServer() {
     '-m', 'uvicorn', 'server:app',
     '--host', '127.0.0.1',
     '--port', String(REPORT_PORT),
+    '--reload',
   ], {
     cwd: path.join(__dirname, '..', '..', 'report-service'),
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -174,8 +176,8 @@ function startReportServer() {
   });
 }
 
-// /api/report/* → 내부 Python Report 서버로 프록시
-app.use('/api/report', createProxyMiddleware({
+// /api/report/* → 내부 Python Report 서버로 프록시 (마운트 경로 보존을 위해 필터 방식으로 변경)
+app.use(createProxyMiddleware('/api/report', {
   target: `http://127.0.0.1:${REPORT_PORT}`,
   changeOrigin: true,
   timeout: 120000,

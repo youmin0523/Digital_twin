@@ -14,13 +14,31 @@ import logging
 import time
 from datetime import date
 
+from stable_baselines3.common.callbacks import BaseCallback
+
 logger = logging.getLogger("report-service.rl.departure_trainer")
 
-CURRICULUM = [
+CURRICULUM_DEFAULTS = [
     {"difficulty": "easy", "timesteps": 50_000},
     {"difficulty": "medium", "timesteps": 100_000},
     {"difficulty": "hard", "timesteps": 100_000},
 ]
+
+
+class _ProgressCallback(BaseCallback):
+    """학습 중 실시간 진행률을 trainer에 반영하는 콜백."""
+
+    def __init__(self, trainer: "DepartureTrainer", stage_start: int):
+        super().__init__(verbose=0)
+        self.trainer = trainer
+        self.stage_start = stage_start
+
+    def _on_step(self) -> bool:
+        done = self.stage_start + self.num_timesteps
+        self.trainer.total_timesteps_done = done
+        if self.trainer.total_timesteps_target > 0:
+            self.trainer.progress = int(done / self.trainer.total_timesteps_target * 100)
+        return not self.trainer.stop_requested
 
 
 class DepartureTrainer:
@@ -28,10 +46,11 @@ class DepartureTrainer:
 
     def __init__(self):
         self.is_training = False
+        self.stop_requested = False
         self.current_stage = ""
         self.progress = 0  # 0~100
         self.total_timesteps_done = 0
-        self.total_timesteps_target = sum(c["timesteps"] for c in CURRICULUM)
+        self.total_timesteps_target = 0
         self.training_history = []
         self.start_time = None
 
@@ -43,59 +62,76 @@ class DepartureTrainer:
         ice_class: str = "PC5",
         forecast_days: int = 30,
         transit_days: int = 14,
+        base_timesteps: int = 100_000,
     ):
         """3단계 커리큘럼 학습 실행."""
         from modules.rl.departure_env import DepartureSchedulingEnv
         from modules.rl.departure_agent import DepartureAgent
 
+        # 동적 타겟 설정
+        stages = [
+            {"difficulty": "easy", "timesteps": int(base_timesteps * 0.5)},
+            {"difficulty": "medium", "timesteps": base_timesteps},
+            {"difficulty": "hard", "timesteps": base_timesteps},
+        ]
+        self.total_timesteps_target = sum(s["timesteps"] for s in stages)
         self.is_training = True
+        self.stop_requested = False
         self.progress = 0
         self.total_timesteps_done = 0
         self.start_time = time.time()
 
         agent = DepartureAgent()
 
-        for i, stage in enumerate(CURRICULUM):
-            self.current_stage = f"{stage['difficulty']} ({i+1}/{len(CURRICULUM)})"
-            logger.info("커리큘럼 단계 시작: %s", self.current_stage)
+        try:
+            for i, stage in enumerate(stages):
+                if self.stop_requested:
+                    logger.info("학습 중단 요청으로 커리큘럼 중단")
+                    break
+                self.current_stage = f"{stage['difficulty']} ({i+1}/{len(stages)})"
+                logger.info("커리큘럼 단계 시작: %s", self.current_stage)
 
-            env = DepartureSchedulingEnv(
-                monthly_ice=monthly_ice,
-                weather_data=weather_data,
-                route_scorer=route_scorer,
-                ice_class=ice_class,
-                forecast_days=forecast_days,
-                transit_days=transit_days,
-                start_date=date.today(),
-                difficulty=stage["difficulty"],
-            )
-
-            try:
-                agent.train(env, timesteps=stage["timesteps"])
-                self.total_timesteps_done += stage["timesteps"]
-                self.progress = int(
-                    self.total_timesteps_done / self.total_timesteps_target * 100
+                env = DepartureSchedulingEnv(
+                    monthly_ice=monthly_ice,
+                    weather_data=weather_data,
+                    route_scorer=route_scorer,
+                    ice_class=ice_class,
+                    forecast_days=forecast_days,
+                    transit_days=transit_days,
+                    start_date=date.today(),
+                    difficulty=stage["difficulty"],
                 )
-                self.training_history.append({
-                    "stage": stage["difficulty"],
-                    "timesteps": stage["timesteps"],
-                    "completed": True,
-                })
-            except Exception as e:
-                logger.error("학습 실패 (단계 %s): %s", stage["difficulty"], e)
-                self.training_history.append({
-                    "stage": stage["difficulty"],
-                    "timesteps": stage["timesteps"],
-                    "completed": False,
-                    "error": str(e),
-                })
-            finally:
-                env.close()
 
-        self.is_training = False
-        self.progress = 100
-        elapsed = time.time() - self.start_time
-        logger.info("커리큘럼 학습 완료 (%.1f초)", elapsed)
+                try:
+                    stage_start = self.total_timesteps_done
+                    cb = _ProgressCallback(self, stage_start)
+                    agent.train(env, timesteps=stage["timesteps"], callback=cb)
+                    self.total_timesteps_done = stage_start + stage["timesteps"]
+                    self.progress = int(
+                        self.total_timesteps_done / self.total_timesteps_target * 100
+                    )
+                    self.training_history.append({
+                        "stage": stage["difficulty"],
+                        "timesteps": stage["timesteps"],
+                        "completed": True,
+                    })
+                except Exception as e:
+                    logger.error("학습 실패 (단계 %s, 다음 단계 계속): %s", stage["difficulty"], e, exc_info=True)
+                    self.training_history.append({
+                        "stage": stage["difficulty"],
+                        "timesteps": stage["timesteps"],
+                        "completed": False,
+                        "error": str(e),
+                    })
+                    if self.stop_requested:
+                        break
+                finally:
+                    env.close()
+        finally:
+            self.is_training = False
+            self.progress = 100
+            elapsed = time.time() - self.start_time
+            logger.info("커리큘럼 학습 완료 (%.1f초)", elapsed)
 
     def train_single(
         self,
@@ -113,6 +149,9 @@ class DepartureTrainer:
         self.is_training = True
         self.current_stage = difficulty
         self.progress = 0
+        self.total_timesteps_done = 0
+        self.total_timesteps_target = timesteps
+        self.start_time = time.time()
 
         env = DepartureSchedulingEnv(
             monthly_ice=monthly_ice,
@@ -124,13 +163,16 @@ class DepartureTrainer:
 
         try:
             agent = DepartureAgent()
-            agent.train(env, timesteps=timesteps)
+            cb = _ProgressCallback(self, 0)
+            agent.train(env, timesteps=timesteps, callback=cb)
             self.progress = 100
         except Exception as e:
-            logger.error("단일 학습 실패: %s", e)
+            logger.error("단일 학습 실패: %s", e, exc_info=True)
         finally:
             env.close()
             self.is_training = False
+            elapsed = time.time() - self.start_time if self.start_time else 0
+            logger.info("단일 학습 종료 (%.1f초)", elapsed)
 
     def get_status(self) -> dict:
         """학습 상태 조회."""

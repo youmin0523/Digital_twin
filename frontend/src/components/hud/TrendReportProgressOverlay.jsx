@@ -1,25 +1,20 @@
 import React, { useEffect, useState } from 'react';
 
-const STAGE_STEPS = {
-  easy: 100000, stage_1_basic: 100000,
-  medium: 200000, stage_2_moderate: 200000,
-  hard: 200000, stage_3_hard: 200000,
-};
-const STAGE_ORDER = ['stage_1_basic', 'stage_2_moderate', 'stage_3_hard'];
+const STAGE_ORDER = ['easy (1/3)', 'medium (2/3)', 'hard (3/3)'];
 const STAGE_LABEL = {
-  easy: 'Easy', stage_1_basic: 'Easy',
-  medium: 'Medium', stage_2_moderate: 'Medium',
-  hard: 'Hard', stage_3_hard: 'Hard',
+  'easy (1/3)': 'Easy Stage',
+  'medium (2/3)': 'Medium Stage',
+  'hard (3/3)': 'Hard Stage',
 };
 const STAGE_COLOR = {
-  easy: '#34d399', stage_1_basic: '#34d399',
-  medium: '#f59e0b', stage_2_moderate: '#f59e0b',
-  hard: '#ef4444', stage_3_hard: '#ef4444',
+  'easy (1/3)': '#34d399',
+  'medium (2/3)': '#f59e0b',
+  'hard (3/3)': '#ef4444',
 };
 
-const POLL_MS = 1500;
+const POLL_MS = 2000;
 
-export default function RLProgressOverlay() {
+export default function TrendReportProgressOverlay() {
   const [status, setStatus] = useState(null);
   const [mode, setMode] = useState('curriculum'); // 'curriculum' or 'single'
   const [difficulty, setDifficulty] = useState('medium');
@@ -30,12 +25,12 @@ export default function RLProgressOverlay() {
 
     async function poll() {
       try {
-        const res = await fetch('/api/rl/status');
+        const res = await fetch('/api/report/rl/status');
         if (!res.ok) return;
         const data = await res.json();
         if (alive) setStatus(data);
       } catch {
-        // 서버 없으면 그냥 숨김
+        // 서버 없거나 에러 시 숨김
       }
     }
 
@@ -44,29 +39,15 @@ export default function RLProgressOverlay() {
     return () => { alive = false; clearInterval(id); };
   }, []);
 
-  // const training = status.is_training; // Always show the box to allow starting
-
   const stage = status?.current_stage ?? null;
-  const metrics = status?.agent_status?.metrics ?? {};
-  const stageTotal = STAGE_STEPS[stage] ?? 100000;
-  const stepInStage = metrics.timestep ?? 0;
-  const stagePct = Math.min(stepInStage / stageTotal, 1);
-
-  // 전체 진행률 — training_log 완료 단계 + 현재 단계 timestep
-  const completedTotal = (status?.training_log ?? []).reduce((s, log) => s + (log.timesteps ?? 0), 0);
-  const grandTotal = 500000; // easy 100k + medium 200k + hard 200k
-  const totalDone = Math.min(completedTotal + stepInStage, grandTotal);
-  const totalPct = totalDone / grandTotal;
-
-  // 단계 인디케이터용 인덱스
-  const stageIdx = STAGE_ORDER.indexOf(stage);
-  const stageColor = STAGE_COLOR[stage] ?? '#60a5fa';
+  const stageColor = STAGE_COLOR[stage] ?? '#10b981';
+  const totalPct = (status?.progress ?? 0) / 100;
 
   return (
     <div style={{
       position: 'absolute',
       left: 10,
-      top: 10,
+      top: 320, // RLProgressOverlay(top:10) 밑에 배치 (간격 고려)
       width: 240,
       zIndex: 300,
       background: 'rgba(13, 19, 41, 0.92)',
@@ -85,7 +66,7 @@ export default function RLProgressOverlay() {
         marginBottom: 8,
       }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0' }}>
-          RL 커리큘럼 학습
+          Trend Report 학습 (RL-A)
         </span>
         <span style={{
           fontSize: 10,
@@ -104,9 +85,9 @@ export default function RLProgressOverlay() {
         <button
           onClick={async () => {
             try {
-              await fetch('/api/rl/stop', { method: 'POST' });
+              await fetch('/api/report/rl/stop', { method: 'POST' });
             } catch (e) {
-              console.error('Failed to stop RL training:', e);
+              console.error('Failed to stop RL-A training:', e);
             }
           }}
           style={{
@@ -128,31 +109,21 @@ export default function RLProgressOverlay() {
 
       {status?.is_training && (
         <>
-          {/* 단계 진행률 */}
-          <div style={{ marginBottom: 6 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <span style={{ fontSize: 10, color: '#94a3b8' }}>단계 진행</span>
-              <span style={{ fontSize: 10, color: stageColor, fontVariantNumeric: 'tabular-nums' }}>
-                {(stagePct * 100).toFixed(1)}%
-              </span>
-            </div>
-            <ProgressBar pct={stagePct} color={stageColor} />
-          </div>
-
           {/* 전체 진행률 */}
           <div style={{ marginBottom: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <span style={{ fontSize: 10, color: '#64748b' }}>전체</span>
-              <span style={{ fontSize: 10, color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>
-                {fmtNum(totalDone)} / {fmtNum(grandTotal)}
+              <span style={{ fontSize: 10, color: '#94a3b8' }}>전체 커리큘럼</span>
+              <span style={{ fontSize: 10, color: stageColor, fontVariantNumeric: 'tabular-nums' }}>
+                {status.progress}%
               </span>
             </div>
-            <ProgressBar pct={totalPct} color="#475569" height={2} />
+            <ProgressBar pct={totalPct} color={stageColor} />
           </div>
 
           {/* 단계 인디케이터 */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+          <div style={{ display: 'flex', gap: 4, marginTop: 10 }}>
             {STAGE_ORDER.map((s, i) => {
+              const stageIdx = STAGE_ORDER.indexOf(stage);
               const done = i < stageIdx;
               const active = i === stageIdx;
               return (
@@ -160,11 +131,8 @@ export default function RLProgressOverlay() {
                   flex: 1,
                   height: 4,
                   borderRadius: 2,
-                  background: done ? STAGE_COLOR[s]
-                    : active ? stageColor
-                      : 'rgba(255,255,255,0.08)',
-                  opacity: done ? 0.7 : 1,
-                  transition: 'background 0.4s',
+                  background: done ? STAGE_COLOR[s] : active ? stageColor : 'rgba(255,255,255,0.08)',
+                  opacity: done ? 0.6 : 1,
                 }} />
               );
             })}
@@ -172,29 +140,14 @@ export default function RLProgressOverlay() {
         </>
       )}
 
-      {/* 메트릭 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-        <MetricRow
-          label="평균 보상 (100ep)"
-          value={metrics.mean_reward_100?.toFixed(2) ?? '—'}
-          color={rewardColor(metrics.mean_reward_100)}
-        />
-        <MetricRow
-          label="성공률"
-          value={metrics.success_rate != null ? `${(metrics.success_rate * 100).toFixed(1)}%` : '—'}
-          color={rateColor(metrics.success_rate)}
-        />
-        <MetricRow
-          label="충돌률"
-          value={metrics.collision_rate != null ? `${(metrics.collision_rate * 100).toFixed(1)}%` : '—'}
-          color={collisionColor(metrics.collision_rate)}
-        />
-        <MetricRow
-          label="에피소드"
-          value={metrics.episodes != null ? fmtNum(metrics.episodes) : '—'}
-          color="#94a3b8"
-        />
-      </div>
+      {/* 통계 */}
+      {status !== null && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <MetricRow label="완료된 스텝" value={fmtNum(status?.total_timesteps_done)} color="#e2e8f0" />
+          <MetricRow label="목표 스텝" value={fmtNum(status?.total_timesteps_target)} color="#94a3b8" />
+          <MetricRow label="경과 시간" value={status?.elapsed_seconds != null ? `${status.elapsed_seconds}s` : '—'} color="#94a3b8" />
+        </div>
+      )}
 
       {/* 학습 옵션 설정 (학습 중이 아닐 때만 노출) */}
       {!status?.is_training && (
@@ -215,10 +168,10 @@ export default function RLProgressOverlay() {
                   flex: 1,
                   padding: '3px 0',
                   fontSize: 9,
-                  background: mode === m ? 'rgba(30,58,138,0.5)' : 'transparent',
-                  border: `1px solid ${mode === m ? '#3b82f6' : '#334155'}`,
+                  background: mode === m ? 'rgba(5,150,105,0.4)' : 'transparent',
+                  border: `1px solid ${mode === m ? '#10b981' : '#334155'}`,
                   borderRadius: 3,
-                  color: mode === m ? '#93c5fd' : '#64748b',
+                  color: mode === m ? '#6ee7b7' : '#64748b',
                   cursor: 'pointer',
                 }}
               >
@@ -238,13 +191,13 @@ export default function RLProgressOverlay() {
                   background: '#0f172a',
                   border: '1px solid #334155',
                   borderRadius: 3,
-                  color: '#93c5fd',
+                  color: '#6ee7b7',
                   fontSize: 10,
                 }}
               >
-                <option value="easy">Easy (하절기)</option>
-                <option value="medium">Medium (춘추)</option>
-                <option value="hard">Hard (동절기)</option>
+                <option value="easy">Easy Stage</option>
+                <option value="medium">Medium Stage</option>
+                <option value="hard">Hard Stage</option>
               </select>
             </div>
           )}
@@ -271,7 +224,7 @@ export default function RLProgressOverlay() {
           <button
             onClick={async () => {
               try {
-                const res = await fetch('/api/rl/train', {
+                const res = await fetch('/api/report/rl/train', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
@@ -285,7 +238,7 @@ export default function RLProgressOverlay() {
                   alert(`학습 시작 실패: ${err.error || '알 수 없는 오류'}`);
                 }
               } catch (e) {
-                console.error('Failed to start RL-C training:', e);
+                console.error('Failed to start RL-A training:', e);
                 alert('네트워크 오류가 발생했습니다.');
               }
             }}
@@ -293,17 +246,17 @@ export default function RLProgressOverlay() {
               width: '100%',
               marginTop: 10,
               padding: '8px 0',
-              background: 'linear-gradient(135deg,#2563eb,#1d4ed8)',
-              border: '1px solid #3b82f6',
+              background: 'linear-gradient(135deg,#059669,#10b981)',
+              border: '1px solid #059669',
               borderRadius: 4,
               color: '#fff',
               fontSize: 11,
               fontWeight: 'bold',
               cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(37,99,235,0.3)',
+              boxShadow: '0 2px 8px rgba(5,150,105,0.3)',
             }}
           >
-            학습 시작 (Start Training)
+            RL 학습 시작 (Start Training)
           </button>
         </div>
       )}
@@ -334,7 +287,7 @@ function MetricRow({ label, value, color }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <span style={{ fontSize: 10, color: '#64748b' }}>{label}</span>
-      <span style={{ fontSize: 12, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
+      <span style={{ fontSize: 11, fontWeight: 600, color, fontVariantNumeric: 'tabular-nums' }}>
         {value}
       </span>
     </div>
@@ -345,25 +298,4 @@ function fmtNum(n) {
   if (n == null) return '—';
   if (n >= 1000) return `${(n / 1000).toFixed(0)}k`;
   return String(n);
-}
-
-function rewardColor(v) {
-  if (v == null) return '#64748b';
-  if (v > 50) return '#34d399';
-  if (v > 0) return '#f59e0b';
-  return '#ef4444';
-}
-
-function rateColor(v) {
-  if (v == null) return '#64748b';
-  if (v > 0.7) return '#34d399';
-  if (v > 0.4) return '#f59e0b';
-  return '#ef4444';
-}
-
-function collisionColor(v) {
-  if (v == null) return '#64748b';
-  if (v < 0.1) return '#34d399';
-  if (v < 0.3) return '#f59e0b';
-  return '#ef4444';
 }

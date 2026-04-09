@@ -77,22 +77,36 @@ async def rl_infer(req: RLInferRequest):
 @app.post("/api/rl/train")
 async def rl_train(req: RLTrainRequest, bg: BackgroundTasks):
     """RL 학습 시작 (비동기)"""
-    if rl_trainer.is_training:
-        return JSONResponse(status_code=409, content={"error": "이미 학습이 진행 중입니다."})
+    logger.info(f"[API] RL 학습 요청: {req}")
+    try:
+        if rl_trainer.is_training:
+            return JSONResponse(status_code=409, content={"error": "이미 학습이 진행 중입니다."})
 
-    if req.curriculum:
-        bg.add_task(rl_trainer.train_curriculum)
-    else:
-        bg.add_task(rl_trainer.train_single, req.difficulty, req.timesteps)
+        if req.curriculum:
+            bg.add_task(rl_trainer.train_curriculum)
+        else:
+            bg.add_task(rl_trainer.train_single, req.difficulty, req.timesteps)
 
-    return {"message": "학습 시작", "curriculum": req.curriculum,
-            "difficulty": req.difficulty, "timesteps": req.timesteps}
+        return {"message": "학습 시작", "curriculum": req.curriculum,
+                "difficulty": req.difficulty, "timesteps": req.timesteps}
+    except Exception as e:
+        logger.error(f"[API] 학습 시작 실패: {e}", exc_info=True)
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.get("/api/rl/status")
 async def rl_status():
     """학습 상태 및 메트릭 조회"""
     return rl_trainer.get_status()
+
+
+@app.post("/api/rl/stop")
+async def rl_stop():
+    """진행 중인 학습 중단 요청"""
+    if not rl_trainer.is_training:
+        return JSONResponse(status_code=400, content={"error": "학습 중이 아닙니다."})
+    rl_trainer.stop_requested = True
+    return {"message": "학습 중단 요청됨"}
 
 
 @app.post("/api/rl/evaluate")

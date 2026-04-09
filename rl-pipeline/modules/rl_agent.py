@@ -142,17 +142,20 @@ class IcebergAvoidanceAgent:
         logger.info("[RL] SAC 모델 생성 완료")
         return self.model
 
-    def train(self, total_timesteps: int = 500_000) -> dict:
+    def train(self, total_timesteps: int = 500_000, extra_callback=None) -> dict:
         if self.model is None:
             self.build_model()
 
         self.callback = TrainingMetricsCallback(log_interval=5000)
         logger.info(f"[RL] 학습 시작: {total_timesteps} 스텝")
 
+        from stable_baselines3.common.callbacks import CallbackList
+        callbacks = CallbackList([self.callback, extra_callback]) if extra_callback else self.callback
+
         self.model.learn(
             total_timesteps=total_timesteps,
-            callback=self.callback,
-            progress_bar=True,
+            callback=callbacks,
+            progress_bar=False,
         )
 
         self._model_version += 1

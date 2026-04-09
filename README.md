@@ -111,7 +111,7 @@ SAC (Soft Actor-Critic) 알고리즘을 사용하여 선박이 빙산과 육지�
 `requirements.txt`에는 RL 관련 패키지가 포함되어 있지 않으므로 별도로 설치합니다:
 
 ```bash
-cd ai-pipeline
+cd rl-pipeline
 
 # Windows
 venv\Scripts\pip install gymnasium stable-baselines3
@@ -120,38 +120,21 @@ venv\Scripts\pip install gymnasium stable-baselines3
 venv/bin/pip install gymnasium stable-baselines3
 ```
 
-#### 2. 글로벌 Land Mask 생성
-
-육지 충돌 감지를 위해 글로벌 land mask 데이터를 생성해야 합니다.
-인터넷 연결이 필요합니다 (Natural Earth 데이터 다운로드).
-
-```bash
-cd ai-pipeline
-
-# Windows
-venv\Scripts\python scripts/generate_global_land_mask.py
-
-# Mac / Linux
-venv/bin/python scripts/generate_global_land_mask.py
-```
-
-실행 결과:
-```
-Natural Earth 110m 육지 데이터 다운로드 중... 완료 (127개 feature)
-글로벌 land mask 생성 중 (360행 x 720열 = 259,200셀)...
-  진행: 0/360 (-89.8°N)
-  ...
-완료: 육지 셀 86,126개 / 전체 259,200개 (33.2%)
-저장: ai-pipeline/data/land_mask_global.json (0.5 MB)
-```
-
-> 한 번만 실행하면 됩니다. 생성된 `data/land_mask_global.json`은 이후 자동으로 로드됩니다.
+#### 2. 글로벌 Land Mask 적용 (구현 완료)
+ 
+ 육지 충돌 감지를 위해 `frontend/public/data/landMask.json` 데이터를 `rl-pipeline/data/land_mask_global.json`으로 자동 이식하여 사용합니다. 
+ 현재 RL 환경(`IcebergAvoidanceEnv`)은 빙산뿐만 아니라 해당 마스크 데이터를 기반으로 육지 충돌을 실시간으로 감지하고 패널티를 부여합니다.
+ 
+ *   **위도 범위**: 65°N ~ 90°N (0.5° 해상도)
+ *   **데이터 소스**: 프론트엔드 공유 리소스 (`landMask.json`)
+ 
+ 별도의 스크립트 실행 없이, `train_all.py` 실행 시 자동으로 로드됩니다.
 
 ### 학습 실행 방법
 
 > **디렉토리 위치 안내**
 > - **방법 1, 2 (API / Swagger)**: 이미 실행 중인 서버에 HTTP 요청을 보내는 것이므로, **터미널 위치는 상관없습니다**. 어디에서든 실행 가능합니다.
-> - **방법 3 (Python 직접)**: 반드시 `ai-pipeline` 폴더에서 실행해야 합니다. Python이 `modules` 패키지를 찾아야 하기 때문입니다.
+> - **방법 3 (Python 직접)**: 반드시 `rl-pipeline` 폴더에서 실행해야 합니다. Python이 `modules` 패키지를 찾아야 하기 때문입니다.
 
 #### 방법 1: Swagger UI에서 학습 (가장 쉬움)
 
@@ -299,11 +282,11 @@ curl -X POST "http://localhost:8000/api/rl/evaluate?n_episodes=100&difficulty=me
 
 API 서버를 띄우지 않고 Python에서 직접 학습을 실행합니다.
 
-> **반드시 `ai-pipeline` 폴더에서 실행해야 합니다.**
+> **반드시 `rl-pipeline` 폴더에서 실행해야 합니다.**
 
 ```cmd
-:: ai-pipeline 폴더로 이동
-cd ai-pipeline
+:: rl-pipeline 폴더로 이동
+cd rl-pipeline
 
 :: 커리큘럼 학습 실행
 venv\Scripts\python -c "from modules.rl_trainer import RLTrainer; print(RLTrainer().train_curriculum())"
@@ -319,7 +302,7 @@ venv\Scripts\python -c "from modules.rl_trainer import RLTrainer; print(RLTraine
 학습된 모델은 자동으로 아래 경로에 저장됩니다:
 
 ```
-ai-pipeline/models/sac_iceberg/
+rl-pipeline/models/sac_iceberg/
 ├── sac_v1.zip              # SAC 모델 가중치
 ├── sac_v1_meta.json        # 하이퍼파라미터 및 최종 메트릭
 ├── sac_v2.zip              # 버전 2 (재학습 시)

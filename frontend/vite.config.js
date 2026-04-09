@@ -11,6 +11,8 @@ export default defineConfig({
         target: 'http://localhost:8001',
         rewrite: (path) => path.replace(/^\/ai-api/, '/api'),
       },
+      '/api/rl': 'http://localhost:8001',
+      '/api/report': 'http://localhost:8002',
       '/api': 'http://localhost:8000',
       '/proxy': 'http://localhost:8000',
       '/nsidc-proxy': 'http://localhost:8000',
