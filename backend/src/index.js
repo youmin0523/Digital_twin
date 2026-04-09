@@ -103,12 +103,23 @@ app.use('/api/rl', createProxyMiddleware({
   changeOrigin: true,
   timeout: 30000,
   proxyTimeout: 30000,
-  onError: (_err, _req, res) => {
-    res.status(503).json({
-      error: 'RL 서버에 연결할 수 없습니다.',
-      fallback: true,
-      detail: rlProcess ? 'RL 서버 시작 중...' : 'RL 서버가 비활성화되어 있습니다.',
-    });
+  on: {
+    proxyReq: (proxyReq, req) => {
+      // express.json()이 body를 먼저 소비하므로 직접 재작성
+      if (req.body && Object.keys(req.body).length > 0) {
+        const bodyData = JSON.stringify(req.body);
+        proxyReq.setHeader('Content-Type', 'application/json');
+        proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+        proxyReq.write(bodyData);
+      }
+    },
+    error: (_err, _req, res) => {
+      res.status(503).json({
+        error: 'RL 서버에 연결할 수 없습니다.',
+        fallback: true,
+        detail: rlProcess ? 'RL 서버 시작 중...' : 'RL 서버가 비활성화되어 있습니다.',
+      });
+    },
   },
 }));
 

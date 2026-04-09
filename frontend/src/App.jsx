@@ -17,6 +17,7 @@ import TeleportOverlay from './components/hud/TeleportOverlay';
 // //* [Modified Code] 우측 하단 레이더 UI 컴포넌트 임포트
 import Minimap from './components/hud/Minimap';
 import WeatherHud from './components/hud/WeatherHud';
+import RLProgressOverlay from './components/hud/RLProgressOverlay';
 import Header from './components/layout/Header';
 import Sidebar from './components/layout/Sidebar';
 import SimulationControls from './components/layout/SimulationControls';
@@ -2051,6 +2052,9 @@ function AppInner() {
               !state.isSimulating && state.simProgress === 0 && !!mouseGlobePos
             }
           />
+
+          {/* RL 커리큘럼 학습 진행 오버레이 */}
+          <RLProgressOverlay />
 
           {/* //* [Modified Code] 레이더(미니맵)을 메인 뷰포트 영역 내부 우측 하단에 부착하여 패널에 가려지지 않게 함 */}
           <Minimap

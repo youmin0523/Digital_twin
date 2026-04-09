@@ -1,0 +1,6 @@
+data
+output
+modules
+__pycache__
+*.log
+*.txt
