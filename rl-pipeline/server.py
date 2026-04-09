@@ -12,6 +12,8 @@ from typing import List
 import logging
 
 from modules.rl_trainer import RLTrainer
+from modules.rl_iterative_trainer import IterativeTrainer
+from modules.rl_reward import RewardWeights
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("rl-pipeline")
@@ -31,6 +33,7 @@ app.add_middleware(
 
 # ── RL 트레이너 초기화 ────────────────────────────────────
 rl_trainer = RLTrainer()
+iterative_trainer = IterativeTrainer(base_trainer=rl_trainer)
 
 
 # ── Request Models ────────────────────────────────────────
@@ -45,6 +48,15 @@ class RLTrainRequest(BaseModel):
     difficulty: str = "medium"
     timesteps: int = 100_000
     curriculum: bool = False
+
+
+class IterativeTrainRequest(BaseModel):
+    max_iterations: int = 10
+    target_success_rate: float = 0.85
+    target_collision_rate: float = 0.05
+    eval_episodes: int = 100
+    eval_difficulty: str = "hard"
+    initial_weights: dict | None = None
 
 
 # ── Endpoints ─────────────────────────────────────────────
@@ -113,3 +125,48 @@ async def rl_stop():
 async def rl_evaluate(n_episodes: int = 100, difficulty: str = "medium"):
     """학습된 모델 평가"""
     return rl_trainer.evaluate(n_episodes=n_episodes, difficulty=difficulty)
+
+
+# ── 반복 학습 Endpoints ────────────────────────────────────
+@app.post("/api/rl/train/iterative")
+async def rl_train_iterative(req: IterativeTrainRequest, bg: BackgroundTasks):
+    """자동화 반복 학습 시작 — 학습→평가→보상 조정→재학습 루프"""
+    if rl_trainer.is_training or iterative_trainer.is_running:
+        return JSONResponse(status_code=409, content={"error": "이미 학습이 진행 중입니다."})
+
+    initial_weights = None
+    if req.initial_weights:
+        try:
+            initial_weights = RewardWeights(**req.initial_weights)
+        except Exception as e:
+            return JSONResponse(status_code=400,
+                                content={"error": f"initial_weights 형식 오류: {e}"})
+
+    bg.add_task(
+        iterative_trainer.run,
+        max_iterations=req.max_iterations,
+        target_success_rate=req.target_success_rate,
+        target_collision_rate=req.target_collision_rate,
+        eval_episodes=req.eval_episodes,
+        eval_difficulty=req.eval_difficulty,
+        initial_weights=initial_weights,
+    )
+    return {"message": "반복 학습 시작",
+            "max_iterations": req.max_iterations,
+            "target_success_rate": req.target_success_rate,
+            "target_collision_rate": req.target_collision_rate}
+
+
+@app.get("/api/rl/train/iterative/status")
+async def rl_iterative_status():
+    """반복 학습 진행 상태 조회"""
+    return iterative_trainer.get_status()
+
+
+@app.post("/api/rl/train/iterative/stop")
+async def rl_iterative_stop():
+    """반복 학습 중단 요청"""
+    if not iterative_trainer.is_running:
+        return JSONResponse(status_code=400, content={"error": "반복 학습이 실행 중이 아닙니다."})
+    iterative_trainer.stop()
+    return {"message": "반복 학습 중단 요청됨"}

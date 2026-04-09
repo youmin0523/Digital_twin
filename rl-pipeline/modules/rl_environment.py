@@ -126,7 +126,8 @@ class IcebergAvoidanceEnv(gym.Env):
     COLLISION_RADIUS_KM = 0.5
     MAX_NEARBY_ICEBERGS = 3
 
-    def __init__(self, render_mode=None, difficulty: str = "medium"):
+    def __init__(self, render_mode=None, difficulty: str = "medium",
+                 reward_weights: RewardWeights | None = None):
         super().__init__()
         self.render_mode = render_mode
         self.difficulty = difficulty
@@ -142,7 +143,7 @@ class IcebergAvoidanceEnv(gym.Env):
 
         self.ship: ShipState | None = None
         self.ship_params = ShipParams()
-        self.reward_weights = RewardWeights()
+        self.reward_weights = reward_weights if reward_weights is not None else RewardWeights()
         self.icebergs: list[Iceberg] = []
         self.route_wps: list[tuple[float, float]] = []
         self.segment_start_idx: int = 0

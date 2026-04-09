@@ -28,6 +28,7 @@ except ImportError:
 
 from gymnasium.wrappers import RecordEpisodeStatistics
 from .rl_environment import IcebergAvoidanceEnv
+from .rl_reward import RewardWeights
 
 logger = logging.getLogger(__name__)
 
@@ -110,19 +111,21 @@ class IcebergAvoidanceAgent:
         self.callback = TrainingMetricsCallback()
         self._model_version = 0
 
-    def create_env(self, difficulty: str = "medium"):
-        raw_env = IcebergAvoidanceEnv(difficulty=difficulty)
+    def create_env(self, difficulty: str = "medium",
+                   reward_weights: RewardWeights | None = None):
+        raw_env = IcebergAvoidanceEnv(difficulty=difficulty, reward_weights=reward_weights)
         self.env = RecordEpisodeStatistics(raw_env)
         return self.env
 
-    def build_model(self, difficulty: str = "medium"):
+    def build_model(self, difficulty: str = "medium",
+                    reward_weights: RewardWeights | None = None):
         if not HAS_SB3:
             raise ImportError(
                 "stable-baselines3가 설치되지 않았습니다. "
                 "pip install stable-baselines3[extra] torch 를 실행하세요."
             )
         if self.env is None:
-            self.create_env(difficulty)
+            self.create_env(difficulty, reward_weights=reward_weights)
 
         self.model = SAC(
             "MlpPolicy",
