@@ -445,7 +445,7 @@ function makeIceGeo(typeName, w, h, d) {
 // ThreeOverlay Component
 // =============================================================================
 const ThreeOverlay = forwardRef(function ThreeOverlay(
-  { visible, shipState, specs, mode, baseRef },
+  { visible, shipState, specs, mode, baseRef, manualMode },
   ref,
 ) {
   const canvasRef = useRef(null);
@@ -658,7 +658,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
     [trackDisposable, placeOnWater],
   );
 
-  const buildIcebergs = useCallback(() => {
+  const buildIcebergs = useCallback((centerX = 0, centerZ = 0) => {
     const { scene, tIcebergs } = ctx.current;
 
     // Clear existing icebergs
@@ -667,18 +667,22 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
     }
     tIcebergs.length = 0;
 
+    // 빙하 생성 중심점 저장 (재생성 판단용)
+    ctx.current.icebergCenterX = centerX;
+    ctx.current.icebergCenterZ = centerZ;
+
     // Close range: small/medium only
     const closeRanges = [60, 100, 155, 220, 310, 420];
     for (const dist of closeRanges) {
       const angle = Math.PI / 3 + Math.random() * ((Math.PI * 4) / 3);
       const closeType = dist < 180 ? ICE_TYPES[3] : ICE_TYPES[2];
-      spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, closeType);
+      spawnIceberg(centerX + Math.cos(angle) * dist, centerZ + Math.sin(angle) * dist, closeType);
     }
     // Mid range: all types mixed
     for (let i = 0; i < 55; i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist = rng(500, 5000);
-      spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, pickType());
+      spawnIceberg(centerX + Math.cos(angle) * dist, centerZ + Math.sin(angle) * dist, pickType());
     }
     // Far range: tabular/large 45% priority
     for (let i = 0; i < 90; i++) {
@@ -690,7 +694,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
             ? ICE_TYPES[0]
             : ICE_TYPES[1]
           : pickType();
-      spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, farType);
+      spawnIceberg(centerX + Math.cos(angle) * dist, centerZ + Math.sin(angle) * dist, farType);
     }
   }, [spawnIceberg]);
 
@@ -1653,6 +1657,33 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
     buildFoam();
     buildLandMasses(baseRef?.lat ?? 35.1, baseRef?.lon ?? 129.0);
 
+    // ── 수동 조종 시각 참조용 해상 부표 그리드 ──
+    // 고정 위치 마커를 배치하여 선박 이동을 눈으로 확인 가능하게 함
+    const buoyGroup = new THREE.Group();
+    buoyGroup.name = 'buoyGrid';
+    const buoyGeo = new THREE.CylinderGeometry(3, 3, 12, 8);
+    const buoyTopGeo = new THREE.SphereGeometry(4, 8, 8);
+    const buoyMat = new THREE.MeshStandardMaterial({ color: 0xff4444, roughness: 0.6 });
+    const buoyTopMat = new THREE.MeshStandardMaterial({ color: 0xffcc00, roughness: 0.5 });
+    const BUOY_SPACING = 2000;
+    const BUOY_GRID = 40; // -40 ~ +40 → 80x80 그리드
+    for (let gx = -BUOY_GRID; gx <= BUOY_GRID; gx++) {
+      for (let gz = -BUOY_GRID; gz <= BUOY_GRID; gz++) {
+        // 밀도 조절: 5칸마다 하나만 배치
+        if (gx % 5 !== 0 || gz % 5 !== 0) continue;
+        const bx = gx * BUOY_SPACING;
+        const bz = gz * BUOY_SPACING;
+        const pole = new THREE.Mesh(buoyGeo, buoyMat);
+        pole.position.set(bx, 6, bz);
+        buoyGroup.add(pole);
+        const top = new THREE.Mesh(buoyTopGeo, buoyTopMat);
+        top.position.set(bx, 14, bz);
+        buoyGroup.add(top);
+      }
+    }
+    scene.add(buoyGroup);
+    ctx.current.buoyGroup = buoyGroup;
+
     // Resize handler
     const handleResize = () => {
       renderer.setSize(window.innerWidth, window.innerHeight);
@@ -1705,8 +1736,8 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
     if (!shipState || !ctx.current.shipGroup3) return;
     const { lat, lon, heading } = shipState;
     if (lat != null && lon != null && heading != null) {
-      // 위도 기반 빙산 표시 — 60°N 이상에서만 빙산 보임
-      const showIce = lat >= 60;
+      // 위도 기반 빙산 표시 — 수동 모드에서는 항상 표시, 자동 모드에서는 60°N 이상
+      const showIce = manualMode || lat >= 60;
       for (const ice of ctx.current.tIcebergs) {
         ice.grp.visible = showIce;
       }
@@ -1827,8 +1858,37 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
         // //* [Modified Code] 바다(파도) 평면이 선박의 물리 이동을 따라다니도록 shipGroup3.position 위치 전달
         animateOcean(t, shipGroup3 ? shipGroup3.position : null);
 
-        // 배 heading 부드러운 보간 (FOLLOW/자동 모드)
-        if (shipGroup3 && shipState) {
+        // 부표 그리드를 선박 주변으로 재중심화 (이동해도 항상 부표가 보이도록)
+        if (ctx.current.buoyGroup && shipGroup3) {
+          const sp = shipGroup3.position;
+          const BUOY_SPACING = 2000;
+          const snapX = Math.round(sp.x / BUOY_SPACING) * BUOY_SPACING;
+          const snapZ = Math.round(sp.z / BUOY_SPACING) * BUOY_SPACING;
+          const bg = ctx.current.buoyGroup;
+          if (Math.abs(bg.position.x - snapX) > BUOY_SPACING ||
+              Math.abs(bg.position.z - snapZ) > BUOY_SPACING) {
+            bg.position.x = snapX;
+            bg.position.z = snapZ;
+          }
+        }
+
+        // 빙하 재생성: 선박이 빙하 중심에서 60km 이상 떨어지면 선박 주변에 다시 생성
+        if (shipGroup3 && ctx.current.tIcebergs) {
+          const sp = shipGroup3.position;
+          const cx = ctx.current.icebergCenterX || 0;
+          const cz = ctx.current.icebergCenterZ || 0;
+          const d2 = (sp.x - cx) * (sp.x - cx) + (sp.z - cz) * (sp.z - cz);
+          if (d2 > 60000 * 60000) {
+            buildIcebergs(sp.x, sp.z);
+            // 위도 체크하여 visible 설정
+            for (const ice of ctx.current.tIcebergs) {
+              ice.grp.visible = true;
+            }
+          }
+        }
+
+        // 배 heading 부드러운 보간 (FOLLOW/자동 모드에서만 — 수동 모드는 App.jsx에서 직접 설정)
+        if (shipGroup3 && shipState && !manualMode) {
           const headingRad = (-(shipState.heading || 0) * Math.PI) / 180;
           let diff = headingRad - shipGroup3.rotation.y;
           while (diff < -Math.PI) diff += Math.PI * 2;
@@ -1950,7 +2010,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
     }
     rafId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId);
-  }, [visible, animateOcean, mode, shipState]);
+  }, [visible, animateOcean, mode, shipState, manualMode, buildIcebergs]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   const isVisible = visible === true;

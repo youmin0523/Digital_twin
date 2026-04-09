@@ -379,6 +379,7 @@ function AppInner() {
   useEffect(() => {
     let lastTime = performance.now();
     let lastHudUpdate = 0;
+    let manualFrameCount = 0; // 수동 모드 HUD 업데이트 프레임 카운터
 
     function loop(now) {
       animFrameRef.current = requestAnimationFrame(loop);
@@ -557,11 +558,11 @@ function AppInner() {
         if (curMode === 'BRIDGE' || curMode === 'FOLLOW') {
           const three = threeRef.current;
           if (three?.shipPivot) {
-            // Base Reference: 출발항 기준 위/경도 직사영 사용 (렌더링 동기화)
+            // Base Reference: 현재 위도 기준 mPerDegLon 사용 (고위도 경도 보정)
             const depPort = PORTS[state.departurePort] || PORTS.BUSAN;
             const METERS_PER_DEGREE_LAT = 111132.954;
             const mPerDegLon =
-              111319.491 * Math.cos((depPort.lat * Math.PI) / 180);
+              111319.491 * Math.cos((pos.lat * Math.PI) / 180);
             three.shipPivot.position.x =
               ((pos.lon - depPort.lon) * mPerDegLon) / 1.5;
             three.shipPivot.position.z =
@@ -584,91 +585,96 @@ function AppInner() {
         }
       }
 
-      // ── 수동 조종 키보드 입력 처리 ──
+      // ── 수동 조종 키보드 입력 처리 (manualMode일 때만) ──
       const k = keys.current;
-      if (
-        k &&
-        (k['KeyW'] || k['KeyS'] || k['KeyA'] || k['KeyD'] || k['KeyX'])
-      ) {
-        // 스로틀 (W/S) — 천천히 올라가고 천천히 내려감
-        if (k['KeyW'])
-          manualThrottleRef.current = Math.min(
-            manualThrottleRef.current + dt * 25,
-            100,
-          );
-        if (k['KeyS'])
-          manualThrottleRef.current = Math.max(
-            manualThrottleRef.current - dt * 25,
-            -20,
-          );
-        if (k['KeyX']) manualThrottleRef.current *= 0.9; // 급정지 대신 부드럽게 감속
+      if (manualModeRef.current && k) {
+        const hasInput = k['KeyW'] || k['KeyS'] || k['KeyA'] || k['KeyD'] || k['KeyX'];
 
-        // 타 (A/D) — 관성 기반 선회: 천천히 돌기 시작, 천천히 멈춤
-        const maxTurnRate = 0.4;
-        let targetTurn = 0;
-        if (k['KeyA']) targetTurn = -maxTurnRate;
-        if (k['KeyD']) targetTurn = maxTurnRate;
-        manualTurnRateRef.current +=
-          (targetTurn - manualTurnRateRef.current) * dt * 1.5; // 부드럽게 가감속
-        if (Math.abs(manualTurnRateRef.current) < 0.001)
-          manualTurnRateRef.current = 0;
-        manualHeadingRef.current += manualTurnRateRef.current * dt;
+        // 키 입력 시 스로틀/방향 갱신
+        if (hasInput) {
+          if (k['KeyW'])
+            manualThrottleRef.current = Math.min(
+              manualThrottleRef.current + dt * 30,
+              100,
+            );
+          if (k['KeyS'])
+            manualThrottleRef.current = Math.max(
+              manualThrottleRef.current - dt * 30,
+              -20,
+            );
+          if (k['KeyX']) manualThrottleRef.current *= 0.9;
 
-        // 속도 계산 — 관성 강하게 (느리게 반응)
-        const targetSpeed = manualThrottleRef.current * 0.3;
+          const maxTurnRate = 0.4;
+          let targetTurn = 0;
+          if (k['KeyA']) targetTurn = -maxTurnRate;
+          if (k['KeyD']) targetTurn = maxTurnRate;
+          manualTurnRateRef.current +=
+            (targetTurn - manualTurnRateRef.current) * dt * 1.5;
+          if (Math.abs(manualTurnRateRef.current) < 0.001)
+            manualTurnRateRef.current = 0;
+          manualHeadingRef.current += manualTurnRateRef.current * dt;
+        } else {
+          // 키 안 누를 때: 스로틀 서서히 감소 (관성 감속)
+          manualThrottleRef.current *= (1 - dt * 2.0);
+          if (Math.abs(manualThrottleRef.current) < 0.5) manualThrottleRef.current = 0;
+        }
+
+        // 속도 계산 (매 프레임, dispatch 없이 ref만 갱신)
+        const targetSpeed = manualThrottleRef.current * 0.5;
         manualSpeedRef.current +=
-          (targetSpeed - manualSpeedRef.current) * dt * 0.8;
+          (targetSpeed - manualSpeedRef.current) * dt * 3.0;
 
-        // Three.js 선박 위치 업데이트
-        const moveScale = 40;
+        // Three.js 선박 위치 업데이트 (dispatch 없이 직접 3D 오브젝트만 이동)
+        const moveScale = 200;
         const three = threeRef.current;
         if (three && three.shipPivot) {
           three.shipPivot.rotation.y = -manualHeadingRef.current;
+          if (Math.abs(manualSpeedRef.current) > 0.01) {
+            const dx = Math.sin(manualHeadingRef.current) * manualSpeedRef.current * dt * moveScale;
+            const dz = Math.cos(manualHeadingRef.current) * manualSpeedRef.current * dt * moveScale;
+            three.shipPivot.position.x += dx;
+            three.shipPivot.position.z -= dz;
+          }
+        }
 
-          // 수동 이동 시 Three.js 좌표 평면을 기준으로 전역 위도/경도를 역산출해 동기화
-          three.shipPivot.position.x +=
-            Math.sin(manualHeadingRef.current) *
-            manualSpeedRef.current *
-            dt *
-            moveScale;
-          three.shipPivot.position.z -=
-            Math.cos(manualHeadingRef.current) *
-            manualSpeedRef.current *
-            dt *
-            moveScale;
+        // React state 동기화: 10프레임마다만 dispatch (무한 리렌더 방지)
+        manualFrameCount++;
+        if (manualFrameCount >= 10) {
+          manualFrameCount = 0;
+          const three = threeRef.current;
+          if (three && three.shipPivot) {
+            const depPortM = PORTS[state.departurePort] || PORTS.BUSAN;
+            const METERS_PER_DEGREE_LAT = 111132.954;
+            const newLat =
+              depPortM.lat -
+              (three.shipPivot.position.z * 1.5) / METERS_PER_DEGREE_LAT;
+            const mPerDegLon =
+              111319.491 * Math.cos((newLat * Math.PI) / 180);
+            const newLon =
+              depPortM.lon + (three.shipPivot.position.x * 1.5) / mPerDegLon;
 
-          const depPortM = PORTS[state.departurePort] || PORTS.BUSAN;
-          const METERS_PER_DEGREE_LAT = 111132.954;
-          const mPerDegLon =
-            111319.491 * Math.cos((depPortM.lat * Math.PI) / 180);
-          const newLon =
-            depPortM.lon + (three.shipPivot.position.x * 1.5) / mPerDegLon;
-          const newLat =
-            depPortM.lat -
-            (three.shipPivot.position.z * 1.5) / METERS_PER_DEGREE_LAT;
-
+            dispatch({
+              type: 'SET_SHIP_STATE',
+              payload: {
+                lat: newLat,
+                lon: newLon,
+                heading: ((manualHeadingRef.current * 180) / Math.PI + 360) % 360,
+              },
+            });
+          }
           dispatch({
-            type: 'SET_SHIP_STATE',
+            type: 'SET_MANUAL',
             payload: {
-              lat: newLat,
-              lon: newLon,
-              heading: ((manualHeadingRef.current * 180) / Math.PI + 360) % 360,
+              manualThrottle: Math.round(manualThrottleRef.current),
+              manualSpeed: Math.round(manualSpeedRef.current * 10) / 10,
+              manualHeading: Math.round(
+                ((manualHeadingRef.current * 180) / Math.PI + 360) % 360,
+              ),
+              manualYawRate: Math.round(manualTurnRateRef.current * 100) / 100,
             },
           });
         }
 
-        // HUD 수동 계기 업데이트
-        dispatch({
-          type: 'SET_MANUAL',
-          payload: {
-            manualThrottle: Math.round(manualThrottleRef.current),
-            manualSpeed: Math.round(manualSpeedRef.current * 10) / 10,
-            manualHeading: Math.round(
-              ((manualHeadingRef.current * 180) / Math.PI + 360) % 360,
-            ),
-            manualYawRate: Math.round(manualTurnRateRef.current * 100) / 100,
-          },
-        });
       }
 
       // deck.gl Cesium 카메라 싱크
@@ -953,7 +959,7 @@ function AppInner() {
           const depPort = PORTS[state.departurePort] || PORTS.BUSAN;
           const METERS_PER_DEGREE_LAT = 111132.954;
           const mPerDegLon =
-            111319.491 * Math.cos((depPort.lat * Math.PI) / 180);
+            111319.491 * Math.cos((lat * Math.PI) / 180);
           three.shipPivot.position.x =
             ((lon - depPort.lon) * mPerDegLon) / 1.5;
           three.shipPivot.position.z =
@@ -1009,17 +1015,21 @@ function AppInner() {
 
   const handleManualToggle = useCallback(() => {
     const nextManual = !state.manualMode;
-    // //* [Modified Code] 수동 조종 시작 시 현재 선박의 물리 상태를 Ref에 초기화하여 연속성 확보
     if (nextManual) {
       manualHeadingRef.current = (state.shipState.heading * Math.PI) / 180;
-      // 현재 속도가 자동 항해 중이었다면 그 속도를 초기값으로 사용
-      const currentSpeedKnots = parseFloat(state.hud.speed) || 0;
-      manualSpeedRef.current = currentSpeedKnots / 0.3; // manualSpeed * 0.3 = knots 공식 역산
-      manualThrottleRef.current = currentSpeedKnots / 0.3;
+      manualSpeedRef.current = 0;
+      manualThrottleRef.current = 0;
       manualTurnRateRef.current = 0;
+      // 수동 조종 시작 시 SATELLITE/WIDE 모드이면 자동으로 BRIDGE 전환
+      // (Three.js shipPivot이 없으면 이동 불가)
+      const curMode = state.currentMode;
+      if (curMode !== 'BRIDGE' && curMode !== 'FOLLOW') {
+        dispatch({ type: 'SET_MODE', payload: 'BRIDGE' });
+        dispatch({ type: 'SET_BRIDGE_VISIBLE', payload: true });
+      }
     }
     dispatch({ type: 'SET_MANUAL_MODE', payload: nextManual });
-  }, [state.manualMode, state.shipState, state.hud, dispatch]);
+  }, [state.manualMode, state.shipState, state.hud, state.currentMode, dispatch]);
 
   // 배속/타임라인
   const handleMultiplierChange = useCallback(
@@ -1881,7 +1891,7 @@ function AppInner() {
       if (three && three.shipPivot) {
         const depPort = PORTS[state.departurePort] || PORTS.BUSAN;
         const METERS_PER_DEGREE_LAT = 111132.954;
-        const mPerDegLon = 111319.491 * Math.cos((depPort.lat * Math.PI) / 180);
+        const mPerDegLon = 111319.491 * Math.cos((lat * Math.PI) / 180);
 
         three.shipPivot.position.x = ((lon - depPort.lon) * mPerDegLon) / 1.5;
         three.shipPivot.position.z =
@@ -1980,6 +1990,7 @@ function AppInner() {
             specs={state.shipSpecs}
             mode={state.currentMode}
             baseRef={PORTS[state.departurePort] || PORTS.BUSAN}
+            manualMode={state.manualMode}
           />
           <DeckOverlay
             ref={deckRef}
