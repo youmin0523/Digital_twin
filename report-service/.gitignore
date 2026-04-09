@@ -1,6 +1,6 @@
-data
-output
-modules
-__pycache__
+venv/
+__pycache__/
+*.pyc
+output/*.pdf
+data/departure_rl_model/*.zip
 *.log
-*.txt

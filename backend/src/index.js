@@ -14,6 +14,7 @@ const { legacyNsidcProxy, legacyCopProxy, legacySentinelProxy } = require('./rou
 const pipelineRouter = require('./routes/pipeline');
 const weatherRouter = require('./routes/weather');
 const sentinel1Router = require('./routes/sentinel1');
+const reportRouter = require('./routes/report');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -118,6 +119,81 @@ app.use('/api/rl', createProxyMiddleware({
         error: 'RL 서버에 연결할 수 없습니다.',
         fallback: true,
         detail: rlProcess ? 'RL 서버 시작 중...' : 'RL 서버가 비활성화되어 있습니다.',
+      });
+    },
+  },
+}));
+
+// ── Report Service 내부 프로세스 관리 + 프록시 ───────────────────
+const REPORT_PORT = 8002;
+const REPORT_VENV_PYTHON = path.join(
+  __dirname, '..', '..', 'report-service', 'venv',
+  process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
+);
+
+let reportProcess = null;
+let reportRestartCount = 0;
+const REPORT_MAX_RESTARTS = 3;
+
+function startReportServer() {
+  const fs = require('fs');
+  if (!fs.existsSync(REPORT_VENV_PYTHON)) {
+    console.warn('[Report] Python venv not found at', REPORT_VENV_PYTHON);
+    console.warn('[Report] Report service disabled. Run: cd report-service && python -m venv venv && venv/Scripts/pip install -r requirements.txt');
+    return;
+  }
+
+  console.log('[Report] Starting Python Report server on internal port', REPORT_PORT);
+  reportProcess = spawn(REPORT_VENV_PYTHON, [
+    '-m', 'uvicorn', 'server:app',
+    '--host', '127.0.0.1',
+    '--port', String(REPORT_PORT),
+  ], {
+    cwd: path.join(__dirname, '..', '..', 'report-service'),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  reportProcess.stdout.on('data', (data) => {
+    const msg = data.toString().trim();
+    if (msg) console.log('[Report]', msg);
+  });
+
+  reportProcess.stderr.on('data', (data) => {
+    const msg = data.toString().trim();
+    if (msg) console.error('[Report]', msg);
+  });
+
+  reportProcess.on('close', (code) => {
+    console.warn(`[Report] Python process exited with code ${code}`);
+    reportProcess = null;
+    if (code !== 0 && reportRestartCount < REPORT_MAX_RESTARTS) {
+      reportRestartCount++;
+      console.log(`[Report] Restarting... (attempt ${reportRestartCount}/${REPORT_MAX_RESTARTS})`);
+      setTimeout(startReportServer, 3000);
+    }
+  });
+}
+
+// /api/report/* → 내부 Python Report 서버로 프록시
+app.use('/api/report', createProxyMiddleware({
+  target: `http://127.0.0.1:${REPORT_PORT}`,
+  changeOrigin: true,
+  timeout: 120000,
+  proxyTimeout: 120000,
+  on: {
+    proxyReq: (proxyReq, req) => {
+      if (req.body && Object.keys(req.body).length > 0) {
+        const bodyData = JSON.stringify(req.body);
+        proxyReq.setHeader('Content-Type', 'application/json');
+        proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+        proxyReq.write(bodyData);
+      }
+    },
+    error: (_err, _req, res) => {
+      res.status(503).json({
+        error: 'Report 서버에 연결할 수 없습니다.',
+        fallback: true,
+        detail: reportProcess ? 'Report 서버 시작 중...' : 'Report 서버가 비활성화되어 있습니다.',
       });
     },
   },
@@ -233,9 +309,15 @@ app.listen(PORT, () => {
   console.log(`[Scheduler] Sentinel-1: 01:00 UTC | Ice: 02:00 UTC | SAR: 03:00 UTC | Berg: 04:00 UTC | Weather: every 6h`);
   // RL 파이프라인 자동 기동
   startRLServer();
+  // Report 서비스 자동 기동
+  startReportServer();
 });
 
-// 프로세스 종료 시 RL 서버도 정리
-process.on('exit', () => { if (rlProcess) rlProcess.kill(); });
-process.on('SIGINT', () => { if (rlProcess) rlProcess.kill(); process.exit(); });
-process.on('SIGTERM', () => { if (rlProcess) rlProcess.kill(); process.exit(); });
+// 프로세스 종료 시 RL + Report 서버 정리
+function cleanupProcesses() {
+  if (rlProcess) rlProcess.kill();
+  if (reportProcess) reportProcess.kill();
+}
+process.on('exit', cleanupProcesses);
+process.on('SIGINT', () => { cleanupProcesses(); process.exit(); });
+process.on('SIGTERM', () => { cleanupProcesses(); process.exit(); });
