@@ -18,6 +18,7 @@ import TeleportOverlay from './components/hud/TeleportOverlay';
 import Minimap from './components/hud/Minimap';
 import WeatherHud from './components/hud/WeatherHud';
 import RLProgressOverlay from './components/hud/RLProgressOverlay';
+import TrendReportPanel from './components/hud/TrendReportPanel';
 import Header from './components/layout/Header';
 import Sidebar from './components/layout/Sidebar';
 import SimulationControls from './components/layout/SimulationControls';
@@ -2055,6 +2056,9 @@ function AppInner() {
 
           {/* RL 커리큘럼 학습 진행 오버레이 */}
           <RLProgressOverlay />
+
+          {/* 동향보고서 패널 */}
+          <TrendReportPanel />
 
           {/* //* [Modified Code] 레이더(미니맵)을 메인 뷰포트 영역 내부 우측 하단에 부착하여 패널에 가려지지 않게 함 */}
           <Minimap

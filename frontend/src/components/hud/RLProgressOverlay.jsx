@@ -62,7 +62,7 @@ export default function RLProgressOverlay() {
   return (
     <div style={{
       position: 'absolute',
-      right: 1150,
+      right: 1670,
       top: 10,
       width: 240,
       zIndex: 300,
@@ -131,7 +131,7 @@ export default function RLProgressOverlay() {
               borderRadius: 2,
               background: done ? STAGE_COLOR[s]
                 : active ? stageColor
-                : 'rgba(255,255,255,0.08)',
+                  : 'rgba(255,255,255,0.08)',
               opacity: done ? 0.7 : 1,
               transition: 'background 0.4s',
             }} />

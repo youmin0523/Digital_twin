@@ -1,34 +1,48 @@
-node_modules
+node_modules/
 .env
 .vite
-.vscode
-.idea
-.taskmaster
+.vscode/
+.idea/
+.taskmaster/
 .taskmaster.md
-.venv
-s1_test.py
 
 # Python
-__pycache__
+__pycache__/
 *.pyc
-backend/pipeline/cache/*.nc
+*.pyo
+.venv/
 
-# Data (large files)
+# Data (large / auto-generated)
 backend/data/realIceData_latest.json
 backend/data/archive/
+backend/data/copernicus_icebergs.json
+backend/data/sentinel1_catalog_latest.json
+backend/data/weather_api_usage.json
+
+# NetCDF cache (downloaded satellite data)
+backend/pipeline/fetchers/cache/
+backend/pipeline/cache/
 
 # Build output
-frontend/dist
+frontend/dist/
 
 # Logs
 backend/logs/
+*.log
 
 # RL Pipeline
 rl-pipeline/venv/
 rl-pipeline/models/
-rl-pipeline/__pycache__/
+
+# Report Service
+report-service/venv/
+report-service/output/*.pdf
+report-service/data/departure_rl_model/*.zip
+report-service/data/calibration_state.json
 
 # Archive (old monolithic files)
 _archive/
-backend/logs/sentinel1_iw_fetcher.log
-report-service/requirements.txt
+
+# Test / temp files
+tmp_test_api.py
+*.tmp
