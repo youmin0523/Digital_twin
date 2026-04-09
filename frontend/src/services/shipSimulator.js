@@ -137,13 +137,13 @@ export const METERS_PER_DEGREE_LON_AT_EQUATOR = 111319.491; // 1도 경도당 �
  * @param {Array}   WAYPOINTS      - Original waypoints
  */
 export function getShipPosLonLat(shipPos, manualBaseLon, manualBaseLat, isManual, simProgress, TWP, WAYPOINTS) {
-  const latRad = (manualBaseLat * Math.PI) / 180;
-  const metersPerDegreeLon =
-    METERS_PER_DEGREE_LON_AT_EQUATOR * Math.cos(latRad);
-
   // Three.js 엔진의 좌표를 위경도에 직접 투영하여 시각적 스케일 증폭
+  // 위도를 먼저 계산한 뒤, 해당 위도 기준 mPerDegLon 사용 (고위도 경도 오차 보정)
   const currentLat =
     manualBaseLat - (shipPos.z * 1.5) / METERS_PER_DEGREE_LAT;
+  const latRad = (currentLat * Math.PI) / 180;
+  const metersPerDegreeLon =
+    METERS_PER_DEGREE_LON_AT_EQUATOR * Math.cos(latRad);
   const currentLon =
     manualBaseLon + (shipPos.x * 1.5) / metersPerDegreeLon;
   if (!isManual) return routePos(simProgress, TWP, WAYPOINTS);

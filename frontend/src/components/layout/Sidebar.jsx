@@ -16,7 +16,6 @@ const VIEW_MODES = [
   { key: 'FOLLOW', label: '선미 추적' },
   { key: 'SATELLITE', label: '위성 조감' },
   { key: 'WIDE', label: '광역 항로' },
-  { key: 'MANUAL', label: '수동 조종' },
 ];
 
 const WMS_LAYERS = [
@@ -87,15 +86,9 @@ export default function Sidebar({
   };
 
   const handleViewMode = (mode) => {
-    if (mode === 'MANUAL') {
-      onManualToggle();
-    } else {
-      if (manualMode) onManualToggle();
-      onModeChange(mode);
-    }
+    onModeChange(mode);
+    // 수동 조종 중에도 BRIDGE/FOLLOW로 뷰를 전환할 수 있도록 manualMode를 유지
   };
-
-  const effectiveMode = manualMode ? 'MANUAL' : currentMode;
 
   return (
     <aside className="dt-sidebar">
@@ -170,12 +163,32 @@ export default function Sidebar({
               type="radio"
               name="viewmode"
               className="dt-sidebar__radio"
-              checked={effectiveMode === m.key}
+              checked={currentMode === m.key}
               onChange={() => handleViewMode(m.key)}
             />
             <span className="dt-sidebar__radio-label">{m.label}</span>
           </label>
         ))}
+        {/* 수동 조종: 뷰 모드와 독립적인 토글 버튼 */}
+        <button
+          className={`dt-sidebar__manual-btn${manualMode ? ' active' : ''}`}
+          onClick={onManualToggle}
+          style={{
+            marginTop: 8,
+            width: '100%',
+            padding: '6px 0',
+            border: manualMode ? '2px solid #00f2fe' : '1px solid #555',
+            borderRadius: 4,
+            background: manualMode ? 'rgba(0,242,254,0.15)' : 'transparent',
+            color: manualMode ? '#00f2fe' : '#aaa',
+            cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: manualMode ? 700 : 400,
+            letterSpacing: 1,
+          }}
+        >
+          {manualMode ? '⚓ 수동 조종 ON' : '수동 조종'}
+        </button>
       </section>
 
       {/* ── WMS 데이터 레이어 ── */}

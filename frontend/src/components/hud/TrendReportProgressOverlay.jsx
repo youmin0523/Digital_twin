@@ -22,6 +22,7 @@ export default function TrendReportProgressOverlay() {
 
   useEffect(() => {
     let alive = true;
+    let intervalId = null;
 
     async function poll() {
       try {
@@ -30,13 +31,26 @@ export default function TrendReportProgressOverlay() {
         const data = await res.json();
         if (alive) setStatus(data);
       } catch {
-        // 서버 없거나 에러 시 숨김
+        // 서버 미가동
       }
     }
 
-    poll();
-    const id = setInterval(poll, POLL_MS);
-    return () => { alive = false; clearInterval(id); };
+    // 첫 요청 성공 시에만 폴링 시작
+    (async () => {
+      try {
+        const res = await fetch('/api/report/rl/status');
+        if (!res.ok || !alive) return;
+        const data = await res.json();
+        if (alive) {
+          setStatus(data);
+          intervalId = setInterval(poll, POLL_MS);
+        }
+      } catch {
+        // 서버 없음 → 폴링 안 함
+      }
+    })();
+
+    return () => { alive = false; if (intervalId) clearInterval(intervalId); };
   }, []);
 
   const stage = status?.current_stage ?? null;
