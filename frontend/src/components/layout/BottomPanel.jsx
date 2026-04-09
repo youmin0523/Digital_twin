@@ -165,7 +165,7 @@ function IceWeatherPanel({ hud }) {
   return (
     <div className="bp-content">
       <RioGauge value={rfiNum} level={rioLevel} />
-      <div className="bp-info-stack" style={{ width: 150 }}>
+      <div className="bp-info-stack" style={{ flex: '0 1 auto', minWidth: 0 }}>
         <DataRow label="Ice Class" value={hud.iceClass || 'PC2'} />
         <DataRow label="SIC" value={hud.sic} />
         <DataRow label="빙해상태" value={hud.iceState} />
@@ -173,7 +173,7 @@ function IceWeatherPanel({ hud }) {
         <DataRow label="해측상태" value={hud.seaLabel} />
       </div>
       <div className="bp-divider" />
-      <div className="bp-cards">
+      <div className="bp-cards" style={{ flex: '0 1 auto', minWidth: 0 }}>
         <InfoCard label="해빙 농도" value={hud.sic} unit="%" />
         <InfoCard
           label="해빙 두께"
@@ -193,9 +193,8 @@ function IceWeatherPanel({ hud }) {
         />
       </div>
       <div className="bp-divider" />
-      <div className="bp-info-stack" style={{ minWidth: 190 }}>
+      <div className="bp-info-stack" style={{ flex: '0 1 auto', minWidth: 0 }}>
         <DataRow label="파고 Hs" value={hud.hs} />
-        {/* //* [Modified Code] 가시거리 항목 추가 */}
         <DataRow label="가시거리" value={hud.vis} />
         <DataRow label="풍속" value={windSpeed + ' m/s'} />
         <DataRow label="풍향" value={windDir + '°'} />
