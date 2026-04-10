@@ -20,7 +20,7 @@ except ImportError:
         def __init__(self, verbose=0): pass
         def _on_step(self): return True
 
-from .rl_agent import IcebergAvoidanceAgent
+from .rl_agent import IcebergAvoidanceAgent, _StopTraining
 from .rl_environment import IcebergAvoidanceEnv, Iceberg
 from .rl_reward import RewardWeights
 from .rl_ship_dynamics import approx_dist_km, bearing_deg, normalize_angle, km_per_deg_lon, KM_PER_DEG_LAT
@@ -30,13 +30,19 @@ logger = logging.getLogger(__name__)
 
 
 class _StopCallback(_BaseCallback):
-    """stop_requested 플래그를 확인해 학습을 중단시키는 콜백."""
+    """stop_requested 플래그를 확인해 학습을 강제 종료하는 콜백.
+
+    단순히 False를 반환하는 방식은 SB3 버전에 따라 동작하지 않을 수 있어,
+    _StopTraining 예외를 발생시켜 model.learn()을 즉시 중단합니다.
+    """
     def __init__(self, trainer: "RLTrainer"):
         super().__init__(verbose=0)
         self.trainer = trainer
 
     def _on_step(self) -> bool:
-        return not self.trainer.stop_requested
+        if self.trainer.stop_requested:
+            raise _StopTraining("사용자 중단 요청")
+        return True
 
 
 @dataclass
@@ -57,12 +63,28 @@ CURRICULUM = [
 class RLTrainer:
     """빙산 회피 RL 학습 관리자"""
 
-    def __init__(self, hyperparams: dict | None = None):
-        self.agent = IcebergAvoidanceAgent(hyperparams)
+    def __init__(self, hyperparams: dict | None = None,
+                 model_key: str = "default",
+                 fixed_route: str | None = None,
+                 fixed_ice_class: str | None = None,
+                 ship_params=None):
+        self.agent = IcebergAvoidanceAgent(hyperparams, model_key=model_key)
+        self._fixed_route = fixed_route
+        self._fixed_ice_class = fixed_ice_class
+        self._ship_params = ship_params
         self.is_training = False
         self.stop_requested = False
         self.current_stage: Optional[str] = None
         self.training_log: list[dict] = []
+
+    def _create_env(self, difficulty: str, reward_weights: RewardWeights | None = None):
+        return self.agent.create_env(
+            difficulty=difficulty,
+            reward_weights=reward_weights,
+            fixed_route=self._fixed_route,
+            fixed_ice_class=self._fixed_ice_class,
+            ship_params=self._ship_params,
+        )
 
     def train_curriculum(self, stages: list[CurriculumStage] | None = None,
                          reward_weights: RewardWeights | None = None) -> dict:
@@ -79,8 +101,7 @@ class RLTrainer:
                 logger.info(f"[Trainer] === 커리큘럼 {i+1}/{len(stages)}: {stage.name} ===")
 
                 try:
-                    self.agent.create_env(difficulty=stage.difficulty,
-                                          reward_weights=reward_weights)
+                    self._create_env(stage.difficulty, reward_weights)
                     if self.agent.model is None:
                         self.agent.build_model(difficulty=stage.difficulty,
                                                reward_weights=reward_weights)
@@ -98,8 +119,12 @@ class RLTrainer:
                     }
                     results.append(result)
                     self.training_log.append(result)
+
+                    # 중단 요청이 왔으면 스테이지 루프 종료
+                    if self.stop_requested:
+                        break
                 except Exception as e:
-                    logger.error(f"[Trainer] 스테이지 {stage.name} 실패 (다음 스테이지 계속): {e}", exc_info=True)
+                    logger.error(f"[Trainer] 스테이지 {stage.name} 실패: {e}", exc_info=True)
                     if self.stop_requested:
                         break
         finally:
@@ -113,7 +138,7 @@ class RLTrainer:
         self.stop_requested = False
         self.current_stage = f"single_{difficulty}"
         try:
-            self.agent.create_env(difficulty=difficulty, reward_weights=reward_weights)
+            self._create_env(difficulty, reward_weights)
             if self.agent.model is None:
                 self.agent.build_model(difficulty=difficulty, reward_weights=reward_weights)
             else:
@@ -144,6 +169,8 @@ class RLTrainer:
         collisions, successes = 0, 0
 
         for _ in range(n_episodes):
+            if self.stop_requested:
+                break
             obs, _ = env.reset()
             total_reward, max_deviation, steps = 0, 0, 0
 

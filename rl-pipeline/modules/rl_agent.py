@@ -30,10 +30,25 @@ from gymnasium.wrappers import RecordEpisodeStatistics
 from .rl_environment import IcebergAvoidanceEnv
 from .rl_reward import RewardWeights
 
+
+class _StopTraining(Exception):
+    """중단 요청 시 model.learn()을 강제 종료하는 sentinel 예외."""
+    pass
+
 logger = logging.getLogger(__name__)
 
-MODEL_DIR = Path(__file__).resolve().parent.parent / "models" / "sac_iceberg"
+_BASE_MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
+MODEL_DIR = _BASE_MODEL_DIR / "sac_iceberg"
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _model_dir_for(model_key: str) -> Path:
+    """model_key별 전용 디렉토리 반환."""
+    if model_key == "default":
+        return MODEL_DIR
+    d = _BASE_MODEL_DIR / f"sac_{model_key}"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 DEFAULT_HYPERPARAMS = {
     "learning_rate": 3e-4,
@@ -64,6 +79,8 @@ class TrainingMetricsCallback(BaseCallback):
         self.total_episodes = 0
         self.metrics_history = []
 
+    _MAX_EPISODE_HISTORY = 2000  # 메모리 누수 방지
+
     def _on_step(self) -> bool:
         infos = self.locals.get("infos", [])
         for info in infos:
@@ -71,6 +88,10 @@ class TrainingMetricsCallback(BaseCallback):
                 self.total_episodes += 1
                 self.episode_rewards.append(info["episode"]["r"])
                 self.episode_lengths.append(info["episode"]["l"])
+                # 리스트 무한 증가 방지 (72시간 학습 대비)
+                if len(self.episode_rewards) > self._MAX_EPISODE_HISTORY:
+                    self.episode_rewards = self.episode_rewards[-self._MAX_EPISODE_HISTORY:]
+                    self.episode_lengths = self.episode_lengths[-self._MAX_EPISODE_HISTORY:]
             if info.get("collision", False):
                 self.collision_count += 1
             if info.get("success", False):
@@ -102,18 +123,43 @@ class TrainingMetricsCallback(BaseCallback):
 
 
 class IcebergAvoidanceAgent:
-    """빙산 회피 SAC 에이전트"""
+    """빙산 회피 SAC 에이전트
 
-    def __init__(self, hyperparams: dict | None = None):
+    model_key를 지정하면 경로(NSR/NWP/TSR), 빙급, 선종별로
+    독립된 모델 디렉토리에 저장/로드합니다.
+    """
+
+    def __init__(self, hyperparams: dict | None = None, model_key: str = "default"):
         self.hyperparams = {**DEFAULT_HYPERPARAMS, **(hyperparams or {})}
+        self.model_key = model_key
+        self.model_dir = _model_dir_for(model_key)
         self.model: Optional[SAC] = None
         self.env: Optional[IcebergAvoidanceEnv] = None
         self.callback = TrainingMetricsCallback()
-        self._model_version = 0
+        self._model_version = self._detect_version()
+
+    def _detect_version(self) -> int:
+        """기존 저장된 모델에서 최대 버전 번호 감지 (재시작 시 덮어쓰기 방지)."""
+        versions = sorted(self.model_dir.glob("sac_v*.zip"))
+        if not versions:
+            return 0
+        try:
+            return max(int(p.stem.split("_v")[1]) for p in versions)
+        except (ValueError, IndexError):
+            return len(versions)
 
     def create_env(self, difficulty: str = "medium",
-                   reward_weights: RewardWeights | None = None):
-        raw_env = IcebergAvoidanceEnv(difficulty=difficulty, reward_weights=reward_weights)
+                   reward_weights: RewardWeights | None = None,
+                   fixed_route: str | None = None,
+                   fixed_ice_class: str | None = None,
+                   ship_params=None):
+        raw_env = IcebergAvoidanceEnv(
+            difficulty=difficulty,
+            reward_weights=reward_weights,
+            fixed_route=fixed_route,
+            fixed_ice_class=fixed_ice_class,
+            ship_params=ship_params,
+        )
         self.env = RecordEpisodeStatistics(raw_env)
         return self.env
 
@@ -157,7 +203,7 @@ class IcebergAvoidanceAgent:
         # 10,000 스텝마다 체크포인트 저장 — 서버 강제 종료 시에도 복구 가능
         checkpoint_cb = CheckpointCallback(
             save_freq=10_000,
-            save_path=str(MODEL_DIR / "checkpoints"),
+            save_path=str(self.model_dir / "checkpoints"),
             name_prefix="sac_ckpt",
             verbose=0,
         )
@@ -173,10 +219,14 @@ class IcebergAvoidanceAgent:
                 callback=callbacks,
                 progress_bar=False,
             )
+        except _StopTraining:
+            # 중단 요청 — 정상 종료로 처리 (finally에서 저장)
+            logger.info("[RL] 중단 요청으로 학습 종료")
         finally:
             # 정상 완료, 사용자 중단, 예외, 서버 종료 모든 케이스에서 저장
             self._model_version += 1
             self.save()
+            self._cleanup_checkpoints(keep=3)
             logger.info(f"[RL] 모델 자동 저장 완료 (v{self._model_version})")
 
         metrics = self.callback.get_latest_metrics()
@@ -236,14 +286,30 @@ class IcebergAvoidanceAgent:
 
         return sequence
 
+    def _cleanup_checkpoints(self, keep: int = 3):
+        """오래된 체크포인트 삭제 — 최근 keep개만 유지 (디스크 절약)."""
+        ckpt_dir = self.model_dir / "checkpoints"
+        if not ckpt_dir.exists():
+            return
+        ckpts = sorted(ckpt_dir.glob("sac_ckpt_*.zip"))
+        for old in ckpts[:-keep]:
+            try:
+                old.unlink()
+                meta = old.with_name(old.stem + "_meta.json")
+                if meta.exists():
+                    meta.unlink()
+            except Exception:
+                pass
+
     def save(self, path: str | None = None):
         if self.model is None:
             return
-        save_path = path or str(MODEL_DIR / f"sac_v{self._model_version}")
+        save_path = path or str(self.model_dir / f"sac_v{self._model_version}")
         self.model.save(save_path)
 
         meta = {
             "version": self._model_version,
+            "model_key": self.model_key,
             "hyperparams": {k: str(v) for k, v in self.hyperparams.items()},
             "metrics": self.callback.get_latest_metrics(),
         }
@@ -256,7 +322,7 @@ class IcebergAvoidanceAgent:
         if path:
             load_path = path
         else:
-            versions = sorted(MODEL_DIR.glob("sac_v*.zip"))
+            versions = sorted(self.model_dir.glob("sac_v*.zip"))
             if not versions:
                 logger.warning("[RL] 저장된 모델 없음")
                 return False

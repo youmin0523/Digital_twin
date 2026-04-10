@@ -134,11 +134,11 @@ def fill_wave_heights(wp_results: list[dict]) -> list[dict]:
     try:
         import copernicusmarine  # noqa: F401
     except ImportError:
-        print("    [WARN] copernicusmarine not installed — skipping wave fallback")
+        print("    [WARN] copernicusmarine not installed - skipping wave fallback")
         return wp_results
 
     if not _copernicus_available():
-        print("    [WARN] Copernicus credentials missing — skipping wave fallback")
+        print("    [WARN] Copernicus credentials missing - skipping wave fallback")
         return wp_results
 
     target_dt = datetime.now(timezone.utc) - timedelta(hours=3)

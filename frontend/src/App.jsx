@@ -2069,8 +2069,10 @@ function AppInner() {
           />
 
           {/* RL 커리큘럼 학습 진행 오버레이 */}
-          <RLProgressOverlay />
-          <TrendReportProgressOverlay />
+          <div style={{ position: 'absolute', left: 10, top: 10, zIndex: 300, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <RLProgressOverlay />
+            <TrendReportProgressOverlay />
+          </div>
           <TrendReportPanel open={trendReportOpen} onToggle={() => setTrendReportOpen(o => !o)} />
 
           {/* //* [Modified Code] 레이더(미니맵)을 메인 뷰포트 영역 내부 우측 하단에 부착하여 패널에 가려지지 않게 함 */}
