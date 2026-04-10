@@ -23,6 +23,11 @@ logger = logging.getLogger(__name__)
 MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
 HISTORY_PATH = MODEL_DIR / "iterative_history.json"
 
+
+def _history_path_for(route: str, ice_class: str, ship_type: str) -> Path:
+    key = f"{route}_{ice_class}_{ship_type}".replace(" ", "_")
+    return MODEL_DIR / f"iterative_history_{key}.json"
+
 # ── 보상 가중치 Clamping 범위 ─────────────────────────────
 WEIGHT_BOUNDS: dict[str, tuple[float, float]] = {
     "collision":         (-500.0, -50.0),
@@ -140,9 +145,19 @@ class IterativeTrainer:
     """학습→평가→보상 조정→재학습 루프를 자동으로 실행합니다."""
 
     def __init__(self, base_trainer: RLTrainer,
-                 history_path: Path | None = None):
+                 history_path: Path | None = None,
+                 route: str | None = None,
+                 ice_class: str | None = None,
+                 ship_type: str | None = None):
         self.base_trainer = base_trainer
-        self.history_path = history_path or HISTORY_PATH
+        self.route = route
+        self.ice_class = ice_class
+        self.ship_type = ship_type
+        self.history_path = history_path or (
+            _history_path_for(route, ice_class, ship_type)
+            if route and ice_class and ship_type
+            else HISTORY_PATH
+        )
         self.history: list[IterationRecord] = []
         self.is_running = False
         self.stop_requested = False
@@ -157,13 +172,23 @@ class IterativeTrainer:
         return (metrics.get("success_rate", 0.0) >= target_success and
                 metrics.get("collision_rate", 1.0) <= target_collision)
 
-    # ── 히스토리 저장 (crash-safe) ────────────────────────
+    # ── 히스토리 저장 (crash-safe, Windows 파일 잠금 재시도 포함) ─
     def _save_history(self):
         self.history_path.parent.mkdir(parents=True, exist_ok=True)
         data = [dataclasses.asdict(r) for r in self.history]
+        payload = json.dumps(data, indent=2, ensure_ascii=False)
         tmp = self.history_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, self.history_path)
+        tmp.write_text(payload, encoding="utf-8")
+        for attempt in range(3):
+            try:
+                os.replace(tmp, self.history_path)
+                return
+            except OSError:
+                if attempt < 2:
+                    time.sleep(0.15)
+                else:
+                    # 최후 수단: 직접 덮어쓰기
+                    self.history_path.write_text(payload, encoding="utf-8")
 
     # ── 메인 루프 ─────────────────────────────────────────
     def run(self,
@@ -172,7 +197,8 @@ class IterativeTrainer:
             target_collision_rate: float = 0.05,
             eval_episodes: int = 100,
             eval_difficulty: str = "hard",
-            initial_weights: RewardWeights | None = None) -> dict:
+            initial_weights: RewardWeights | None = None,
+            base_timesteps: int | None = None) -> dict:
 
         self.is_running = True
         self.stop_requested = False
@@ -200,12 +226,16 @@ class IterativeTrainer:
                 pre_metrics: dict = {}
                 if self.base_trainer.agent.model is not None:
                     logger.info("[IterativeTrainer] 학습 전 평가 중...")
-                    pre_metrics = self.base_trainer.evaluate(
-                        n_episodes=eval_episodes, difficulty=eval_difficulty)
-                    logger.info(f"[IterativeTrainer] 사전 평가: {pre_metrics}")
+                    try:
+                        pre_metrics = self.base_trainer.evaluate(
+                            n_episodes=eval_episodes, difficulty=eval_difficulty)
+                        logger.info(f"[IterativeTrainer] 사전 평가: {pre_metrics}")
+                    except Exception as e:
+                        logger.error("[IterativeTrainer] 사전 평가 실패, 스킵: %s", e, exc_info=True)
 
-                    if self._converged(pre_metrics, target_success_rate, target_collision_rate):
-                        logger.info("[IterativeTrainer] 이미 수렴 조건 달성 — 조기 종료")
+                    # 첫 번째 반복은 무조건 학습 실행 (기존 모델 개선 목적)
+                    if i > 1 and pre_metrics and self._converged(pre_metrics, target_success_rate, target_collision_rate):
+                        logger.info("[IterativeTrainer] 수렴 조건 달성 — 조기 종료")
                         record = IterationRecord(
                             iteration=i, weights=dataclasses.asdict(current_weights),
                             pre_metrics=pre_metrics, post_metrics=pre_metrics,
@@ -216,13 +246,22 @@ class IterativeTrainer:
 
                 # 2. 커리큘럼 학습
                 logger.info("[IterativeTrainer] 커리큘럼 학습 시작...")
-                self.base_trainer.train_curriculum(reward_weights=current_weights)
+                try:
+                    self.base_trainer.train_curriculum(reward_weights=current_weights)
+                except Exception as e:
+                    logger.error("[IterativeTrainer] 커리큘럼 학습 예외 발생: %s", e, exc_info=True)
+                    # 학습 실패 시 이번 반복을 스킵하고 다음으로 진행
+                    continue
 
                 # 3. 학습 후 평가
                 logger.info("[IterativeTrainer] 학습 후 평가 중...")
-                post_metrics = self.base_trainer.evaluate(
-                    n_episodes=eval_episodes, difficulty=eval_difficulty)
-                logger.info(f"[IterativeTrainer] 사후 평가: {post_metrics}")
+                try:
+                    post_metrics = self.base_trainer.evaluate(
+                        n_episodes=eval_episodes, difficulty=eval_difficulty)
+                    logger.info(f"[IterativeTrainer] 사후 평가: {post_metrics}")
+                except Exception as e:
+                    logger.error("[IterativeTrainer] 사후 평가 실패: %s", e, exc_info=True)
+                    post_metrics = pre_metrics or {}
 
                 # 4. 시그널 분석 및 가중치 조정
                 signals = self.adjuster.analyze(post_metrics)

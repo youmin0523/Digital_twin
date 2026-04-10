@@ -15,6 +15,7 @@ import time
 from datetime import date
 
 from stable_baselines3.common.callbacks import BaseCallback
+from modules.rl.departure_agent import _StopTraining
 
 logger = logging.getLogger("report-service.rl.departure_trainer")
 
@@ -38,7 +39,9 @@ class _ProgressCallback(BaseCallback):
         self.trainer.total_timesteps_done = done
         if self.trainer.total_timesteps_target > 0:
             self.trainer.progress = int(done / self.trainer.total_timesteps_target * 100)
-        return not self.trainer.stop_requested
+        if self.trainer.stop_requested:
+            raise _StopTraining("사용자 중단 요청")
+        return True
 
 
 class DepartureTrainer:
@@ -118,17 +121,18 @@ class DepartureTrainer:
                         "completed": True,
                     })
                 except Exception as e:
-                    logger.error("학습 실패 (단계 %s, 다음 단계 계속): %s", stage["difficulty"], e, exc_info=True)
+                    logger.error("학습 실패 (단계 %s): %s", stage["difficulty"], e, exc_info=True)
                     self.training_history.append({
                         "stage": stage["difficulty"],
                         "timesteps": stage["timesteps"],
                         "completed": False,
                         "error": str(e),
                     })
-                    if self.stop_requested:
-                        break
                 finally:
                     env.close()
+
+                if self.stop_requested:
+                    break
         finally:
             self.is_training = False
             self.progress = 100

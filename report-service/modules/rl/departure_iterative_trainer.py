@@ -24,6 +24,12 @@ DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 HISTORY_PATH = DATA_DIR / "departure_iterative_history.json"
 MODEL_DIR = DATA_DIR / "departure_rl_model"
 
+
+def _history_path_for(ice_class: str, ship_type: str) -> Path:
+    """(ice_class, ship_type) 전용 히스토리 파일 경로."""
+    key = f"{ice_class}_{ship_type}".replace(" ", "_").replace("/", "_")
+    return DATA_DIR / f"departure_iterative_history_{key}.json"
+
 # ── 보상 가중치 Clamping 범위 ─────────────────────────────
 WEIGHT_BOUNDS: dict[str, tuple[float, float]] = {
     "prohibitive_penalty": (-100.0, -5.0),
@@ -154,9 +160,8 @@ def _evaluate_agent(agent, monthly_ice: dict, weather_data: dict,
                 continue
             obs, reward, terminated, truncated, info = env.step(action)
 
-            # 성공 판단: 보상이 success_bonus 기준 이상이면 통행 불가 없음
-            # route_scorer 없는 환경에선 reward > 0으로 판단
-            if reward > 0:
+            # 성공 판단: has_prohibitive 플래그 사용 (정확한 금지구간 여부)
+            if not info.get("has_prohibitive", True):
                 successes += 1
             else:
                 prohibitives += 1
@@ -185,9 +190,16 @@ def _evaluate_agent(agent, monthly_ice: dict, weather_data: dict,
 class DepartureIterativeTrainer:
     """출항 RL 학습→평가→보상 조정→재학습 루프를 자동으로 실행합니다."""
 
-    def __init__(self, departure_trainer, history_path: Path | None = None):
+    def __init__(self, departure_trainer, history_path: Path | None = None,
+                 ice_class: str = "PC5", ship_type: str = "default"):
         self.departure_trainer = departure_trainer
-        self.history_path = history_path or HISTORY_PATH
+        self.ice_class = ice_class
+        self.ship_type = ship_type
+        self.history_path = history_path or (
+            _history_path_for(ice_class, ship_type)
+            if ship_type != "default"
+            else HISTORY_PATH
+        )
         self.history: list[DepartureIterationRecord] = []
         self.is_running = False
         self.stop_requested = False
@@ -205,16 +217,26 @@ class DepartureIterativeTrainer:
     def _save_history(self):
         self.history_path.parent.mkdir(parents=True, exist_ok=True)
         data = [dataclasses.asdict(r) for r in self.history]
+        payload = json.dumps(data, indent=2, ensure_ascii=False)
         tmp = self.history_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, self.history_path)
+        tmp.write_text(payload, encoding="utf-8")
+        for attempt in range(3):
+            try:
+                os.replace(tmp, self.history_path)
+                return
+            except OSError:
+                if attempt < 2:
+                    time.sleep(0.15)
+                else:
+                    self.history_path.write_text(payload, encoding="utf-8")
 
     def _save_versioned_model(self, iteration: int):
         """현재 에이전트 모델을 버전별로 저장."""
         if self._agent is None or self._agent.model is None:
             return
         MODEL_DIR.mkdir(parents=True, exist_ok=True)
-        versioned_path = MODEL_DIR / f"departure_sac_v{iteration}"
+        base = self._agent.model_path.stem  # e.g. departure_sac_PC5_bulk
+        versioned_path = MODEL_DIR / f"{base}_v{iteration}"
         self._agent.model.save(str(versioned_path))
         logger.info("[DepartureIterative] 버전 모델 저장: %s", versioned_path)
 
@@ -241,9 +263,12 @@ class DepartureIterativeTrainer:
         current_weights = initial_weights or DepartureRewardWeights()
         self.current_weights = current_weights
 
-        # 에이전트를 반복 간 유지 (가중치 축적)
+        # 에이전트를 반복 간 유지 (ice_class/ship_type 전용 경로 사용)
         if self._agent is None:
-            self._agent = DepartureAgent()
+            self._agent = DepartureAgent(
+                ice_class=self.ice_class,
+                ship_type=self.ship_type,
+            )
 
         logger.info("[DepartureIterative] 반복 학습 시작 (max=%d, "
                     "target_success=%.2f, target_prohibitive=%.2f)",
@@ -262,17 +287,21 @@ class DepartureIterativeTrainer:
 
                 iter_start = time.time()
 
-                # 1. 학습 전 평가
+                # 1. 학습 전 평가 (2번째 반복부터만 조기 종료 판단)
                 pre_metrics: dict = {}
                 if self._agent.model is not None:
                     logger.info("[DepartureIterative] 학습 전 평가 중...")
-                    pre_metrics = _evaluate_agent(
-                        self._agent, monthly_ice, weather_data,
-                        route_scorer, ice_class, eval_episodes)
-                    logger.info("[DepartureIterative] 사전 평가: %s", pre_metrics)
+                    try:
+                        pre_metrics = _evaluate_agent(
+                            self._agent, monthly_ice, weather_data,
+                            route_scorer, ice_class, eval_episodes)
+                        logger.info("[DepartureIterative] 사전 평가: %s", pre_metrics)
+                    except Exception as e:
+                        logger.error("[DepartureIterative] 사전 평가 실패, 스킵: %s", e, exc_info=True)
 
-                    if self._converged(pre_metrics, target_success_rate, target_prohibitive_rate):
-                        logger.info("[DepartureIterative] 이미 수렴 조건 달성 — 조기 종료")
+                    # 첫 번째 반복은 무조건 학습 실행 (기존 모델 개선 목적)
+                    if i > 1 and pre_metrics and self._converged(pre_metrics, target_success_rate, target_prohibitive_rate):
+                        logger.info("[DepartureIterative] 수렴 조건 달성 — 조기 종료")
                         record = DepartureIterationRecord(
                             iteration=i, weights=dataclasses.asdict(current_weights),
                             pre_metrics=pre_metrics, post_metrics=pre_metrics,
@@ -284,16 +313,24 @@ class DepartureIterativeTrainer:
                 # 2. 커리큘럼 학습 — departure_trainer를 직접 호출하되
                 #    내부 에이전트 대신 self._agent를 사용해 상태 유지
                 logger.info("[DepartureIterative] 커리큘럼 학습 시작...")
-                self._run_curriculum_with_agent(
-                    monthly_ice, weather_data, route_scorer, ice_class,
-                    forecast_days, transit_days, base_timesteps, current_weights)
+                try:
+                    self._run_curriculum_with_agent(
+                        monthly_ice, weather_data, route_scorer, ice_class,
+                        forecast_days, transit_days, base_timesteps, current_weights)
+                except Exception as e:
+                    logger.error("[DepartureIterative] 커리큘럼 학습 예외 발생: %s", e, exc_info=True)
+                    continue
 
                 # 3. 학습 후 평가
                 logger.info("[DepartureIterative] 학습 후 평가 중...")
-                post_metrics = _evaluate_agent(
-                    self._agent, monthly_ice, weather_data,
-                    route_scorer, ice_class, eval_episodes)
-                logger.info("[DepartureIterative] 사후 평가: %s", post_metrics)
+                try:
+                    post_metrics = _evaluate_agent(
+                        self._agent, monthly_ice, weather_data,
+                        route_scorer, ice_class, eval_episodes)
+                    logger.info("[DepartureIterative] 사후 평가: %s", post_metrics)
+                except Exception as e:
+                    logger.error("[DepartureIterative] 사후 평가 실패: %s", e, exc_info=True)
+                    post_metrics = pre_metrics or {}
 
                 # 4. 버전 저장
                 self._save_versioned_model(i)

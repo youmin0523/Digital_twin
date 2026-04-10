@@ -19,14 +19,19 @@ const STAGE_COLOR = {
 
 const POLL_MS = 1500;
 
+const SHIP_LABELS = { bulk: '벌크선', tanker: '탱커', container: '컨테이너선', lng: 'LNG선' };
+const SHIP_COLORS = { bulk: '#60a5fa', tanker: '#f59e0b', container: '#34d399', lng: '#a78bfa' };
+const ROUTE_COLORS = { NSR: '#38bdf8', NWP: '#fb923c', TSR: '#a78bfa' };
+
 export default function RLProgressOverlay() {
-  const [status, setStatus] = useState(null);
-  const [iterStatus, setIterStatus] = useState(null);
-  const [mode, setMode] = useState('curriculum'); // 'curriculum' | 'single' | 'iterative'
-  const [difficulty, setDifficulty] = useState('medium');
-  const [timesteps, setTimesteps] = useState(100000);
-  const [maxIter, setMaxIter] = useState(10);
-  const [targetSuccess, setTargetSuccess] = useState(0.85);
+  const [status, setStatus]           = useState(null);
+  const [iterStatus, setIterStatus]   = useState(null);
+  const [multiStatus, setMultiStatus] = useState(null);
+  const [mode, setMode]               = useState('curriculum');
+  const [difficulty, setDifficulty]   = useState('medium');
+  const [timesteps, setTimesteps]     = useState(100000);
+  const [maxIter, setMaxIter]         = useState(10);
+  const [targetSuccess, setTargetSuccess]   = useState(0.85);
   const [targetCollision, setTargetCollision] = useState(0.05);
 
   useEffect(() => {
@@ -34,15 +39,15 @@ export default function RLProgressOverlay() {
 
     async function poll() {
       try {
-        const [r1, r2] = await Promise.all([
+        const [r1, r2, r3] = await Promise.all([
           fetch('/api/rl/status'),
           fetch('/api/rl/train/iterative/status'),
+          fetch('/api/rl/multi/status'),
         ]);
         if (r1.ok && alive) setStatus(await r1.json());
         if (r2.ok && alive) setIterStatus(await r2.json());
-      } catch {
-        // 서버 없으면 숨김
-      }
+        if (r3.ok && alive) setMultiStatus(await r3.json());
+      } catch { /* 서버 없으면 숨김 */ }
     }
 
     poll();
@@ -50,9 +55,10 @@ export default function RLProgressOverlay() {
     return () => { alive = false; clearInterval(id); };
   }, []);
 
-  const isIterRunning = iterStatus?.is_running ?? false;
-  const isTraining = status?.is_training ?? false;
-  const anyActive = isTraining || isIterRunning;
+  const isMultiRunning = multiStatus?.is_running ?? false;
+  const isIterRunning  = iterStatus?.is_running ?? false;
+  const isTraining     = status?.is_training ?? false;
+  const anyActive      = isTraining || isIterRunning || isMultiRunning;
 
   const stage = status?.current_stage ?? null;
   const metrics = status?.agent_status?.metrics ?? {};
@@ -76,20 +82,34 @@ export default function RLProgressOverlay() {
 
   async function handleStop() {
     try {
-      if (isIterRunning) {
-        await fetch('/api/rl/train/iterative/stop', { method: 'POST' });
+      if (isMultiRunning) {
+        await fetch('/api/rl/multi/stop', { method: 'POST' });
       } else {
-        await fetch('/api/rl/stop', { method: 'POST' });
+        await Promise.allSettled([
+          fetch('/api/rl/train/iterative/stop', { method: 'POST' }),
+          fetch('/api/rl/stop', { method: 'POST' }),
+        ]);
       }
-    } catch (e) {
-      console.error('학습 중단 실패:', e);
-    }
+    } catch (e) { console.error('학습 중단 실패:', e); }
   }
 
   async function handleStart() {
     try {
       let res;
-      if (mode === 'iterative') {
+      if (mode === 'multi') {
+        res = await fetch('/api/rl/multi/train', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            max_iterations: maxIter,
+            target_success_rate: targetSuccess,
+            target_collision_rate: targetCollision,
+            eval_episodes: 50,
+            eval_difficulty: 'hard',
+            base_timesteps: 500000,
+          }),
+        });
+      } else if (mode === 'iterative') {
         res = await fetch('/api/rl/train/iterative', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -105,11 +125,7 @@ export default function RLProgressOverlay() {
         res = await fetch('/api/rl/train', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            curriculum: mode === 'curriculum',
-            difficulty,
-            timesteps,
-          }),
+          body: JSON.stringify({ curriculum: mode === 'curriculum', difficulty, timesteps }),
         });
       }
       if (!res.ok) {
@@ -122,15 +138,11 @@ export default function RLProgressOverlay() {
     }
   }
 
-  const borderColor = isIterRunning ? '#a78bfa' : stageColor;
+  const borderColor = isMultiRunning ? '#f59e0b' : isIterRunning ? '#a78bfa' : stageColor;
 
   return (
     <div style={{
-      position: 'absolute',
-      left: 10,
-      top: 10,
-      width: 240,
-      zIndex: 300,
+      width: isMultiRunning ? 340 : 240,
       background: 'rgba(13, 19, 41, 0.92)',
       border: `1px solid ${borderColor}44`,
       borderRadius: 8,
@@ -138,23 +150,27 @@ export default function RLProgressOverlay() {
       boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
       padding: '12px 16px',
       fontFamily: "'Segoe UI', system-ui, sans-serif",
+      maxHeight: '85vh',
+      overflowY: 'auto',
     }}>
 
       {/* 헤더 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0' }}>
-          RL {isIterRunning ? '반복 학습' : '커리큘럼 학습'}
+          RL {isMultiRunning ? '전체 병렬' : isIterRunning ? '반복 학습' : '커리큘럼 학습'}
         </span>
         <span style={{
           fontSize: 10, fontWeight: 700,
-          color: isIterRunning ? '#a78bfa' : stageColor,
-          background: isIterRunning ? '#a78bfa22' : `${stageColor}22`,
-          border: `1px solid ${isIterRunning ? '#a78bfa55' : `${stageColor}55`}`,
+          color: isMultiRunning ? '#f59e0b' : isIterRunning ? '#a78bfa' : stageColor,
+          background: isMultiRunning ? '#f59e0b22' : isIterRunning ? '#a78bfa22' : `${stageColor}22`,
+          border: `1px solid ${isMultiRunning ? '#f59e0b55' : isIterRunning ? '#a78bfa55' : `${stageColor}55`}`,
           borderRadius: 4, padding: '1px 6px',
         }}>
-          {isIterRunning
-            ? `반복 ${curIter}/${maxIter}`
-            : (status === null ? '대기' : (STAGE_LABEL[stage] ?? stage ?? '—'))}
+          {isMultiRunning
+            ? `${multiStatus?.running_models ?? 0}/${multiStatus?.total_models ?? 0} 실행중`
+            : isIterRunning
+              ? `반복 ${curIter}/${maxIter}`
+              : (status === null ? '대기' : (STAGE_LABEL[stage] ?? stage ?? '—'))}
         </span>
       </div>
 
@@ -169,8 +185,13 @@ export default function RLProgressOverlay() {
         </button>
       )}
 
+      {/* 다중 모델 병렬 학습 진행 */}
+      {isMultiRunning && multiStatus?.models && (
+        <RLMultiModelProgress multiStatus={multiStatus} />
+      )}
+
       {/* 반복 학습 진행 표시 */}
-      {isIterRunning && (
+      {isIterRunning && !isMultiRunning && (
         <div style={{ marginBottom: 8 }}>
           {/* 반복 진행 바 */}
           <div style={{ marginBottom: 6 }}>
@@ -222,7 +243,7 @@ export default function RLProgressOverlay() {
       )}
 
       {/* 일반 학습 진행 표시 */}
-      {isTraining && !isIterRunning && (
+      {isTraining && !isIterRunning && !isMultiRunning && (
         <>
           <div style={{ marginBottom: 6 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
@@ -255,12 +276,11 @@ export default function RLProgressOverlay() {
         </>
       )}
 
-      {/* 메트릭 (반복 학습 중엔 latest_metrics 우선 표시) */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      {/* 메트릭 (다중 모델 중엔 숨김) */}
+      {!isMultiRunning && (<div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         <MetricRow
           label="평균 보상 (100ep)"
-          value={(metrics.mean_reward_100 ?? latestMetrics.mean_reward).toFixed?.call(
-            metrics.mean_reward_100 ?? latestMetrics.mean_reward, 2) ?? '—'}
+          value={fmtReward(metrics.mean_reward_100 ?? latestMetrics.mean_reward)}
           color={rewardColor(metrics.mean_reward_100 ?? latestMetrics.mean_reward)}
         />
         <MetricRow
@@ -278,7 +298,7 @@ export default function RLProgressOverlay() {
           value={metrics.episodes != null ? fmtNum(metrics.episodes) : '—'}
           color="#94a3b8"
         />
-      </div>
+      </div>)}
 
       {/* 학습 설정 (학습 중이 아닐 때) */}
       {!anyActive && (
@@ -290,20 +310,31 @@ export default function RLProgressOverlay() {
           <div style={{ fontSize: 10, color: '#64748b', marginBottom: 5 }}>학습 모드 설정</div>
 
           {/* 모드 선택 */}
-          <div style={{ display: 'flex', gap: 3, marginBottom: 8 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 8 }}>
             {[
               { key: 'curriculum', label: '커리큘럼' },
-              { key: 'single', label: '단일' },
-              { key: 'iterative', label: '반복 학습' },
+              { key: 'single',     label: '단일' },
+              { key: 'iterative',  label: '반복' },
+              { key: 'multi',      label: '전체 병렬' },
             ].map(({ key, label }) => (
               <button key={key} onClick={() => setMode(key)} style={{
-                flex: 1, padding: '3px 0', fontSize: 9,
+                flex: '1 1 40%', padding: '3px 0', fontSize: 9,
                 background: mode === key
-                  ? (key === 'iterative' ? 'rgba(109,40,217,0.4)' : 'rgba(30,58,138,0.5)')
+                  ? key === 'multi' ? 'rgba(245,158,11,0.4)'
+                    : key === 'iterative' ? 'rgba(109,40,217,0.4)'
+                    : 'rgba(30,58,138,0.5)'
                   : 'transparent',
-                border: `1px solid ${mode === key ? (key === 'iterative' ? '#7c3aed' : '#3b82f6') : '#334155'}`,
+                border: `1px solid ${mode === key
+                  ? key === 'multi' ? '#f59e0b'
+                    : key === 'iterative' ? '#7c3aed'
+                    : '#3b82f6'
+                  : '#334155'}`,
                 borderRadius: 3,
-                color: mode === key ? (key === 'iterative' ? '#c4b5fd' : '#93c5fd') : '#64748b',
+                color: mode === key
+                  ? key === 'multi' ? '#fde68a'
+                    : key === 'iterative' ? '#c4b5fd'
+                    : '#93c5fd'
+                  : '#64748b',
                 cursor: 'pointer',
               }}>
                 {label}
@@ -327,7 +358,7 @@ export default function RLProgressOverlay() {
           )}
 
           {/* 커리큘럼/단일 모드: 스텝 수 */}
-          {mode !== 'iterative' && (
+          {mode !== 'iterative' && mode !== 'multi' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
               <span style={{ fontSize: 9, color: '#64748b' }}>반복:</span>
               <input
@@ -344,61 +375,58 @@ export default function RLProgressOverlay() {
             </div>
           )}
 
-          {/* 반복 학습 모드: 설정 */}
-          {mode === 'iterative' && (
+          {/* 반복 / 전체 병렬 모드: 설정 */}
+          {(mode === 'iterative' || mode === 'multi') && (
             <div style={{ marginBottom: 8 }}>
-              <div style={{
-                padding: '5px 7px', marginBottom: 6,
-                background: 'rgba(109,40,217,0.1)',
-                border: '1px solid #7c3aed33',
-                borderRadius: 4,
-                fontSize: 9, color: '#a78bfa', lineHeight: 1.5,
-              }}>
-                학습 완료 → 자동 분석 → 보상 조정 → 재학습을 반복합니다
-              </div>
-
+              {mode === 'multi' ? (
+                <div style={{
+                  padding: '5px 7px', marginBottom: 6,
+                  background: 'rgba(245,158,11,0.08)',
+                  border: '1px solid #f59e0b33',
+                  borderRadius: 4, fontSize: 9, color: '#fde68a', lineHeight: 1.6,
+                }}>
+                  항로 3종 × 빙급 7종 × 선종 4종 =<br /><b>84개 모델</b>을 동시에 반복 학습합니다
+                </div>
+              ) : (
+                <div style={{
+                  padding: '5px 7px', marginBottom: 6,
+                  background: 'rgba(109,40,217,0.1)',
+                  border: '1px solid #7c3aed33',
+                  borderRadius: 4, fontSize: 9, color: '#a78bfa', lineHeight: 1.5,
+                }}>
+                  학습 완료 → 자동 분석 → 보상 조정 → 재학습을 반복합니다
+                </div>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ fontSize: 9, color: '#64748b', width: 70 }}>최대 반복:</span>
-                  <input
-                    type="number"
-                    value={maxIter}
+                  <input type="number" value={maxIter}
                     onChange={(e) => setMaxIter(parseInt(e.target.value) || 1)}
-                    min={1} max={20} step={1}
-                    style={{
+                    min={1} max={20} step={1} style={{
                       flex: 1, padding: '2px 4px',
                       background: '#0f172a', border: '1px solid #334155',
-                      borderRadius: 3, color: '#c4b5fd', fontSize: 10,
-                    }}
-                  />
+                      borderRadius: 3, color: mode === 'multi' ? '#fde68a' : '#c4b5fd', fontSize: 10,
+                    }} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ fontSize: 9, color: '#64748b', width: 70 }}>목표 성공률:</span>
-                  <input
-                    type="number"
-                    value={targetSuccess}
+                  <input type="number" value={targetSuccess}
                     onChange={(e) => setTargetSuccess(parseFloat(e.target.value) || 0.85)}
-                    min={0.1} max={1.0} step={0.05}
-                    style={{
+                    min={0.1} max={1.0} step={0.05} style={{
                       flex: 1, padding: '2px 4px',
                       background: '#0f172a', border: '1px solid #334155',
                       borderRadius: 3, color: '#34d399', fontSize: 10,
-                    }}
-                  />
+                    }} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ fontSize: 9, color: '#64748b', width: 70 }}>목표 충돌률:</span>
-                  <input
-                    type="number"
-                    value={targetCollision}
+                  <input type="number" value={targetCollision}
                     onChange={(e) => setTargetCollision(parseFloat(e.target.value) || 0.05)}
-                    min={0.01} max={0.5} step={0.01}
-                    style={{
+                    min={0.01} max={0.5} step={0.01} style={{
                       flex: 1, padding: '2px 4px',
                       background: '#0f172a', border: '1px solid #334155',
                       borderRadius: 3, color: '#ef4444', fontSize: 10,
-                    }}
-                  />
+                    }} />
                 </div>
               </div>
             </div>
@@ -407,17 +435,18 @@ export default function RLProgressOverlay() {
           {/* 시작 버튼 */}
           <button onClick={handleStart} style={{
             width: '100%', marginTop: 6, padding: '8px 0',
-            background: mode === 'iterative'
-              ? 'linear-gradient(135deg,#6d28d9,#4c1d95)'
-              : 'linear-gradient(135deg,#2563eb,#1d4ed8)',
-            border: `1px solid ${mode === 'iterative' ? '#7c3aed' : '#3b82f6'}`,
+            background: mode === 'multi'
+              ? 'linear-gradient(135deg,#d97706,#f59e0b)'
+              : mode === 'iterative'
+                ? 'linear-gradient(135deg,#6d28d9,#4c1d95)'
+                : 'linear-gradient(135deg,#2563eb,#1d4ed8)',
+            border: `1px solid ${mode === 'multi' ? '#f59e0b' : mode === 'iterative' ? '#7c3aed' : '#3b82f6'}`,
             borderRadius: 4, color: '#fff',
             fontSize: 11, fontWeight: 'bold', cursor: 'pointer',
-            boxShadow: mode === 'iterative'
-              ? '0 2px 8px rgba(109,40,217,0.4)'
-              : '0 2px 8px rgba(37,99,235,0.3)',
           }}>
-            {mode === 'iterative' ? '🔄 반복 학습 시작' : '학습 시작 (Start Training)'}
+            {mode === 'multi' ? '전체 병렬 학습 시작 (84개)'
+              : mode === 'iterative' ? '반복 학습 시작'
+              : '학습 시작 (Start Training)'}
           </button>
         </div>
       )}
@@ -443,6 +472,11 @@ function MetricRow({ label, value, color }) {
       <span style={{ fontSize: 12, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
   );
+}
+
+function fmtReward(v) {
+  if (v == null || isNaN(v)) return '—';
+  return Number(v).toFixed(2);
 }
 
 function fmtNum(n) {
@@ -475,4 +509,137 @@ function collisionColor(v) {
   if (v < 0.1) return '#34d399';
   if (v < 0.3) return '#f59e0b';
   return '#ef4444';
+}
+
+// ── 다중 모델 병렬 학습 진행 컴포넌트 ─────────────────────────
+const ROUTES_ORDER = ['NSR', 'NWP', 'TSR'];
+const SHIP_ORDER   = ['bulk', 'tanker', 'container', 'lng'];
+const ICE_ORDER    = ['PC7', 'PC6', 'PC5', 'PC4', 'PC3', 'IA_Super', 'IA'];
+
+function modelDot(m) {
+  if (m.error)     return { color: '#ef4444', label: '오류' };
+  if (m.converged) return { color: '#34d399', label: '수렴' };
+  if (m.is_running) return { color: '#f59e0b', label: '학습중' };
+  return { color: '#475569', label: '대기' };
+}
+
+function RLMultiModelProgress({ multiStatus }) {
+  const models = multiStatus?.models ?? {};
+
+  const totalRunning   = multiStatus?.running_models ?? 0;
+  const totalConverged = multiStatus?.converged_models ?? 0;
+  const totalModels    = multiStatus?.total_models ?? 0;
+
+  return (
+    <div style={{ marginBottom: 8 }}>
+      {/* 요약 배지 */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+        {[
+          { label: '전체',  value: totalModels,   color: '#94a3b8' },
+          { label: '학습중', value: totalRunning,  color: '#f59e0b' },
+          { label: '수렴',  value: totalConverged, color: '#34d399' },
+        ].map(b => (
+          <div key={b.label} style={{
+            flex: 1, textAlign: 'center', padding: '4px 0',
+            background: `${b.color}11`,
+            border: `1px solid ${b.color}44`,
+            borderRadius: 4,
+          }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: b.color }}>{b.value}</div>
+            <div style={{ fontSize: 8, color: '#64748b' }}>{b.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 항로별 그룹 */}
+      {ROUTES_ORDER.map(route => {
+        const routeColor = ROUTE_COLORS[route] ?? '#94a3b8';
+        return (
+          <div key={route} style={{ marginBottom: 8 }}>
+            {/* 항로 헤더 */}
+            <div style={{
+              fontSize: 9, fontWeight: 700, color: routeColor,
+              borderBottom: `1px solid ${routeColor}33`,
+              paddingBottom: 2, marginBottom: 4,
+              letterSpacing: '0.05em',
+            }}>
+              {route}
+            </div>
+
+            {/* 선종별 그룹 */}
+            {SHIP_ORDER.map(shipType => {
+              const shipColor = SHIP_COLORS[shipType] ?? '#94a3b8';
+              const shipLabel = SHIP_LABELS[shipType] ?? shipType;
+
+              // 이 항로+선종에 속하는 모델들 (빙급 순)
+              const rows = ICE_ORDER.map(iceKey => {
+                const key = `${route}_${iceKey}_${shipType}`;
+                return { iceKey, model: models[key] };
+              }).filter(({ model }) => model != null);
+
+              if (rows.length === 0) return null;
+
+              return (
+                <div key={shipType} style={{ marginBottom: 5 }}>
+                  {/* 선종 서브헤더 */}
+                  <div style={{
+                    fontSize: 8, color: shipColor, marginBottom: 2,
+                    display: 'flex', alignItems: 'center', gap: 4,
+                  }}>
+                    <span style={{
+                      display: 'inline-block', width: 6, height: 6,
+                      borderRadius: '50%', background: shipColor, flexShrink: 0,
+                    }} />
+                    {shipLabel}
+                  </div>
+
+                  {/* 빙급별 행 */}
+                  {rows.map(({ iceKey, model }) => {
+                    const dot = modelDot(model);
+                    const iceLabel = iceKey.replace('_', ' ');
+                    const sr = model.latest_metrics?.success_rate;
+                    const cr = model.latest_metrics?.collision_rate;
+                    return (
+                      <div key={iceKey} style={{
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        marginBottom: 2, paddingLeft: 10,
+                      }}>
+                        {/* 상태 점 */}
+                        <span style={{
+                          width: 5, height: 5, borderRadius: '50%',
+                          background: dot.color, flexShrink: 0,
+                        }} title={dot.label} />
+                        {/* 빙급 */}
+                        <span style={{ fontSize: 8, color: '#94a3b8', width: 38, flexShrink: 0 }}>
+                          {iceLabel}
+                        </span>
+                        {/* 반복 */}
+                        <span style={{ fontSize: 8, color: '#64748b', width: 22, flexShrink: 0 }}>
+                          {model.current_iteration > 0 ? `#${model.current_iteration}` : '—'}
+                        </span>
+                        {/* 성공률 */}
+                        <span style={{
+                          fontSize: 8, fontWeight: 600,
+                          color: rateColor(sr), width: 34, flexShrink: 0,
+                        }}>
+                          {sr != null ? `${(sr * 100).toFixed(0)}%` : '—'}
+                        </span>
+                        {/* 충돌률 */}
+                        <span style={{
+                          fontSize: 8, fontWeight: 600,
+                          color: collisionColor(cr),
+                        }}>
+                          {cr != null ? `충${(cr * 100).toFixed(0)}%` : ''}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
 }

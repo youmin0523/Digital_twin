@@ -46,6 +46,7 @@ from modules.pdf_generator import PdfGenerator
 from modules.rl.departure_agent import DepartureAgent
 from modules.rl.departure_trainer import DepartureTrainer
 from modules.rl.departure_iterative_trainer import DepartureIterativeTrainer
+from modules.rl.multi_model_trainer import MultiModelIterativeTrainer, ALL_COMBINATIONS, SHIP_TYPES
 from modules.rl.prediction_calibrator import PredictionCalibrator
 from modules.rl import existing_rl_client
 
@@ -57,6 +58,7 @@ pdf_generator = PdfGenerator()
 departure_agent = DepartureAgent()
 departure_trainer = DepartureTrainer()
 departure_iterative_trainer = DepartureIterativeTrainer(departure_trainer=departure_trainer)
+multi_model_trainer = MultiModelIterativeTrainer()
 calibrator = PredictionCalibrator()
 
 OUTPUT_DIR = Path(__file__).parent / "output"
@@ -115,6 +117,15 @@ class DepartureIterativeTrainRequest(BaseModel):
     target_prohibitive_rate: float = 0.10
     eval_episodes: int = 50
     initial_weights: dict | None = None
+
+
+class MultiModelTrainRequest(BaseModel):
+    base_timesteps: int = 100_000
+    max_iterations: int = 10
+    target_success_rate: float = 0.80
+    target_prohibitive_rate: float = 0.10
+    eval_episodes: int = 50
+    forecast_days: int = 30
 
 
 # ── 보고서 생성 파이프라인 ────────────────────────────────────
@@ -369,10 +380,12 @@ async def rl_status_general():
 
 @app.post("/api/report/rl/stop")
 async def rl_stop():
-    """진행 중인 RL(A) 학습 중단 요청."""
-    if not departure_trainer.is_training:
+    """진행 중인 RL(A) 학습 중단 요청 (반복 학습 포함)."""
+    if not departure_trainer.is_training and not departure_iterative_trainer.is_running:
         return JSONResponse(status_code=400, content={"error": "학습 중이 아닙니다."})
     departure_trainer.stop_requested = True
+    if departure_iterative_trainer.is_running:
+        departure_iterative_trainer.stop_requested = True
     return {"message": "학습 중단 요청됨"}
 
 
@@ -474,3 +487,50 @@ async def departure_iterative_stop():
         return JSONResponse(status_code=400, content={"error": "반복 학습이 실행 중이 아닙니다."})
     departure_iterative_trainer.stop()
     return {"message": "출항 RL 반복 학습 중단 요청됨"}
+
+
+# ── 다중 모델 (빙급 × 선종) 병렬 학습 Endpoints ───────────────
+@app.post("/api/report/rl/multi/train")
+async def multi_model_train(req: MultiModelTrainRequest, bg: BackgroundTasks):
+    """빙급 × 선종 전체 조합을 동시에 반복 학습 시작."""
+    if multi_model_trainer.is_running:
+        return JSONResponse(status_code=409, content={"error": "이미 다중 모델 학습이 진행 중입니다."})
+
+    monthly_ice = data_loader.load_monthly_ice()
+    weather = data_loader.load_weather()
+
+    bg.add_task(
+        multi_model_trainer.start,
+        monthly_ice=monthly_ice,
+        weather_data=weather,
+        route_scorer=route_scorer,
+        base_timesteps=req.base_timesteps,
+        max_iterations=req.max_iterations,
+        target_success_rate=req.target_success_rate,
+        target_prohibitive_rate=req.target_prohibitive_rate,
+        eval_episodes=req.eval_episodes,
+        forecast_days=req.forecast_days,
+    )
+
+    combos = [{"ice_class": ic, "ship_type": st,
+                "ship_label": SHIP_TYPES[st]["label"]}
+               for ic, st in ALL_COMBINATIONS]
+    return {
+        "message": f"다중 모델 학습 시작 ({len(ALL_COMBINATIONS)}개 조합)",
+        "combinations": combos,
+    }
+
+
+@app.get("/api/report/rl/multi/status")
+async def multi_model_status():
+    """다중 모델 학습 진행 상태 조회."""
+    return multi_model_trainer.get_status()
+
+
+@app.post("/api/report/rl/multi/stop")
+async def multi_model_stop():
+    """다중 모델 학습 전체 중단."""
+    if not multi_model_trainer.is_running:
+        return JSONResponse(status_code=400, content={"error": "다중 모델 학습이 실행 중이 아닙니다."})
+    multi_model_trainer.stop()
+    return {"message": "다중 모델 학습 중단 요청됨"}

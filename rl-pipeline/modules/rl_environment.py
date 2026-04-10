@@ -127,10 +127,16 @@ class IcebergAvoidanceEnv(gym.Env):
     MAX_NEARBY_ICEBERGS = 3
 
     def __init__(self, render_mode=None, difficulty: str = "medium",
-                 reward_weights: RewardWeights | None = None):
+                 reward_weights: RewardWeights | None = None,
+                 fixed_route: str | None = None,
+                 fixed_ice_class: str | None = None,
+                 ship_params: ShipParams | None = None):
         super().__init__()
         self.render_mode = render_mode
         self.difficulty = difficulty
+        self._fixed_route = fixed_route          # None이면 에피소드마다 랜덤
+        self._fixed_ice_class = fixed_ice_class  # None이면 에피소드마다 랜덤
+        self._custom_ship_params = ship_params   # None이면 기본 ShipParams()
 
         self.action_space = spaces.Box(
             low=np.array([-15.0, 0.5], dtype=np.float32),
@@ -142,7 +148,7 @@ class IcebergAvoidanceEnv(gym.Env):
         )
 
         self.ship: ShipState | None = None
-        self.ship_params = ShipParams()
+        self.ship_params = self._custom_ship_params if self._custom_ship_params is not None else ShipParams()
         self.reward_weights = reward_weights if reward_weights is not None else RewardWeights()
         self.icebergs: list[Iceberg] = []
         self.route_wps: list[tuple[float, float]] = []
@@ -171,7 +177,7 @@ class IcebergAvoidanceEnv(gym.Env):
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
 
-        route_key = random.choice(list(ROUTE_WAYPOINTS.keys()))
+        route_key = self._fixed_route if self._fixed_route else random.choice(list(ROUTE_WAYPOINTS.keys()))
         self.route_wps = ROUTE_WAYPOINTS[route_key]
 
         n = len(self.route_wps)
@@ -179,7 +185,7 @@ class IcebergAvoidanceEnv(gym.Env):
         self.segment_start_idx = random.randint(0, n - seg_len - 1)
         self.segment_end_idx = self.segment_start_idx + seg_len
 
-        self.ice_class = random.choice(["PC3", "PC5", "PC7", "IA Super", "IA"])
+        self.ice_class = self._fixed_ice_class if self._fixed_ice_class else random.choice(["PC3", "PC5", "PC7", "IA Super", "IA"])
         self.max_safe_conc = MAX_SAFE_CONCENTRATION.get(self.ice_class, 0.7)
 
         dp = self._get_difficulty_params()

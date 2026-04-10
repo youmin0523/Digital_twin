@@ -221,6 +221,7 @@ class DepartureSchedulingEnv(gym.Env):
             "departure_date": dep_date.isoformat(),
             "day_offset": day_offset,
             "episode_reward": self._episode_reward,
+            "has_prohibitive": has_prohibitive,
         }
 
         return obs, reward, terminated, truncated, info
