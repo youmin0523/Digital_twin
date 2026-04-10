@@ -54,13 +54,19 @@ def main():
     parser.add_argument(
         "--sentinel1-only", action="store_true", help="Sentinel-1 IW 빙하 아카이브만 수집"
     )
+    parser.add_argument(
+        "--detect-icebergs", action="store_true", help="SAR CV 빙산 자동 탐지 실행"
+    )
+    parser.add_argument(
+        "--detect-max", type=int, default=5, help="SAR 탐지 시 최대 처리 제품 수 (기본: 5)"
+    )
     args = parser.parse_args()
 
     ensure_data_dir()
 
     run_all = not (
         args.ice_only or args.berg_only or args.nsidc_only
-        or args.weather_only or args.sentinel1_only
+        or args.weather_only or args.sentinel1_only or args.detect_icebergs
     )
 
     results = []
@@ -86,6 +92,13 @@ def main():
     if run_all or args.sentinel1_only:
         rc = run_script(FETCHERS_DIR / "sentinel1_iw_fetcher.py")
         results.append(("Sentinel-1 IW Glacier Archive", rc))
+
+    if args.detect_icebergs:
+        rc = run_script(
+            PIPELINE_DIR / "processors" / "iceberg_detector.py",
+            ["--latest", "--max-products", str(args.detect_max)],
+        )
+        results.append(("SAR Iceberg Detection (CV)", rc))
 
     # 결과 요약
     print(f"\n{'='*60}")

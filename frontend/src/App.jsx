@@ -20,6 +20,8 @@ import WeatherHud from './components/hud/WeatherHud';
 import RLProgressOverlay from './components/hud/RLProgressOverlay';
 import TrendReportProgressOverlay from './components/hud/TrendReportProgressOverlay';
 import TrendReportPanel from './components/hud/TrendReportPanel';
+import WhatIfPanel from './components/hud/WhatIfPanel';
+import FuelAnalysisPanel from './components/hud/FuelAnalysisPanel';
 import Header from './components/layout/Header';
 import Sidebar from './components/layout/Sidebar';
 import SimulationControls from './components/layout/SimulationControls';
@@ -84,6 +86,8 @@ function AppInner() {
   const [teleportOpen, setTeleportOpen] = useState(false);
   // Trend Report 패널 상태
   const [trendReportOpen, setTrendReportOpen] = useState(false);
+  // ML 연료 분석 패널 상태
+  const [fuelAnalysisOpen, setFuelAnalysisOpen] = useState(false);
 
   // 토스트 알림 상태
   const [toastMsg, setToastMsg] = useState('');
@@ -2074,6 +2078,13 @@ function AppInner() {
             <TrendReportProgressOverlay />
           </div>
           <TrendReportPanel open={trendReportOpen} onToggle={() => setTrendReportOpen(o => !o)} />
+          <FuelAnalysisPanel
+            open={fuelAnalysisOpen}
+            onToggle={() => setFuelAnalysisOpen(o => !o)}
+            currentRoute={state.currentRouteKey}
+            shipSpecs={state.shipSpecs}
+          />
+          <WhatIfPanel route={state.currentRouteKey} iceClass={state.shipSpecs?.iceClass || 'PC5'} />
 
           {/* //* [Modified Code] 레이더(미니맵)을 메인 뷰포트 영역 내부 우측 하단에 부착하여 패널에 가려지지 않게 함 */}
           <Minimap
@@ -2103,6 +2114,8 @@ function AppInner() {
         onReset={handleResetEvaluation}
         trendReportOpen={trendReportOpen}
         onTrendReportToggle={() => setTrendReportOpen(o => !o)}
+        fuelAnalysisOpen={fuelAnalysisOpen}
+        onFuelAnalysisToggle={() => setFuelAnalysisOpen(o => !o)}
       />
 
       {/* Ship Specs Summary Modal */}
