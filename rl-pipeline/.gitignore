@@ -1,2 +1,7 @@
-modules
 __pycache__
+**/__pycache__
+*.pyc
+venv/
+models/sac_iceberg/*.zip
+models/sac_iceberg/*.pt
+models/sac_iceberg/*.onnx
