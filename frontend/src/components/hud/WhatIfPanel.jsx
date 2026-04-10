@@ -123,7 +123,7 @@ export default function WhatIfPanel({ route = 'NSR', iceClass = 'PC5' }) {
   return (
     <div style={{
       position: 'absolute',
-      left: 260,
+      left: 690,
       top: 10,
       width: 280,
       zIndex: 290,
