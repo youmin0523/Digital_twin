@@ -768,3 +768,97 @@
 2026-04-09 16:05:03,816 [INFO]   디스크 사용: 0.0GB / 50GB
 2026-04-09 16:05:03,816 [INFO]   카탈로그: 302건
 2026-04-09 16:05:03,816 [INFO] ==================================================
+2026-04-10 13:46:58,233 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-10 13:49:05,358 [INFO] 검색 기간: 2026-03-29 ~ 2026-04-09
+2026-04-10 13:49:05,394 [INFO] 
+────────────────────────────────────────
+2026-04-10 13:49:05,394 [INFO] AOI: Svalbard (svalbard)
+2026-04-10 13:49:05,394 [INFO] ────────────────────────────────────────
+2026-04-10 13:49:05,394 [INFO] CDSE 토큰 발급 요청...
+2026-04-10 13:49:35,068 [INFO] CDSE 토큰 발급 완료 (만료: 1800초)
+2026-04-10 13:50:01,114 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 1/5 (3.0초 대기)
+2026-04-10 13:50:21,663 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 2/5 (5.2초 대기)
+2026-04-10 13:50:40,515 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 3/5 (9.5초 대기)
+2026-04-10 13:51:04,314 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 4/5 (16.0초 대기)
+2026-04-10 13:51:38,036 [ERROR] [Svalbard] 카탈로그 쿼리 실패: 5회 재시도 후 실패: https://catalogue.dataspace.copernicus.eu/odata/v1/Products
+2026-04-10 13:51:38,039 [INFO] 
+────────────────────────────────────────
+2026-04-10 13:51:38,040 [INFO] AOI: East Greenland (greenland_east)
+2026-04-10 13:51:38,041 [INFO] ────────────────────────────────────────
+2026-04-10 13:51:57,338 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 1/5 (3.1초 대기)
+2026-04-10 13:52:13,586 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 2/5 (4.7초 대기)
+2026-04-10 13:52:31,278 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 3/5 (9.6초 대기)
+2026-04-10 13:52:55,274 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 4/5 (17.6초 대기)
+2026-04-10 13:53:25,706 [ERROR] [East Greenland] 카탈로그 쿼리 실패: 5회 재시도 후 실패: https://catalogue.dataspace.copernicus.eu/odata/v1/Products
+2026-04-10 13:53:25,708 [INFO] 
+────────────────────────────────────────
+2026-04-10 13:53:25,708 [INFO] AOI: Jakobshavn / Ilulissat (jakobshavn)
+2026-04-10 13:53:25,709 [INFO] ────────────────────────────────────────
+2026-04-10 13:53:36,901 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 1/5 (2.0초 대기)
+2026-04-10 13:53:50,840 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 2/5 (4.9초 대기)
+2026-04-10 13:54:11,996 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 3/5 (8.3초 대기)
+2026-04-10 13:54:38,385 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 4/5 (16.2초 대기)
+2026-04-10 13:55:13,074 [ERROR] [Jakobshavn / Ilulissat] 카탈로그 쿼리 실패: 5회 재시도 후 실패: https://catalogue.dataspace.copernicus.eu/odata/v1/Products
+2026-04-10 13:55:13,076 [INFO] 
+────────────────────────────────────────
+2026-04-10 13:55:13,077 [INFO] AOI: Novaya Zemlya (novaya_zemlya)
+2026-04-10 13:55:13,078 [INFO] ────────────────────────────────────────
+2026-04-10 13:55:52,710 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 1/5 (3.1초 대기)
+2026-04-10 13:56:45,729 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 2/5 (4.3초 대기)
+2026-04-10 13:57:01,702 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 3/5 (9.6초 대기)
+2026-04-10 13:57:32,299 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 4/5 (16.6초 대기)
+2026-04-10 13:58:14,640 [ERROR] [Novaya Zemlya] 카탈로그 쿼리 실패: 5회 재시도 후 실패: https://catalogue.dataspace.copernicus.eu/odata/v1/Products
+2026-04-10 13:58:15,223 [INFO] 카탈로그 저장: sentinel1_catalog_latest.json (302건, 137KB)
+2026-04-10 13:58:15,223 [INFO] 
+==================================================
+2026-04-10 13:58:15,224 [INFO]   완료 — 신규 0건, 다운로드 0건
+2026-04-10 13:58:15,224 [INFO]   디스크 사용: 0.0GB / 50GB
+2026-04-10 13:58:15,224 [INFO]   카탈로그: 302건
+2026-04-10 13:58:15,224 [INFO] ==================================================
+2026-04-10 15:27:59,775 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-10 15:29:29,058 [INFO] 검색 기간: 2026-03-29 ~ 2026-04-09
+2026-04-10 15:29:29,353 [INFO] 
+────────────────────────────────────────
+2026-04-10 15:29:29,357 [INFO] AOI: Svalbard (svalbard)
+2026-04-10 15:29:29,359 [INFO] ────────────────────────────────────────
+2026-04-10 15:29:29,360 [INFO] CDSE 토큰 발급 요청...
+2026-04-10 15:29:51,406 [INFO] CDSE 토큰 발급 완료 (만료: 1800초)
+2026-04-10 15:30:11,749 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 1/5 (2.5초 대기)
+2026-04-10 15:30:28,873 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 2/5 (4.8초 대기)
+2026-04-10 15:30:46,703 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 3/5 (8.2초 대기)
+2026-04-10 15:31:11,732 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 4/5 (17.4초 대기)
+2026-04-10 15:31:41,496 [ERROR] [Svalbard] 카탈로그 쿼리 실패: 5회 재시도 후 실패: https://catalogue.dataspace.copernicus.eu/odata/v1/Products
+2026-04-10 15:31:41,497 [INFO] 
+────────────────────────────────────────
+2026-04-10 15:31:41,499 [INFO] AOI: East Greenland (greenland_east)
+2026-04-10 15:31:41,500 [INFO] ────────────────────────────────────────
+2026-04-10 15:31:55,198 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 1/5 (2.6초 대기)
+2026-04-10 15:32:29,168 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 2/5 (6.0초 대기)
+2026-04-10 15:33:01,730 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 3/5 (8.8초 대기)
+2026-04-10 15:33:37,442 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 4/5 (17.1초 대기)
+2026-04-10 15:34:22,832 [ERROR] [East Greenland] 카탈로그 쿼리 실패: 5회 재시도 후 실패: https://catalogue.dataspace.copernicus.eu/odata/v1/Products
+2026-04-10 15:34:23,264 [INFO] 
+────────────────────────────────────────
+2026-04-10 15:34:23,264 [INFO] AOI: Jakobshavn / Ilulissat (jakobshavn)
+2026-04-10 15:34:23,264 [INFO] ────────────────────────────────────────
+2026-04-10 15:34:41,066 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 1/5 (3.8초 대기)
+2026-04-10 15:35:06,508 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 2/5 (5.9초 대기)
+2026-04-10 15:35:30,617 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 3/5 (9.2초 대기)
+2026-04-10 15:36:08,621 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 4/5 (16.7초 대기)
+2026-04-10 15:36:50,717 [ERROR] [Jakobshavn / Ilulissat] 카탈로그 쿼리 실패: 5회 재시도 후 실패: https://catalogue.dataspace.copernicus.eu/odata/v1/Products
+2026-04-10 15:36:50,718 [INFO] 
+────────────────────────────────────────
+2026-04-10 15:36:50,720 [INFO] AOI: Novaya Zemlya (novaya_zemlya)
+2026-04-10 15:36:50,721 [INFO] ────────────────────────────────────────
+2026-04-10 15:37:21,411 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 1/5 (3.8초 대기)
+2026-04-10 15:37:56,799 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 2/5 (5.1초 대기)
+2026-04-10 15:38:48,600 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 3/5 (8.9초 대기)
+2026-04-10 15:39:25,951 [WARNING] 요청 에러: ('Connection aborted.', ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)) — 재시도 4/5 (16.3초 대기)
+2026-04-10 15:40:06,406 [ERROR] [Novaya Zemlya] 카탈로그 쿼리 실패: 5회 재시도 후 실패: https://catalogue.dataspace.copernicus.eu/odata/v1/Products
+2026-04-10 15:40:12,195 [INFO] 카탈로그 저장: sentinel1_catalog_latest.json (302건, 137KB)
+2026-04-10 15:40:12,197 [INFO] 
+==================================================
+2026-04-10 15:40:12,199 [INFO]   완료 — 신규 0건, 다운로드 0건
+2026-04-10 15:40:12,200 [INFO]   디스크 사용: 0.0GB / 50GB
+2026-04-10 15:40:12,234 [INFO]   카탈로그: 302건
+2026-04-10 15:40:12,236 [INFO] ==================================================

@@ -1,6 +1,6 @@
 // //! [Original Code] import React, { useState } from 'react';
-// //* [Modified Code] useRef, useCallback 추가 (Portal 기반 툴팁용)
-import React, { useState, useRef, useCallback } from 'react';
+// //* [Modified Code] useRef, useCallback, useEffect 추가 (Portal 기반 툴팁용 + ML 연료 비교)
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import './BottomPanel.css';
 import {
@@ -9,6 +9,7 @@ import {
   MIN_RESCUE_DAYS,
   MIN_TEMP_MARGIN,
 } from '../../services/polarisRIO';
+import { compareFuelCost } from '../../services/api';
 
 const DEFAULT_CHECKS = {
   pwom: true,
@@ -484,9 +485,14 @@ function EvalTooltipPortal({ anchorRect, evaluationResult }) {
 }
 
 /* ── Tab 3: Ship Service Info ── */
-function ServiceInfoPanel({ hud, currentRoute, evaluationResult }) {
+function ServiceInfoPanel({ hud, currentRoute, evaluationResult, specs }) {
   // //* [Modified Code] Portal 툴팁 상태 관리
   const [tooltipRect, setTooltipRect] = useState(null);
+
+  // ── ML 연료 비교 상태 ──────────────────────────────────────
+  const [fuelData, setFuelData] = useState(null);
+  const [fuelLoading, setFuelLoading] = useState(false);
+  const [fuelError, setFuelError] = useState(null);
   const badgeRef = useRef(null);
 
   const handleBadgeEnter = useCallback(() => {
@@ -495,6 +501,59 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult }) {
     }
   }, []);
   const handleBadgeLeave = useCallback(() => setTooltipRect(null), []);
+
+  // ── 선종 매핑 (shipSpecs.type → API vessel_type) ────────────
+  const vesselTypeMap = { icebreaker: 'icebreaker', lng_tanker: 'lng', container: 'container' };
+  const iceClassCodeMap = { PC2: 2, PC3: 3, PC4: 4, PC5: 5, PC6: 6, PC7: 7, NONE: 0 };
+  // 선종별 기본 엔진 출력 (kW)
+  const defaultEnginePower = { icebreaker: 32000, lng_tanker: 37000, container: 28000 };
+
+  // NSR 항로 거리 (해리) — ai-pipeline/config.py 기준
+  const routeDistanceNm = { NSR: 7200, NWP: 8100, TSR: 6600 };
+
+  // ── ML 연료 비교 API 호출 ──────────────────────────────────
+  useEffect(() => {
+    if (!specs) return;
+    const arcticRoutes = ['NSR', 'NWP', 'TSR'];
+    if (!arcticRoutes.includes(currentRoute)) {
+      setFuelData(null);
+      return;
+    }
+
+    const vtype = vesselTypeMap[specs.type] || 'container';
+    const iceCode = iceClassCodeMap[specs.iceClass] || 0;
+    const enginePower = defaultEnginePower[specs.type] || 28000;
+    const nsrDist = routeDistanceNm[currentRoute] || 7200;
+
+    // 현재 SIC(빙하 농도)를 HUD에서 가져옴
+    const sicStr = hud.sic || '0%';
+    const sicVal = parseFloat(sicStr) / 100 || 0;
+    // 빙하 두께는 농도에 기반한 추정값
+    const iceThickness = Math.min(3.0, 0.3 + 2.0 * Math.pow(sicVal, 1.5));
+
+    setFuelLoading(true);
+    setFuelError(null);
+    compareFuelCost({
+      displacement: specs.displacement || 20000,
+      draft: specs.draft || 8.5,
+      engine_power: enginePower,
+      ice_class_code: iceCode,
+      nsr_ice_thickness: iceThickness,
+      nsr_ice_concentration: sicVal,
+      nsr_distance_nm: nsrDist,
+      suez_distance_nm: 12400,
+      vessel_type: vtype,
+      speed_knots: 14.0,
+    })
+      .then((data) => {
+        setFuelData(data);
+        setFuelLoading(false);
+      })
+      .catch((err) => {
+        setFuelError(err.message);
+        setFuelLoading(false);
+      });
+  }, [specs?.type, specs?.displacement, specs?.draft, specs?.iceClass, currentRoute, hud.sic]);
 
   const allRoutes = [
     { name: 'NSR', dist: 7200, days: 14, cost: 280, co2: 1840, arctic: true },
@@ -683,6 +742,85 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult }) {
           </div>
         </>
       )}
+      {/* ── ML 연료 비용 비교 (XGBoost 예측 기반) ── */}
+      {fuelData && !fuelData.error && (
+        <>
+          <div className="bp-divider" />
+          <div style={{
+            display: 'flex', flexDirection: 'column', justifyContent: 'center',
+            flex: 1, minWidth: 0, maxWidth: 320,
+          }}>
+            <span className="bp-service__table-title" style={{ color: '#f59e0b' }}>
+              ML 연료 비용 분석
+            </span>
+            <table className="bp-service__table" style={{ fontSize: '10px' }}>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th style={{ color: '#38bdf8' }}>{currentRoute}</th>
+                  <th style={{ color: '#fb923c' }}>SUEZ</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style={{ color: '#94a3b8' }}>연료</td>
+                  <td>{fuelData.nsr.total_fuel_tons.toLocaleString()}t</td>
+                  <td>{fuelData.suez.total_fuel_tons.toLocaleString()}t</td>
+                </tr>
+                <tr>
+                  <td style={{ color: '#94a3b8' }}>연료비</td>
+                  <td>${(fuelData.nsr.fuel_cost_usd / 1000).toFixed(0)}K</td>
+                  <td>${(fuelData.suez.fuel_cost_usd / 1000).toFixed(0)}K</td>
+                </tr>
+                <tr>
+                  <td style={{ color: '#94a3b8' }}>부대비</td>
+                  <td>${(fuelData.nsr.additional_cost_usd / 1000).toFixed(0)}K</td>
+                  <td>${(fuelData.suez.additional_cost_usd / 1000).toFixed(0)}K</td>
+                </tr>
+                <tr style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                  <td style={{ color: '#e2e8f0', fontWeight: 'bold' }}>총비용</td>
+                  <td style={{ fontWeight: 'bold' }}>${(fuelData.nsr.total_cost_usd / 1000).toFixed(0)}K</td>
+                  <td style={{ fontWeight: 'bold' }}>${(fuelData.suez.total_cost_usd / 1000).toFixed(0)}K</td>
+                </tr>
+                <tr>
+                  <td style={{ color: '#94a3b8' }}>소요일</td>
+                  <td>{fuelData.nsr.transit_days}일</td>
+                  <td>{fuelData.suez.transit_days}일</td>
+                </tr>
+              </tbody>
+            </table>
+            {/* 절감 요약 배지 */}
+            <div style={{
+              marginTop: 4, padding: '4px 8px', borderRadius: 6, fontSize: '10px',
+              fontWeight: 'bold', textAlign: 'center',
+              background: fuelData.comparison.nsr_is_cheaper
+                ? 'rgba(52,211,153,0.15)' : 'rgba(239,68,68,0.15)',
+              border: `1px solid ${fuelData.comparison.nsr_is_cheaper
+                ? 'rgba(52,211,153,0.3)' : 'rgba(239,68,68,0.3)'}`,
+              color: fuelData.comparison.nsr_is_cheaper ? '#34d399' : '#f87171',
+            }}>
+              {fuelData.comparison.nsr_is_cheaper
+                ? `${currentRoute} 선택 시 $${(Math.abs(fuelData.comparison.cost_saving_usd) / 1000).toFixed(0)}K 절감 (${fuelData.comparison.cost_saving_percent}%) · ${Math.abs(fuelData.comparison.time_saving_days)}일 단축`
+                : `SUEZ 우회가 $${(Math.abs(fuelData.comparison.cost_saving_usd) / 1000).toFixed(0)}K 저렴`}
+            </div>
+            {/* NSR 부대비 상세 (에스코트·보험) */}
+            {fuelData.nsr.escort_cost_usd > 0 && (
+              <div style={{ fontSize: '9px', color: '#64748b', marginTop: 3, paddingLeft: 4 }}>
+                쇄빙 에스코트 ${(fuelData.nsr.escort_cost_usd / 1000).toFixed(0)}K
+                · 북극해 보험 ${(fuelData.nsr.insurance_cost_usd / 1000).toFixed(0)}K
+              </div>
+            )}
+          </div>
+        </>
+      )}
+      {fuelLoading && (
+        <>
+          <div className="bp-divider" />
+          <div style={{ display: 'flex', alignItems: 'center', color: '#64748b', fontSize: '10px' }}>
+            ML 연료 분석 중...
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -701,6 +839,8 @@ export default function BottomPanel({
   onReset,
   trendReportOpen,
   onTrendReportToggle,
+  fuelAnalysisOpen,
+  onFuelAnalysisToggle,
 }) {
   return (
     <div className="bp" style={{ position: 'relative' }}>
@@ -754,6 +894,28 @@ export default function BottomPanel({
             >
               TREND REPORT {trendReportOpen ? '▲' : '▼'}
             </button>
+            {/* FUEL ANALYSIS 토글 — TREND REPORT 옆 */}
+            <button
+              onClick={onFuelAnalysisToggle}
+              style={{
+                position: 'absolute',
+                left: 118,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                padding: '2px 8px',
+                background: fuelAnalysisOpen ? 'rgba(245,158,11,0.35)' : 'transparent',
+                border: `1px solid ${fuelAnalysisOpen ? '#f59e0b' : '#1e3a8a'}`,
+                borderRadius: 3,
+                color: fuelAnalysisOpen ? '#fbbf24' : '#4a6490',
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: 0.5,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              FUEL ANALYSIS {fuelAnalysisOpen ? '▲' : '▼'}
+            </button>
             Ship Service Info
             {/* //* [Modified Code] 초기화 아이콘 버튼 */}
             <button
@@ -780,6 +942,7 @@ export default function BottomPanel({
             hud={hud}
             currentRoute={currentRoute}
             evaluationResult={evaluationResult}
+            specs={specs}
           />
         </div>
       </div>

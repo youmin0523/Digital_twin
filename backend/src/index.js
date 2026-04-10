@@ -201,6 +201,82 @@ app.use(createProxyMiddleware('/api/report', {
   },
 }));
 
+// ── ML Fuel Prediction Pipeline 내부 프로세스 관리 + 프록시 ─────
+const ML_PORT = 8003;
+const ML_VENV_PYTHON = path.join(
+  __dirname, '..', '..', 'ml-pipeline', 'venv',
+  process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
+);
+
+let mlProcess = null;
+let mlRestartCount = 0;
+const ML_MAX_RESTARTS = 3;
+
+function startMLServer() {
+  const fs = require('fs');
+  if (!fs.existsSync(ML_VENV_PYTHON)) {
+    console.warn('[ML] Python venv not found at', ML_VENV_PYTHON);
+    console.warn('[ML] ML pipeline disabled. Run: cd ml-pipeline && python -m venv venv && venv/Scripts/pip install -r requirements.txt');
+    return;
+  }
+
+  console.log('[ML] Starting Python ML server on internal port', ML_PORT);
+  mlProcess = spawn(ML_VENV_PYTHON, [
+    '-m', 'uvicorn', 'server:app',
+    '--host', '127.0.0.1',
+    '--port', String(ML_PORT),
+    '--reload',
+  ], {
+    cwd: path.join(__dirname, '..', '..', 'ml-pipeline'),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  mlProcess.stdout.on('data', (data) => {
+    const msg = data.toString().trim();
+    if (msg) console.log('[ML]', msg);
+  });
+
+  mlProcess.stderr.on('data', (data) => {
+    const msg = data.toString().trim();
+    if (msg) console.error('[ML]', msg);
+  });
+
+  mlProcess.on('close', (code) => {
+    console.warn(`[ML] Python process exited with code ${code}`);
+    mlProcess = null;
+    if (code !== 0 && mlRestartCount < ML_MAX_RESTARTS) {
+      mlRestartCount++;
+      console.log(`[ML] Restarting... (attempt ${mlRestartCount}/${ML_MAX_RESTARTS})`);
+      setTimeout(startMLServer, 3000);
+    }
+  });
+}
+
+// /api/fuel/* → 내부 Python ML 서버로 프록시
+app.use(createProxyMiddleware('/api/fuel', {
+  target: `http://127.0.0.1:${ML_PORT}`,
+  changeOrigin: true,
+  timeout: 30000,
+  proxyTimeout: 30000,
+  on: {
+    proxyReq: (proxyReq, req) => {
+      if (req.body && Object.keys(req.body).length > 0) {
+        const bodyData = JSON.stringify(req.body);
+        proxyReq.setHeader('Content-Type', 'application/json');
+        proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+        proxyReq.write(bodyData);
+      }
+    },
+    error: (_err, _req, res) => {
+      res.status(503).json({
+        error: 'ML 연료 예측 서버에 연결할 수 없습니다.',
+        fallback: true,
+        detail: mlProcess ? 'ML 서버 시작 중...' : 'ML 서버가 비활성화되어 있습니다.',
+      });
+    },
+  },
+}));
+
 // ── Iceberg pipeline scheduler ──────────────────────────────────
 const SCRIPT_PATH = path.join(__dirname, '..', 'scripts', 'update_icebergs.py');
 
@@ -313,12 +389,15 @@ app.listen(PORT, () => {
   startRLServer();
   // Report 서비스 자동 기동
   startReportServer();
+  // ML 연료 예측 서비스 자동 기동
+  startMLServer();
 });
 
 // 프로세스 종료 시 RL + Report 서버 정리
 function cleanupProcesses() {
   if (rlProcess) rlProcess.kill();
   if (reportProcess) reportProcess.kill();
+  if (mlProcess) mlProcess.kill();
 }
 process.on('exit', cleanupProcesses);
 process.on('SIGINT', () => { cleanupProcesses(); process.exit(); });

@@ -405,3 +405,179 @@ curl -X POST http://localhost:8000/api/rl/infer \
 | `/api/rl/status` | GET | RL 학습 상태 조회 |
 | `/api/rl/evaluate` | POST | 학습된 모델 평가 |
 | `/api/rl/infer` | POST | RL 실시간 추론 |
+| `/api/report/generate` | POST | AI 동향 보고서 생성 (report-service) |
+| `/api/report/whatif` | POST | What-If 시나리오 분석 (report-service) |
+| `/api/report/whatif/status/{id}` | GET | What-If 분석 상태 조회 |
+
+---
+
+## AI 확장 기능
+
+### 1. What-If 시나리오 자동 분석
+
+Claude AI가 현재 해양 데이터를 분석하여 의미 있는 시나리오를 자동 제안하고 평가합니다.
+
+**아키텍처**: report-service(포트 8002)에 통합, 별도 서비스 불필요
+
+```
+Frontend(:5173) → Backend(:8000) → report-service(:8002)
+                                       ├── POST /api/report/generate  (기존 보고서)
+                                       └── POST /api/report/whatif    (What-If 신규)
+```
+
+#### 사전 준비
+
+1. `backend/.env`에 `ANTHROPIC_API_KEY` 설정
+2. report-service 의존성 설치 + 서버 시작:
+```bash
+cd report-service
+pip install -r requirements.txt
+uvicorn server:app --reload --port 8002
+```
+
+#### 사용법 (Swagger UI)
+
+1. 브라우저에서 `http://localhost:8002/docs` 접속
+2. `POST /api/report/whatif` → Try it out
+3. 요청 예시:
+```json
+{
+  "route": "NSR",
+  "ice_class": "PC5",
+  "departure_date_start": "2026-09-01",
+  "forecast_days": 30
+}
+```
+4. Execute → `job_id` 반환
+5. `GET /api/report/whatif/status/{job_id}`로 결과 확인
+
+#### 사용법 (curl)
+
+```bash
+# What-If 분석 시작
+curl -X POST http://localhost:8002/api/report/whatif \
+  -H "Content-Type: application/json" \
+  -d '{"route":"NSR","ice_class":"PC5","departure_date_start":"2026-09-01","forecast_days":30}'
+
+# 결과 확인 (job_id 사용)
+curl http://localhost:8002/api/report/whatif/status/{job_id}
+```
+
+#### 응답 예시
+
+```json
+{
+  "status": "completed",
+  "progress": 100,
+  "result": {
+    "scenarios": [
+      {
+        "name": "해빙 +30% 시나리오",
+        "description": "해빙 농도가 30% 증가한 상황",
+        "route_summary": {
+          "avg_rio": -2.5,
+          "green_days": 12,
+          "yellow_days": 10,
+          "red_days": 8
+        },
+        "recommendation": "조건부"
+      }
+    ],
+    "ai_recommendation": "9월 중순 출항을 권장하며...",
+    "tool_calls_count": 8
+  }
+}
+```
+
+#### Claude Tool 도구 목록
+
+| 도구 | 설명 |
+|------|------|
+| `score_route` | 항로 RIO 평가 (출항일 기준 N일간 캘린더) |
+| `score_route_modified_ice` | 해빙 농도 조정 시나리오 (×배율) |
+| `compare_ice_classes` | 여러 Ice Class 동시 비교 |
+| `get_current_conditions` | 현재 해빙/빙산/기상 요약 조회 |
+
+---
+
+### 2. Sentinel-1 SAR 빙산 자동 탐지 (Computer Vision)
+
+YOLOv8 기반으로 Sentinel-1 SAR 위성영상에서 빙산을 자동 탐지합니다.
+
+#### 파이프라인 구조
+
+```
+Sentinel-1 GRD .zip
+    → sar_preprocessor.py (TIFF 추출 → σ0 보정 → 640×640 타일링)
+    → iceberg_detector.py (YOLOv8n 추론 → 바운딩박스)
+    → detection_postprocessor.py (좌표변환 → NMS → JSON 병합)
+    → realBergData_latest.json 업데이트
+```
+
+#### 사전 준비
+
+```bash
+# SAR 의존성 설치
+cd backend/pipeline
+pip install -r requirements.txt
+```
+
+#### 모델 학습 (합성 데이터)
+
+```bash
+cd backend/pipeline/trainers
+
+# 1. 합성 데이터셋 생성 (200 타일)
+python sar_dataset_builder.py
+
+# 2. YOLOv8n 학습
+python iceberg_model_trainer.py --epochs 50 --device cpu
+```
+
+학습 완료 시 모델 저장 위치: `backend/pipeline/models/iceberg_yolov8.pt`
+
+#### SAR 빙산 탐지 실행
+
+```bash
+# Sentinel-1 SAR 제품 다운로드 (최근 7일)
+python fetchers/sentinel1_iw_fetcher.py --backfill 7
+
+# 빙산 탐지 실행
+python run_pipeline.py --detect-icebergs --detect-max 5
+```
+
+#### 출력 포맷
+
+탐지된 빙산은 기존 `realBergData_latest.json`에 병합됩니다:
+```json
+{
+  "id": "SAR_20260406_154551_001",
+  "lon": 15.234,
+  "lat": 78.112,
+  "length_m": 145,
+  "width_m": 88,
+  "type": "medium",
+  "source": "sentinel1_sar",
+  "confidence": 0.87
+}
+```
+
+#### 모델 학습 결과 확인
+
+```bash
+python -c "from trainers.iceberg_model_trainer import IcebergModelTrainer; print(IcebergModelTrainer.get_model_info())"
+```
+
+---
+
+### 3. 두 기능의 연결
+
+SAR 탐지로 추가된 빙산 데이터가 What-If 시나리오의 입력으로 자동 반영됩니다:
+
+1. SAR 탐지가 `realBergData_latest.json`에 빙산 추가 (source: "sentinel1_sar")
+2. What-If의 `get_current_conditions` 도구가 SAR 탐지 메타데이터를 포함
+3. Claude가 "SAR에서 빙산 32개 추가 탐지 → 빙산 밀도 2배 시나리오" 자동 제안
+
+```
+[SAR CV] → realBergData_latest.json → [What-If Generator] → Claude가 시나리오 제안
+```

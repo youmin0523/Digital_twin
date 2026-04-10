@@ -49,6 +49,7 @@ from modules.rl.departure_iterative_trainer import DepartureIterativeTrainer
 from modules.rl.multi_model_trainer import MultiModelIterativeTrainer, ALL_COMBINATIONS, SHIP_TYPES
 from modules.rl.prediction_calibrator import PredictionCalibrator
 from modules.rl import existing_rl_client
+from modules.whatif_generator import WhatIfGenerator
 
 # ── 싱글톤 초기화 ────────────────────────────────────────────
 data_loader = DataLoader()
@@ -60,6 +61,7 @@ departure_trainer = DepartureTrainer()
 departure_iterative_trainer = DepartureIterativeTrainer(departure_trainer=departure_trainer)
 multi_model_trainer = MultiModelIterativeTrainer()
 calibrator = PredictionCalibrator()
+whatif_generator = WhatIfGenerator(route_scorer, data_loader)
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 
@@ -125,6 +127,20 @@ class MultiModelTrainRequest(BaseModel):
     target_success_rate: float = 0.80
     target_prohibitive_rate: float = 0.10
     eval_episodes: int = 50
+    forecast_days: int = 30
+
+
+class SarTrainRequest(BaseModel):
+    epochs: int = 30
+    batch_size: int = 4
+    synthetic_count: int = 200
+    device: str = "cpu"
+
+
+class WhatIfRequest(BaseModel):
+    route: str = "NSR"
+    ice_class: str = "PC5"
+    departure_date_start: str = ""
     forecast_days: int = 30
 
 
@@ -534,3 +550,143 @@ async def multi_model_stop():
         return JSONResponse(status_code=400, content={"error": "다중 모델 학습이 실행 중이 아닙니다."})
     multi_model_trainer.stop()
     return {"message": "다중 모델 학습 중단 요청됨"}
+
+
+# ══════════════════════════════════════════════════════════════
+# What-If 시나리오 분석 API
+# ══════════════════════════════════════════════════════════════
+
+async def _run_whatif(job_id: str, req: WhatIfRequest):
+    """비동기 What-If 시나리오 생성."""
+    try:
+        _update_job(job_id, 10)
+        result = whatif_generator.generate_scenarios(
+            route=req.route,
+            ice_class=req.ice_class,
+            departure_date=req.departure_date_start or date.today().isoformat(),
+            forecast_days=req.forecast_days,
+        )
+        _update_job(job_id, 90)
+
+        # 결과 저장
+        from dataclasses import asdict
+        result_dict = {
+            "scenarios": [asdict(s) for s in result.scenarios],
+            "comparison_text": result.comparison_text,
+            "ai_recommendation": result.ai_recommendation,
+            "tool_calls_count": result.tool_calls_count,
+        }
+        jobs[job_id]["result"] = result_dict
+        _update_job(job_id, 100, status="completed")
+        logger.info("What-If 완료: %d 시나리오", len(result.scenarios))
+    except Exception as e:
+        logger.error("What-If 실패: %s", e, exc_info=True)
+        _fail_job(job_id, str(e))
+
+
+@app.post("/api/report/whatif")
+async def start_whatif(req: WhatIfRequest, bg: BackgroundTasks):
+    """What-If 시나리오 분석을 시작합니다."""
+    job_id = _create_job()
+    bg.add_task(_run_whatif, job_id, req)
+    return {"job_id": job_id, "message": "What-If 시나리오 분석 시작"}
+
+
+@app.get("/api/report/whatif/status/{job_id}")
+async def whatif_status(job_id: str):
+    """What-If 분석 진행 상태 조회."""
+    job = jobs.get(job_id)
+    if not job:
+        return JSONResponse(status_code=404, content={"error": "Job not found"})
+    return {
+        "status": job["status"],
+        "progress": job["progress"],
+        "error": job.get("error"),
+        "result": job.get("result"),
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# SAR 빙산 탐지 모델 학습 API
+# ══════════════════════════════════════════════════════════════
+
+_sar_training_state = {"is_training": False, "progress": 0, "stage": "", "result": None, "error": None}
+
+
+async def _run_sar_training(req: SarTrainRequest):
+    """비동기 SAR YOLOv8 학습 파이프라인."""
+    import sys
+    _pipeline_trainers = str(Path(__file__).parent.parent / "backend" / "pipeline" / "trainers")
+    if _pipeline_trainers not in sys.path:
+        sys.path.insert(0, _pipeline_trainers)
+
+    _sar_training_state.update(is_training=True, progress=0, stage="데이터셋 생성", result=None, error=None)
+
+    try:
+        # 1. 합성 데이터셋 생성 (0→30%)
+        _sar_training_state["stage"] = "합성 데이터셋 생성 중..."
+        _sar_training_state["progress"] = 5
+
+        from sar_dataset_builder import build_dataset
+        yaml_path = build_dataset(synthetic_count=req.synthetic_count)
+        _sar_training_state["progress"] = 30
+
+        # 2. YOLOv8 학습 (30→90%)
+        _sar_training_state["stage"] = f"YOLOv8 학습 중 ({req.epochs} 에폭)..."
+        from iceberg_model_trainer import IcebergModelTrainer
+
+        trainer = IcebergModelTrainer(
+            dataset_yaml=yaml_path,
+            epochs=req.epochs,
+            batch_size=req.batch_size,
+            device=req.device,
+        )
+        result = trainer.train()
+        _sar_training_state["progress"] = 90
+
+        # 3. 완료
+        _sar_training_state["stage"] = "완료"
+        _sar_training_state["progress"] = 100
+        _sar_training_state["result"] = result
+        logger.info("SAR 모델 학습 완료: %s", result.get("weights_path", "N/A"))
+
+    except Exception as e:
+        logger.error("SAR 학습 실패: %s", e, exc_info=True)
+        _sar_training_state["error"] = str(e)
+        _sar_training_state["stage"] = "실패"
+    finally:
+        _sar_training_state["is_training"] = False
+
+
+@app.post("/api/report/sar/train")
+async def start_sar_training(req: SarTrainRequest, bg: BackgroundTasks):
+    """SAR 빙산 탐지 YOLOv8 모델 학습을 시작합니다."""
+    if _sar_training_state["is_training"]:
+        return JSONResponse(status_code=409, content={"error": "이미 SAR 학습이 진행 중입니다."})
+    bg.add_task(_run_sar_training, req)
+    return {
+        "message": "SAR 빙산 탐지 모델 학습 시작",
+        "epochs": req.epochs,
+        "synthetic_count": req.synthetic_count,
+        "device": req.device,
+    }
+
+
+@app.get("/api/report/sar/train-status")
+async def sar_train_status():
+    """SAR 학습 진행 상태 조회."""
+    return _sar_training_state
+
+
+@app.get("/api/report/sar/model-info")
+async def sar_model_info():
+    """SAR 모델 메타데이터 조회."""
+    import sys
+    _pipeline_trainers = str(Path(__file__).parent.parent / "backend" / "pipeline" / "trainers")
+    if _pipeline_trainers not in sys.path:
+        sys.path.insert(0, _pipeline_trainers)
+    try:
+        from iceberg_model_trainer import IcebergModelTrainer
+        return IcebergModelTrainer.get_model_info()
+    except Exception as e:
+        return {"error": str(e)}
