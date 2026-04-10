@@ -152,17 +152,32 @@ class IcebergAvoidanceAgent:
         self.callback = TrainingMetricsCallback(log_interval=5000)
         logger.info(f"[RL] 학습 시작: {total_timesteps} 스텝")
 
-        from stable_baselines3.common.callbacks import CallbackList
-        callbacks = CallbackList([self.callback, extra_callback]) if extra_callback else self.callback
+        from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
 
-        self.model.learn(
-            total_timesteps=total_timesteps,
-            callback=callbacks,
-            progress_bar=False,
+        # 10,000 스텝마다 체크포인트 저장 — 서버 강제 종료 시에도 복구 가능
+        checkpoint_cb = CheckpointCallback(
+            save_freq=10_000,
+            save_path=str(MODEL_DIR / "checkpoints"),
+            name_prefix="sac_ckpt",
+            verbose=0,
         )
 
-        self._model_version += 1
-        self.save()
+        cb_list = [self.callback, checkpoint_cb]
+        if extra_callback:
+            cb_list.append(extra_callback)
+        callbacks = CallbackList(cb_list)
+
+        try:
+            self.model.learn(
+                total_timesteps=total_timesteps,
+                callback=callbacks,
+                progress_bar=False,
+            )
+        finally:
+            # 정상 완료, 사용자 중단, 예외, 서버 종료 모든 케이스에서 저장
+            self._model_version += 1
+            self.save()
+            logger.info(f"[RL] 모델 자동 저장 완료 (v{self._model_version})")
 
         metrics = self.callback.get_latest_metrics()
         logger.info(f"[RL] 학습 완료: {metrics}")

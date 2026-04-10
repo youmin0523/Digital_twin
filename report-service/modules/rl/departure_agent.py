@@ -54,9 +54,22 @@ class DepartureAgent:
             self.create_model(env)
         else:
             self.model.set_env(env)
-        self.model.learn(total_timesteps=timesteps, callback=callback)
-        self.save()
-        self.is_trained = True
+
+        try:
+            from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
+            checkpoint_cb = CheckpointCallback(
+                save_freq=5_000,
+                save_path=str(MODEL_DIR / "checkpoints"),
+                name_prefix="departure_ckpt",
+                verbose=0,
+            )
+            cb = CallbackList([checkpoint_cb, callback]) if callback else checkpoint_cb
+            self.model.learn(total_timesteps=timesteps, callback=cb)
+        finally:
+            # 정상 완료, 중단, 서버 종료 모든 케이스에서 저장
+            self.save()
+            self.is_trained = True
+            logger.info("출항 RL 모델 자동 저장 완료")
 
     def save(self):
         """모델 저장."""
