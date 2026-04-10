@@ -274,6 +274,19 @@ class IterativeTrainer:
                 self.current_weights = current_weights
 
         finally:
+            # 반복 학습 중단/완료/예외 모든 케이스에서 히스토리 및 모델 저장
+            if self.base_trainer.agent.model is not None:
+                try:
+                    self.base_trainer.agent.save()
+                    logger.info("[IterativeTrainer] 중단 시점 모델 자동 저장 완료")
+                except Exception as e:
+                    logger.error("[IterativeTrainer] 중단 시점 모델 저장 실패: %s", e)
+            if self.history:
+                try:
+                    self._save_history()
+                    logger.info("[IterativeTrainer] 중단 시점 히스토리 자동 저장 완료")
+                except Exception as e:
+                    logger.error("[IterativeTrainer] 히스토리 저장 실패: %s", e)
             self.is_running = False
             self.current_iteration = 0
 

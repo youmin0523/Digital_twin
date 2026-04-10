@@ -348,6 +348,19 @@ class DepartureIterativeTrainer:
                 self.current_weights = current_weights
 
         finally:
+            # 반복 학습 중단/완료/예외 모든 케이스에서 모델 및 히스토리 저장
+            if self._agent is not None and self._agent.model is not None:
+                try:
+                    self._agent.save()
+                    logger.info("[DepartureIterative] 중단 시점 모델 자동 저장 완료")
+                except Exception as e:
+                    logger.error("[DepartureIterative] 모델 저장 실패: %s", e)
+            if self.history:
+                try:
+                    self._save_history()
+                    logger.info("[DepartureIterative] 중단 시점 히스토리 자동 저장 완료")
+                except Exception as e:
+                    logger.error("[DepartureIterative] 히스토리 저장 실패: %s", e)
             self.is_running = False
             self.current_iteration = 0
 
