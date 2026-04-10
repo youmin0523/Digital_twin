@@ -86,3 +86,4 @@ tmp/
 # OS generated files
 .DS_Store
 Thumbs.db
+backend/logs/sentinel1_iw_fetcher.log
