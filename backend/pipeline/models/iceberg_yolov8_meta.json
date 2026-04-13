@@ -1,13 +1,13 @@
 {
   "model": "yolov8n",
-  "epochs": 10,
-  "batch_size": 8,
+  "epochs": 30,
+  "batch_size": 4,
   "img_size": 640,
   "device": "cpu",
-  "dataset": "C:\\Hijin\\pjbingha\\Digital_twin\\backend\\data\\datasets\\sar_icebergs\\data.yaml",
-  "training_time_seconds": 8097.8,
-  "trained_at": "2026-04-10T17:15:38.096646",
-  "weights_path": "C:\\Hijin\\pjbingha\\Digital_twin\\backend\\pipeline\\models\\iceberg_yolov8.pt",
+  "dataset": "C:\\cccc\\Digital_twin\\backend\\data\\datasets\\sar_icebergs\\data.yaml",
+  "training_time_seconds": 143025.4,
+  "trained_at": "2026-04-12T09:56:10.916674",
+  "weights_path": "C:\\cccc\\Digital_twin\\backend\\pipeline\\models\\iceberg_yolov8.pt",
   "classes": [
     "iceberg"
   ],

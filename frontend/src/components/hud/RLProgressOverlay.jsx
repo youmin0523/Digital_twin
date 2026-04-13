@@ -150,7 +150,7 @@ export default function RLProgressOverlay() {
       boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
       padding: '12px 16px',
       fontFamily: "'Segoe UI', system-ui, sans-serif",
-      maxHeight: '85vh',
+      maxHeight: 'calc(100vh - 20px)',
       overflowY: 'auto',
     }}>
 

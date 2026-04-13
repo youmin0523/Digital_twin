@@ -2073,7 +2073,7 @@ function AppInner() {
           />
 
           {/* RL 커리큘럼 학습 진행 오버레이 */}
-          <div style={{ position: 'absolute', left: 10, top: 10, zIndex: 300, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ position: 'absolute', left: 10, top: 10, zIndex: 300, display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 8, maxHeight: 'calc(100vh - 20px)' }}>
             <RLProgressOverlay />
             <TrendReportProgressOverlay />
           </div>
