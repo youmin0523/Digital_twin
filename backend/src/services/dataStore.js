@@ -44,7 +44,17 @@ async function getIceData(type, month) {
     fileName = `realIceData_month${mm}.json`;
   }
 
-  const data = await readJsonFile(path.join(DATA_DIR, fileName));
+  let data = await readJsonFile(path.join(DATA_DIR, fileName));
+
+  // latest 파일이 없으면 월별 파일 중 가장 최근(12→1 순) 것으로 폴백
+  if (!data && month === 'latest') {
+    for (let m = 12; m >= 1; m--) {
+      const mm = String(m).padStart(2, '0');
+      data = await readJsonFile(path.join(DATA_DIR, `realIceData_month${mm}.json`));
+      if (data) { console.log(`[DataStore] realIceData_latest.json 없음 → month${mm} 폴백`); break; }
+    }
+  }
+
   if (data) setCache(cacheKey, data);
   return data;
 }

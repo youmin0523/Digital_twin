@@ -175,8 +175,14 @@ def compare_routes(req: RouteCompareRequest):
     suez_total_fuel = suez_fuel_per_nm * req.suez_distance_nm
 
     # ── 3) 운항 시간 계산 ────────────────────────────────────
-    # NSR: 빙하로 인한 속도 저하 반영 (농도 기반)
-    ice_speed_factor = max(0.3, 1.0 - 0.4 * req.nsr_ice_concentration)
+    # NSR: 빙하로 인한 속도 저하 반영 (농도 + 빙하 두께 + 빙급 보정)
+    # 빙급 코드 → 내빙 성능 계수 (0=없음 → 낮음, 2=PC2 → 높음)
+    ice_class_perf = {0: 0.0, 2: 0.9, 4: 0.7}.get(req.ice_class_code, 0.5)
+    # 농도 영향: 고내빙 선박일수록 덜 감속
+    conc_penalty = req.nsr_ice_concentration * (0.5 - 0.3 * ice_class_perf)
+    # 빙하 두께 영향 (두께 1m 기준, 최대 0.3 감속)
+    thick_penalty = min(0.3, req.nsr_ice_thickness / 3.0 * (0.3 - 0.15 * ice_class_perf))
+    ice_speed_factor = max(0.3, 1.0 - conc_penalty - thick_penalty)
     nsr_effective_speed = req.speed_knots * ice_speed_factor
     nsr_transit_days = req.nsr_distance_nm / (nsr_effective_speed * 24)
 

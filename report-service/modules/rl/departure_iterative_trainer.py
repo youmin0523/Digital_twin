@@ -90,20 +90,21 @@ class DepartureRewardAdjuster:
 
         for sig in signals:
             if sig == "high_prohibitive":
-                d["prohibitive_penalty"] *= 1.4
+                d["prohibitive_penalty"] *= 1.8   # 1.4 → 1.8: 더 강력한 억제
+                d["success_bonus"]       *= 1.2   # 동시에 성공 보너스도 강화
             elif sig == "low_success":
-                d["success_bonus"] *= 1.3
+                d["success_bonus"]       *= 1.6   # 1.3 → 1.6
             elif sig == "moderate_success":
-                d["success_bonus"] *= 1.15
+                d["success_bonus"]       *= 1.3   # 1.15 → 1.3
             elif sig == "slow_transit":
-                d["efficiency_penalty"] *= 1.25
+                d["efficiency_penalty"]  *= 1.4   # 1.25 → 1.4
             elif sig == "converging":
-                d["efficiency_penalty"] *= 0.95
+                d["efficiency_penalty"]  *= 0.9
 
         return _apply_bounds(DepartureRewardWeights(**d))
 
     def check_plateau(self, history: list[dict], field: str = "prohibitive_rate",
-                      threshold: float = 0.03, window: int = 2) -> bool:
+                      threshold: float = 0.02, window: int = 3) -> bool:
         """최근 window 회 연속으로 field 개선이 threshold 미만이면 True."""
         if len(history) < window + 1:
             return False
@@ -202,6 +203,7 @@ class DepartureIterativeTrainer:
         )
         self.history: list[DepartureIterationRecord] = []
         self.is_running = False
+        self._load_history()  # 기존 히스토리 복원
         self.stop_requested = False
         self.current_iteration = 0
         self.current_weights: Optional[DepartureRewardWeights] = None
@@ -213,6 +215,19 @@ class DepartureIterativeTrainer:
                    target_prohibitive: float) -> bool:
         return (metrics.get("success_rate", 0.0) >= target_success and
                 metrics.get("prohibitive_rate", 1.0) <= target_prohibitive)
+
+    def _load_history(self):
+        """디스크에서 기존 히스토리를 불러와 self.history에 복원."""
+        if not self.history_path.exists():
+            return
+        try:
+            data = json.loads(self.history_path.read_text(encoding="utf-8"))
+            self.history = [DepartureIterationRecord(**r) for r in data]
+            if self.history:
+                logger.info("[DepartureIterative] 기존 히스토리 복원: %d회 완료", len(self.history))
+        except Exception as e:
+            logger.warning("[DepartureIterative] 히스토리 로드 실패 (초기화): %s", e)
+            self.history = []
 
     def _save_history(self):
         self.history_path.parent.mkdir(parents=True, exist_ok=True)
@@ -258,9 +273,24 @@ class DepartureIterativeTrainer:
 
         self.is_running = True
         self.stop_requested = False
-        self.history = []
         self.departure_trainer.stop_requested = False
-        current_weights = initial_weights or DepartureRewardWeights()
+        # 기존 히스토리가 없으면 초기화, 있으면 이어서 진행
+        if not self.history:
+            self._load_history()
+        completed = len(self.history)
+
+        if completed >= max_iterations:
+            logger.info("[DepartureIterative] 이미 %d/%d회 완료 — 스킵", completed, max_iterations)
+            self.is_running = False
+            return {"iterations_completed": completed, "skipped": True}
+
+        # 마지막 완료된 가중치에서 이어서 시작
+        if self.history and initial_weights is None:
+            last = self.history[-1]
+            current_weights = DepartureRewardWeights(**last.weights)
+            logger.info("[DepartureIterative] %d회부터 이어서 재개 (이전 %d회 완료)", completed + 1, completed)
+        else:
+            current_weights = initial_weights or DepartureRewardWeights()
         self.current_weights = current_weights
 
         # 에이전트를 반복 간 유지 (ice_class/ship_type 전용 경로 사용)
@@ -275,7 +305,7 @@ class DepartureIterativeTrainer:
                     max_iterations, target_success_rate, target_prohibitive_rate)
 
         try:
-            for i in range(1, max_iterations + 1):
+            for i in range(completed + 1, max_iterations + 1):
                 if self.stop_requested:
                     logger.info("[DepartureIterative] 중단 요청으로 종료")
                     break

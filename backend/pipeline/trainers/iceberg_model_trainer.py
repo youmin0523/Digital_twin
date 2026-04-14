@@ -43,6 +43,7 @@ class IcebergModelTrainer:
         batch_size: int = 8,
         img_size: int = 640,
         device: str = "cpu",
+        resume: bool | None = None,  # None = 자동 감지
     ):
         self.dataset_yaml = dataset_yaml
         self.model_name = model_name
@@ -52,6 +53,27 @@ class IcebergModelTrainer:
         self.device = device
         self.model = None
         self.results = None
+        self._last_pt = MODELS_DIR / "runs" / "iceberg_detect" / "weights" / "last.pt"
+        self._completed_epochs = self._count_completed_epochs()
+        # resume=None이면 last.pt 존재 + 미완료 시 자동 재개
+        if resume is None:
+            self.resume = self._last_pt.exists() and self._completed_epochs < self.epochs
+        else:
+            self.resume = resume
+        if self.resume:
+            log.info("YOLOv8 이어서 학습: %d/%d epoch 완료 → last.pt 에서 재개",
+                     self._completed_epochs, self.epochs)
+
+    def _count_completed_epochs(self) -> int:
+        """results.csv 에서 완료된 epoch 수 반환."""
+        csv = MODELS_DIR / "runs" / "iceberg_detect" / "results.csv"
+        if not csv.exists():
+            return 0
+        try:
+            lines = [l for l in csv.read_text(encoding="utf-8").strip().split("\n") if l.strip()]
+            return max(0, len(lines) - 1)
+        except Exception:
+            return 0
 
     def setup(self):
         """YOLOv8 모델 초기화."""
@@ -85,35 +107,40 @@ class IcebergModelTrainer:
         Returns:
             학습 결과 메타데이터 딕셔너리
         """
-        if not self.model:
-            self.setup()
-
         log.info("=" * 60)
-        log.info("  SAR 빙산 탐지 모델 학습 시작")
+        log.info("  SAR 빙산 탐지 모델 학습 시작 (resume=%s, 완료=%d/%d epoch)",
+                 self.resume, self._completed_epochs, self.epochs)
         log.info("=" * 60)
 
         start_time = datetime.now()
 
-        self.results = self.model.train(
-            data=str(self.dataset_yaml),
-            epochs=self.epochs,
-            batch=self.batch_size,
-            imgsz=self.img_size,
-            device=self.device,
-            project=str(MODELS_DIR / "runs"),
-            name="iceberg_detect",
-            exist_ok=True,
-            # SAR 특화 증강 설정
-            hsv_h=0.0,   # SAR은 색상 없음
-            hsv_s=0.0,
-            hsv_v=0.3,   # 밝기만 변화
-            flipud=0.5,  # 상하 뒤집기
-            fliplr=0.5,  # 좌우 뒤집기
-            degrees=180,  # 360도 회전 (SAR은 방향 무관)
-            scale=0.3,   # 스케일 변화
-            mosaic=0.5,  # 모자이크 증강
-            verbose=True,
-        )
+        if self.resume and self._last_pt.exists():
+            # last.pt 에서 이어서 학습 (YOLO resume 모드)
+            from ultralytics import YOLO
+            self.model = YOLO(str(self._last_pt))
+            self.results = self.model.train(resume=True)
+        else:
+            if not self.model:
+                self.setup()
+            self.results = self.model.train(
+                data=str(self.dataset_yaml),
+                epochs=self.epochs,
+                batch=self.batch_size,
+                imgsz=self.img_size,
+                device=self.device,
+                project=str(MODELS_DIR / "runs"),
+                name="iceberg_detect",
+                exist_ok=True,
+                hsv_h=0.0,
+                hsv_s=0.0,
+                hsv_v=0.3,
+                flipud=0.5,
+                fliplr=0.5,
+                degrees=180,
+                scale=0.3,
+                mosaic=0.5,
+                verbose=True,
+            )
 
         elapsed = (datetime.now() - start_time).total_seconds()
 

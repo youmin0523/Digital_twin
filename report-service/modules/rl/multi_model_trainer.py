@@ -113,9 +113,12 @@ class MultiModelIterativeTrainer:
                     ice_class=ic, ship_type=st, label=_model_label(ic, st)
                 )
 
-        n = len(ALL_COMBINATIONS)
+        import os
+        # rl-pipeline과 코어 공유: 최소 2, 최대 2 (28개 조합, 부하 분산)
+        cpu_workers = max(2, min(2, (os.cpu_count() or 8) // 10))
+        n = min(cpu_workers, len(ALL_COMBINATIONS))
         self._executor = ThreadPoolExecutor(max_workers=n, thread_name_prefix="rl_train")
-        logger.info("[MultiModel] 학습 시작: %d개 조합", n)
+        logger.info("[MultiModel] 학습 시작: %d개 조합, 동시 실행: %d개", len(ALL_COMBINATIONS), n)
 
         for ic, st in ALL_COMBINATIONS:
             key = _combo_key(ic, st)
@@ -149,8 +152,33 @@ class MultiModelIterativeTrainer:
         from modules.rl.departure_iterative_trainer import DepartureIterativeTrainer
         from modules.rl.departure_env import DepartureRewardWeights
 
+        import json as _json
+        from pathlib import Path as _Path
         key = _combo_key(ice_class, ship_type)
         transit_days = SHIP_TYPES[ship_type]["transit_days"]
+
+        # 수렴 완료된 조합만 스킵 (미수렴이면 재학습)
+        _data_dir = _Path(__file__).resolve().parents[2] / "data"
+        _hist_key = key.replace(" ", "_").replace("/", "_")
+        history_path = _data_dir / f"departure_iterative_history_{_hist_key}.json"
+        if history_path.exists():
+            try:
+                existing = _json.loads(history_path.read_text(encoding="utf-8"))
+                already_converged = existing and existing[-1].get("converged", False)
+                if already_converged:
+                    logger.info("[MultiModel] 스킵 (수렴 완료): %s (%d회)", key, len(existing))
+                    with self._lock:
+                        st = self._statuses.get(key)
+                        if st:
+                            st.current_iteration = len(existing)
+                            st.converged = True
+                            st.is_running = False
+                    return
+                # 미수렴이면 히스토리 초기화 후 재학습
+                logger.info("[MultiModel] 미수렴 재학습 (이전 %d회): %s", len(existing), key)
+                history_path.unlink(missing_ok=True)
+            except Exception:
+                pass
 
         with self._lock:
             self._statuses[key].is_running = True

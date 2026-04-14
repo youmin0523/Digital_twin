@@ -10,11 +10,14 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, Future
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from .rl_ship_dynamics import ShipParams
 
 logger = logging.getLogger(__name__)
+
+MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
 
 # ── 지원 항로 ────────────────────────────────────────────────
 ROUTES: list[str] = ["NSR", "NWP", "TSR"]
@@ -127,9 +130,13 @@ class RLMultiModelTrainer:
                     label=f"{r} / {ic} / {SHIP_TYPES[st]['label']}",
                 )
 
-        n = len(ALL_COMBINATIONS)
+        import os
+        # 22코어 기준: 동시 3개 실행 (각 조합이 멀티스레드 학습이므로 과부하 방지)
+        # 3개 × ~8분(150K steps) = 84개 조합 완료까지 약 3~4시간
+        cpu_workers = max(2, min(3, (os.cpu_count() or 8) // 8))
+        n = min(cpu_workers, len(ALL_COMBINATIONS))
         self._executor = ThreadPoolExecutor(max_workers=n, thread_name_prefix="rl_multi")
-        logger.info("[RLMultiModel] 학습 시작: %d개 조합", n)
+        logger.info("[RLMultiModel] 학습 시작: %d개 조합, 동시 실행: %d개", len(ALL_COMBINATIONS), n)
 
         for r, ic, st in ALL_COMBINATIONS:
             key = _combo_key(r, ic, st)
@@ -156,8 +163,30 @@ class RLMultiModelTrainer:
         from .rl_trainer import RLTrainer
         from .rl_iterative_trainer import IterativeTrainer
 
+        import json as _json
         key = _combo_key(route, ice_class, ship_type)
         ship_params = _make_ship_params(ship_type)
+
+        # 이미 수렴 완료된 조합만 스킵 (미수렴이면 재학습)
+        history_path = MODEL_DIR / f"iterative_history_{key}.json"
+        if history_path.exists():
+            try:
+                existing = _json.loads(history_path.read_text(encoding="utf-8"))
+                already_converged = existing and existing[-1].get("converged", False)
+                if already_converged:
+                    logger.info("[RLMultiModel] 스킵 (수렴 완료): %s (%d회)", key, len(existing))
+                    with self._lock:
+                        st = self._statuses.get(key)
+                        if st:
+                            st.current_iteration = len(existing)
+                            st.converged = True
+                            st.is_running = False
+                    return
+                # 미수렴이면 히스토리 초기화 후 새로 학습 (보상 가중치 개선됨)
+                logger.info("[RLMultiModel] 미수렴 재학습 시작 (이전 %d회): %s", len(existing), key)
+                history_path.unlink(missing_ok=True)
+            except Exception:
+                pass
 
         with self._lock:
             self._statuses[key].is_running = True

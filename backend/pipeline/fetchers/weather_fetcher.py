@@ -314,7 +314,7 @@ def _check_budget(needed: int) -> bool:
     if needed > remaining:
         print(f"  [LIMIT] 일일 API 호출 한도 도달: "
               f"사용 {usage['calls']}/{DAILY_CALL_LIMIT}, 필요 {needed}, 잔여 {remaining}")
-        print(f"  [LIMIT] 이번 주기 건너뜀 — 기존 캐시 데이터 유지")
+        print(f"  [LIMIT] 이번 주기 건너뜀 - 기존 캐시 데이터 유지")
         return False
     return True
 

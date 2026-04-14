@@ -79,11 +79,13 @@ class PredictionCalibrator:
         errors = np.array(predicted_rios) - np.array(actual_rios)
         mean_sq_error = float(np.mean(errors ** 2))
 
-        # 간단한 그래디언트: 오차 방향에 따라 임계값 조정
-        # 예측 RIO가 실제보다 높으면(낙관적) → 임계값을 낮춤 (더 보수적으로)
-        # 예측 RIO가 실제보다 낮으면(비관적) → 임계값을 높임
+        # 비례 그래디언트: 오차 크기에 비례해 임계값 조정
+        # errors = predicted - actual
+        # avg_error > 0 → 예측이 실제보다 높음(낙관적) → 임계값을 낮춰 보수적으로
+        # avg_error < 0 → 예측이 실제보다 낮음(비관적) → 임계값을 높임
         avg_error = float(np.mean(errors))
-        adjustment = -lr * np.sign(avg_error) * min(abs(avg_error), 0.05)
+        # np.sign + 상수 조정 대신 오차 크기 비례 조정 (최대 ±0.05 클리핑)
+        adjustment = float(np.clip(-lr * avg_error, -0.05, 0.05))
 
         # 임계값 미세 조정 (범위 제한)
         for key in thresholds:

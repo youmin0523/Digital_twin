@@ -202,6 +202,41 @@ function createShipIcon(type = 'icebreaker') {
 
 // ═══════════════════════════════════════════════════════════════
 
+// ── RL 학습 선박 색상 (route × ship_type) ────────────────────
+const RL_ROUTE_COLOR = { NSR: '#00f2fe', NWP: '#fb923c', TSR: '#a855f7' };
+const RL_SHIP_COLOR  = { bulk: '#60a5fa', tanker: '#fbbf24', container: '#34d399', lng: '#c084fc' };
+
+// 작은 원형 점 아이콘 (RL 학습 선박용)
+const rlIconCache = {};
+function createRLShipIcon(routeKey, shipType) {
+  const cacheKey = `${routeKey}_${shipType}`;
+  if (rlIconCache[cacheKey]) return rlIconCache[cacheKey];
+  const size = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const cx = size / 2, cy = size / 2, r = size / 2 - 2;
+  // 외곽 원 (route 색)
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = RL_ROUTE_COLOR[routeKey] || '#94a3b8';
+  ctx.fill();
+  // 내부 원 (ship 색)
+  ctx.beginPath(); ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2);
+  ctx.fillStyle = RL_SHIP_COLOR[shipType] || '#fff';
+  ctx.fill();
+  // 선수 방향 삼각형
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r * 0.85);
+  ctx.lineTo(cx + r * 0.35, cy + r * 0.4);
+  ctx.lineTo(cx - r * 0.35, cy + r * 0.4);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fill();
+  const url = canvas.toDataURL('image/png');
+  rlIconCache[cacheKey] = url;
+  return url;
+}
+
 const CesiumGlobe = forwardRef(function CesiumGlobe(
   {
     currentRouteKey = 'NSR',
@@ -209,6 +244,7 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
     activeWaypoints,
     routeVisibility,
     generatedRoutes,
+    rlShips = [],   // [{ id, route, shipType, lat, lon, heading, label, iteration }]
   },
   ref,
 ) {
@@ -218,6 +254,7 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
   const waypointEntitiesRef = useRef([]);
   const shipEntityRef = useRef(null);
   const lastShipType = useRef(null);
+  const rlShipEntitiesRef = useRef({});  // id → entity
 
   const drawRoute = useCallback(
     (
@@ -407,13 +444,72 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
     }
   }, []);
 
+  // RL 학습 선박 엔티티 일괄 업데이트
+  const updateRLShipEntities = useCallback((ships) => {
+    const viewer = viewerRef.current;
+    if (!viewer || viewer.isDestroyed()) return;
+    const entities = rlShipEntitiesRef.current;
+
+    // 사라진 id 제거
+    const newIds = new Set(ships.map(s => s.id));
+    Object.keys(entities).forEach(id => {
+      if (!newIds.has(id)) {
+        try { viewer.entities.remove(entities[id]); } catch {}
+        delete entities[id];
+      }
+    });
+
+    // 추가/업데이트
+    ships.forEach(ship => {
+      const pos = Cesium.Cartesian3.fromDegrees(ship.lon, ship.lat, 500);
+      const rot = -Cesium.Math.toRadians(ship.heading || 0);
+      const iconUrl = createRLShipIcon(ship.route, ship.shipType);
+
+      if (entities[ship.id]) {
+        entities[ship.id].position = pos;
+        entities[ship.id].billboard.rotation = rot;
+        if (entities[ship.id].label)
+          entities[ship.id].label.text = new Cesium.ConstantProperty(ship.label || '');
+      } else {
+        entities[ship.id] = viewer.entities.add({
+          id: `rl-ship-${ship.id}`,
+          position: pos,
+          billboard: {
+            image: iconUrl,
+            width: 22,
+            height: 22,
+            alignedAxis: Cesium.Cartesian3.UNIT_Z,
+            rotation: rot,
+            verticalOrigin: Cesium.VerticalOrigin.CENTER,
+            horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            scaleByDistance: new Cesium.NearFarScalar(100000, 1.8, 8000000, 0.5),
+          },
+          label: {
+            text: ship.label || '',
+            font: 'bold 10px sans-serif',
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 2,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            verticalOrigin: Cesium.VerticalOrigin.TOP,
+            pixelOffset: new Cesium.Cartesian2(0, 14),
+            scaleByDistance: new Cesium.NearFarScalar(100000, 1.0, 5000000, 0.0),
+            distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3000000),
+          },
+        });
+      }
+    });
+  }, []);
+
   useImperativeHandle(
     ref,
     () => ({
       viewer: viewerRef.current,
       updateShipEntity,
+      updateRLShipEntities,
     }),
-    [updateShipEntity],
+    [updateShipEntity, updateRLShipEntities],
   );
 
   useEffect(() => {
@@ -704,6 +800,13 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
     generatedRoutes,
     drawRoute,
   ]);
+
+  // RL 선박 prop 변경 시 Cesium 엔티티 동기화
+  useEffect(() => {
+    if (viewerRef.current && !viewerRef.current.isDestroyed()) {
+      updateRLShipEntities(rlShips);
+    }
+  }, [rlShips, updateRLShipEntities]);
 
   return <div id="cesium-wrap" ref={containerRef} />;
 });

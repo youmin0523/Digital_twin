@@ -417,6 +417,10 @@ async def rl_calibrate():
         return JSONResponse(status_code=400, content={"error": "현재 월 해빙 데이터 없음"})
 
     from modules.route_scorer import ARCTIC_SEGMENTS, concentration_to_ice_conditions
+    import sys as _sys
+    _router_path = str(Path(__file__).parent.parent / "backend" / "pipeline")
+    if _router_path not in _sys.path:
+        _sys.path.insert(0, _router_path)
     from arctic_master_router import calculate_rio
 
     predicted_rios = []
@@ -556,8 +560,8 @@ async def multi_model_stop():
 # What-If 시나리오 분석 API
 # ══════════════════════════════════════════════════════════════
 
-async def _run_whatif(job_id: str, req: WhatIfRequest):
-    """비동기 What-If 시나리오 생성."""
+def _run_whatif(job_id: str, req: WhatIfRequest):
+    """비동기 What-If 시나리오 생성 (동기 — BackgroundTasks에서 실행)."""
     try:
         _update_job(job_id, 10)
         result = whatif_generator.generate_scenarios(
@@ -607,86 +611,53 @@ async def whatif_status(job_id: str):
 
 
 # ══════════════════════════════════════════════════════════════
-# SAR 빙산 탐지 모델 학습 API
+# SAR 빙산 탐지 모델 학습 API — 8003 전용 서버로 프록시
 # ══════════════════════════════════════════════════════════════
+# SAR 학습은 sar_server.py (포트 8003) 에서 독립 프로세스로 실행됩니다.
+# 이 서버(8002)는 RL 학습 전용으로 유지되어 이벤트루프 블로킹이 발생하지 않습니다.
 
-_sar_training_state = {"is_training": False, "progress": 0, "stage": "", "result": None, "error": None}
+SAR_SERVER_URL = "http://127.0.0.1:8003"
 
 
-async def _run_sar_training(req: SarTrainRequest):
-    """비동기 SAR YOLOv8 학습 파이프라인."""
-    import sys
-    _pipeline_trainers = str(Path(__file__).parent.parent / "backend" / "pipeline" / "trainers")
-    if _pipeline_trainers not in sys.path:
-        sys.path.insert(0, _pipeline_trainers)
-
-    _sar_training_state.update(is_training=True, progress=0, stage="데이터셋 생성", result=None, error=None)
-
-    try:
-        # 1. 합성 데이터셋 생성 (0→30%)
-        _sar_training_state["stage"] = "합성 데이터셋 생성 중..."
-        _sar_training_state["progress"] = 5
-
-        from sar_dataset_builder import build_dataset
-        yaml_path = build_dataset(synthetic_count=req.synthetic_count)
-        _sar_training_state["progress"] = 30
-
-        # 2. YOLOv8 학습 (30→90%)
-        _sar_training_state["stage"] = f"YOLOv8 학습 중 ({req.epochs} 에폭)..."
-        from iceberg_model_trainer import IcebergModelTrainer
-
-        trainer = IcebergModelTrainer(
-            dataset_yaml=yaml_path,
-            epochs=req.epochs,
-            batch_size=req.batch_size,
-            device=req.device,
-        )
-        result = trainer.train()
-        _sar_training_state["progress"] = 90
-
-        # 3. 완료
-        _sar_training_state["stage"] = "완료"
-        _sar_training_state["progress"] = 100
-        _sar_training_state["result"] = result
-        logger.info("SAR 모델 학습 완료: %s", result.get("weights_path", "N/A"))
-
-    except Exception as e:
-        logger.error("SAR 학습 실패: %s", e, exc_info=True)
-        _sar_training_state["error"] = str(e)
-        _sar_training_state["stage"] = "실패"
-    finally:
-        _sar_training_state["is_training"] = False
+async def _sar_proxy(method: str, path: str, body: bytes | None = None) -> dict:
+    """8003 SAR 서버로 요청을 프록시."""
+    import httpx
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        if method == "GET":
+            r = await client.get(f"{SAR_SERVER_URL}{path}")
+        else:
+            r = await client.post(f"{SAR_SERVER_URL}{path}", content=body,
+                                  headers={"Content-Type": "application/json"})
+        return r.json()
 
 
 @app.post("/api/report/sar/train")
-async def start_sar_training(req: SarTrainRequest, bg: BackgroundTasks):
-    """SAR 빙산 탐지 YOLOv8 모델 학습을 시작합니다."""
-    if _sar_training_state["is_training"]:
-        return JSONResponse(status_code=409, content={"error": "이미 SAR 학습이 진행 중입니다."})
-    bg.add_task(_run_sar_training, req)
-    return {
-        "message": "SAR 빙산 탐지 모델 학습 시작",
-        "epochs": req.epochs,
-        "synthetic_count": req.synthetic_count,
-        "device": req.device,
-    }
+async def start_sar_training(req: SarTrainRequest):
+    """SAR 학습 시작 — sar_server(8003)로 위임."""
+    try:
+        import json as _json
+        result = await _sar_proxy("POST", "/api/sar/train", _json.dumps(req.dict()).encode())
+        return result
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "SAR 서버(8003)에 연결할 수 없습니다. 'python sar_server.py' 를 먼저 실행하세요."},
+        )
 
 
 @app.get("/api/report/sar/train-status")
 async def sar_train_status():
-    """SAR 학습 진행 상태 조회."""
-    return _sar_training_state
+    """SAR 학습 상태 — sar_server(8003)에서 조회."""
+    try:
+        return await _sar_proxy("GET", "/api/sar/status")
+    except Exception:
+        return {"error": "SAR 서버(8003) 응답 없음", "is_training": False}
 
 
 @app.get("/api/report/sar/model-info")
 async def sar_model_info():
-    """SAR 모델 메타데이터 조회."""
-    import sys
-    _pipeline_trainers = str(Path(__file__).parent.parent / "backend" / "pipeline" / "trainers")
-    if _pipeline_trainers not in sys.path:
-        sys.path.insert(0, _pipeline_trainers)
+    """SAR 모델 메타데이터 — sar_server(8003)에서 조회."""
     try:
-        from iceberg_model_trainer import IcebergModelTrainer
-        return IcebergModelTrainer.get_model_info()
-    except Exception as e:
-        return {"error": str(e)}
+        return await _sar_proxy("GET", "/api/sar/model-info")
+    except Exception:
+        return {"error": "SAR 서버(8003) 응답 없음"}

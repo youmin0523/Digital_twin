@@ -120,8 +120,8 @@ class IcebergAvoidanceEnv(gym.Env):
 
     metadata = {"render_modes": ["human"]}
 
-    MAX_STEPS = 500
-    DT = 2.0         # 타임스텝 (초)
+    MAX_STEPS = 1500     # 500→1500: 충분한 항해 시간 확보 (DT=2s 기준 50분)
+    DT = 2.0             # 타임스텝 (초)
     MAX_DEVIATION_KM = 50.0
     COLLISION_RADIUS_KM = 0.5
     MAX_NEARBY_ICEBERGS = 3
@@ -312,7 +312,7 @@ class IcebergAvoidanceEnv(gym.Env):
             obs[10 + i * 2] = min(1.0, dist / 50.0)
 
         obs[15] = min(1.0, self.ice_concentration)
-        obs[16] = min(1.0, self.ice_concentration)
+        obs[16] = min(1.0, self.max_safe_conc)  # 빙급별 허용 최대 농도 (obs[15]와 구분)
         obs[17] = min(1.0, self.visibility_km / 20.0)
         obs[18] = min(1.0, self.wave_height_m / 8.0)
         obs[19] = self.max_safe_conc
