@@ -13,6 +13,7 @@ __pycache__/
 .venv/
 
 # Data (large / auto-generated)
+backend/data/sentinel1_archive/
 backend/data/realIceData_latest.json
 backend/data/archive/
 backend/data/copernicus_icebergs.json
