@@ -44,3 +44,5 @@ tmp/
 # OS generated files
 .DS_Store
 Thumbs.db
+# 쇄빙선 에스코트 시뮬 출력
+data/simulations/*.json

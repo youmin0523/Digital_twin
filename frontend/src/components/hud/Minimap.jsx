@@ -170,17 +170,9 @@ export default function Minimap({
       className="hud"
       id="minimap-wrap"
       style={{
-        position: 'absolute',
-        bottom: 50,
-        right: 10,
-        padding: '16px 20px',
-        width: 240,
-        zIndex: 300,
-        background: 'rgba(13, 19, 41, 0.9)',
-        border: '1px solid #1a2a4a',
-        borderRadius: '8px',
-        backdropFilter: 'blur(8px)',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+        width: '100%',
+        boxSizing: 'border-box',
+        padding: 0,
       }}
     >
       <div className="hud-title">📍 현재 위치</div>
@@ -194,6 +186,9 @@ export default function Minimap({
           borderRadius: 8,
           display: 'block',
           background: 'rgba(0,0,0,0.2)',
+          width: '100%',
+          height: 'auto',
+          maxWidth: '100%',
         }}
       />
       <div

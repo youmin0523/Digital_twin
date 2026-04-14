@@ -1,0 +1,247 @@
+/* Voyage Playback 모드 UI 스타일 */
+
+.voyage-mode-toggle {
+  display: flex;
+  gap: 6px;
+  background: transparent;
+  padding: 0;
+  border: none;
+  box-shadow: none;
+}
+.voyage-mode-toggle button {
+  flex: 1;
+}
+
+.voyage-mode-toggle button {
+  background: transparent;
+  color: #d1d5db;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+.voyage-mode-toggle button.active {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #60a5fa;
+}
+
+.voyage-hud {
+  position: absolute;
+  top: 70px;
+  left: 16px;
+  z-index: 450;
+  background: rgba(0, 0, 0, 0.75);
+  color: #e5e7eb;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-family: 'Consolas', monospace;
+  font-size: 12px;
+  min-width: 240px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.voyage-hud-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #60a5fa;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.voyage-hud-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+.voyage-hud-key {
+  color: #9ca3af;
+}
+
+.voyage-hud-val {
+  color: #fff;
+  font-weight: 500;
+}
+
+.voyage-hud-row.muted,
+.muted {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.voyage-controls {
+  background: transparent;
+  color: #e5e7eb;
+  padding: 0;
+  border: none;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.voyage-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  flex-wrap: wrap;
+}
+
+.voyage-controls-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.voyage-controls-label {
+  font-size: 11px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.voyage-btn {
+  background: rgba(255, 255, 255, 0.05);
+  color: #e5e7eb;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.voyage-btn.small {
+  padding: 3px 6px;
+  font-size: 10px;
+}
+
+.voyage-btn.primary {
+  background: #3b82f6;
+  border-color: #60a5fa;
+  color: #fff;
+  min-width: 80px;
+}
+
+.voyage-btn.active {
+  background: #3b82f6;
+  border-color: #60a5fa;
+  color: #fff;
+}
+
+.voyage-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.voyage-slider {
+  flex: 1;
+  height: 6px;
+  cursor: pointer;
+}
+
+.voyage-toast-stack {
+  position: absolute;
+  top: 130px;
+  right: 16px;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.voyage-toast {
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  padding: 8px 14px;
+  border-left: 4px solid #fff;
+  border-radius: 4px;
+  font-family: 'Consolas', monospace;
+  font-size: 12px;
+  min-width: 220px;
+  animation: voyage-toast-in 0.25s ease-out;
+}
+
+.voyage-toast.emph {
+  background: rgba(185, 28, 28, 0.85);
+  animation: voyage-toast-pulse 0.6s ease-out;
+}
+
+.voyage-toast-tag {
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.voyage-toast-msg {
+  color: #e5e7eb;
+}
+
+@keyframes voyage-toast-in {
+  from {
+    transform: translateX(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes voyage-toast-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.voyage-event-log {
+  position: absolute;
+  top: 340px;
+  right: 10px;
+  z-index: 450;
+  width: 240px;
+  /* WeatherHud(top:60 ~ 약 320) 아래부터 Minimap(bottom:50, ~420 높이) 위까지만 차지 */
+  max-height: calc(100vh - 340px - 490px);
+  min-height: 60px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #d1d5db;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: 'Consolas', monospace;
+  font-size: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.voyage-event-log-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #60a5fa;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.voyage-event-log-item {
+  padding: 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

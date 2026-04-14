@@ -1,2 +1,4 @@
 node_modules
 .env
+# 쇄빙선 시뮬 트레이스 (백엔드 생성본)
+public/simulations/*.json

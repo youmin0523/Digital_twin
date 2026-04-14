@@ -505,7 +505,10 @@ const CesiumGlobe = forwardRef(function CesiumGlobe(
   useImperativeHandle(
     ref,
     () => ({
-      viewer: viewerRef.current,
+      get viewer() {
+        return viewerRef.current;
+      },
+      getViewer: () => viewerRef.current,
       updateShipEntity,
       updateRLShipEntities,
     }),
