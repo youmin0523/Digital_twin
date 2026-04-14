@@ -66,6 +66,14 @@ import {
   rerouteAroundIceberg,
 } from './services/icebergAvoidance';
 import { createRLAvoidanceController } from './services/rlAvoidanceController';
+import useVoyagePlayback from './hooks/useVoyagePlayback';
+import VoyagePlaybackLayer from './components/VoyagePlayback/VoyagePlaybackLayer';
+import VoyageHUD from './components/VoyagePlayback/VoyageHUD';
+import VoyageControls from './components/VoyagePlayback/VoyageControls';
+import VoyageEventToast from './components/VoyagePlayback/VoyageEventToast';
+import AraonLiveMarker from './components/VoyagePlayback/AraonLiveMarker';
+import { sampleShipAt, sampleIcebreakersAt } from './services/voyageTrace';
+import './components/VoyagePlayback/voyagePlayback.css';
 
 function AppInner() {
   const state = useAppState();
@@ -76,6 +84,44 @@ function AppInner() {
   const deckRef = useRef(null);
   const viewerRef = useRef(null);
   const [cesiumViewerState, setCesiumViewerState] = useState(null);
+
+  // Voyage Playback 모드 (쇄빙선 에스코트 시뮬 재생)
+  const [appMode, setAppMode] = useState('live'); // 'live' | 'voyage'
+  const voyage = useVoyagePlayback();
+  const voyageActive = appMode === 'voyage';
+  const currentRio = voyage.trace
+    ? (sampleShipAt(voyage.trace, voyage.tHours) || {}).rio
+    : 0;
+
+  // 아라온 HUD 정보 — voyage 모드면 trace 에서 보간, 아니면 Wrangel 정적값
+  const ARAON_STATUS_KO = {
+    idle: '대기',
+    dispatched: '출동',
+    rendezvous: '랑데부',
+    escorting: '동행',
+    released: '복귀',
+  };
+  // 컴팩트 좌표 (한 줄에 들어가도록)
+  const formatLatLonShort = (p) => {
+    if (!p) return '—';
+    const lat = `${p.lat.toFixed(1)}${p.lat >= 0 ? 'N' : 'S'}`;
+    const lon = `${p.lon.toFixed(1)}${p.lon >= 0 ? 'E' : 'W'}`;
+    return `${lat} ${lon}`;
+  };
+  let araonInfo = {
+    position: '71.0N 179.5E',
+    statusKo: '대기',
+  };
+  if (voyageActive && voyage.trace) {
+    const ibs = sampleIcebreakersAt(voyage.trace, voyage.tHours);
+    const araon = ibs.find((x) => x.id === 'ib-araon');
+    if (araon) {
+      araonInfo = {
+        position: formatLatLonShort(araon.position),
+        statusKo: ARAON_STATUS_KO[araon.status] || araon.status,
+      };
+    }
+  }
 
   const animFrameRef = useRef(null);
 
@@ -2139,6 +2185,25 @@ function AppInner() {
             copVisible={layerStates.copThick}
           />
 
+          {/* Live Simulation 모드에서도 아라온을 Wrangel Is. 정박 마커로 표시 */}
+          <AraonLiveMarker cesiumRef={cesiumRef} visible={appMode === 'live'} />
+          {voyageActive && (
+            <>
+              <VoyagePlaybackLayer
+                cesiumRef={cesiumRef}
+                trace={voyage.trace}
+                tHours={voyage.tHours}
+                active={voyageActive}
+              />
+              <VoyageHUD
+                trace={voyage.trace}
+                tHours={voyage.tHours}
+                currentRio={currentRio}
+              />
+              <VoyageEventToast newEvents={voyage.newEvents} />
+            </>
+          )}
+
           {/* Indicators */}
           {state.manualMode && (
             <div id="manual-indicator">⚑ 수동 조종 모드</div>
@@ -2147,20 +2212,6 @@ function AppInner() {
           <div id="polar-night-ind">극야 구간</div>
           <div id="banner" />
           <div id="gebco-depth-popup" />
-
-          {/* 해역 기상 HUD — 출항 전: 마우스 위치 / 출항 후: 선박 위치 */}
-          <WeatherHud
-            shipPos={
-              state.isSimulating || state.simProgress > 0
-                ? state.shipState
-                : mouseGlobePos || state.shipState
-            }
-            weatherData={weatherData}
-            currentRouteKey={state.currentRouteKey}
-            isMouseMode={
-              !state.isSimulating && state.simProgress === 0 && !!mouseGlobePos
-            }
-          />
 
           {/* RL 커리큘럼 학습 진행 오버레이 */}
           <div style={{ position: 'absolute', left: 10, top: 10, zIndex: 300, display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 8, maxHeight: 'calc(100vh - 20px)' }}>
@@ -2175,18 +2226,89 @@ function AppInner() {
             shipSpecs={state.shipSpecs}
           />
           <WhatIfPanel route={state.currentRouteKey} iceClass={state.shipSpecs?.iceClass || 'PC5'} />
-
-          {/* //* [Modified Code] 레이더(미니맵)을 메인 뷰포트 영역 내부 우측 하단에 부착하여 패널에 가려지지 않게 함 */}
-          <Minimap
-            shipPos={state.shipState}
-            progress={state.simProgress}
-            heading={state.shipState.heading}
-            waypoints={waypoints}
-            onOpenTeleport={() => setTeleportOpen(true)}
-            departurePort={PORTS[state.departurePort] || PORTS.BUSAN}
-            arrivalPort={PORTS[state.arrivalPort] || PORTS.ROTTERDAM}
-          />
         </div>
+
+        {/* ═══ Right Sidebar — 좌측 Sidebar와 대칭 구조 (static flex item) ═══ */}
+        <aside className="dt-sidebar dt-sidebar--right">
+          <section className="dt-sidebar__section">
+            <span className="dt-sidebar__section-title">재생 컨트롤</span>
+            <VoyageControls
+              iceClass={voyage.iceClass}
+              onLoadIceClass={voyage.loadIceClass}
+              trace={voyage.trace}
+              tHours={voyage.tHours}
+              isPlaying={voyage.isPlaying}
+              speed={voyage.speed}
+              onPlay={voyage.play}
+              onPause={voyage.pause}
+              onSeek={voyage.seek}
+              onSetSpeed={voyage.setSpeed}
+            />
+          </section>
+
+          <section className="dt-sidebar__section">
+            <span className="dt-sidebar__section-title">Simulation Mode</span>
+            <div className="voyage-mode-toggle">
+              <button
+                type="button"
+                className={appMode === 'live' ? 'active' : ''}
+                onClick={() => {
+                  setAppMode('live');
+                  dispatch({ type: 'SET_MODE', payload: 'SATELLITE' });
+                }}
+              >
+                Live Simulation
+              </button>
+              <button
+                type="button"
+                className={appMode === 'voyage' ? 'active' : ''}
+                onClick={async () => {
+                  if (state.isSimulating) {
+                    handleReset();
+                  }
+                  dispatch({ type: 'SET_MODE', payload: 'VOYAGE_PLAYBACK' });
+                  setAppMode('voyage');
+                  if (!voyage.trace) {
+                    try {
+                      await voyage.loadIceClass('Arc4');
+                    } catch (e) {
+                      // 로드 실패는 콘솔에 이미 로깅됨
+                    }
+                  }
+                }}
+              >
+                Voyage Playback
+              </button>
+            </div>
+          </section>
+
+          <section className="dt-sidebar__section">
+            <WeatherHud
+              shipPos={
+                state.isSimulating || state.simProgress > 0
+                  ? state.shipState
+                  : mouseGlobePos || state.shipState
+              }
+              weatherData={weatherData}
+              currentRouteKey={state.currentRouteKey}
+              isMouseMode={
+                !state.isSimulating && state.simProgress === 0 && !!mouseGlobePos
+              }
+            />
+          </section>
+
+          <section className="dt-sidebar__section">
+            <Minimap
+              shipPos={state.shipState}
+              progress={state.simProgress}
+              heading={state.shipState.heading}
+              waypoints={waypoints}
+              onOpenTeleport={() => setTeleportOpen(true)}
+              departurePort={PORTS[state.departurePort] || PORTS.BUSAN}
+              arrivalPort={PORTS[state.arrivalPort] || PORTS.ROTTERDAM}
+            />
+          </section>
+        </aside>
       </div>
 
       {/* ═══ Bottom Panel ═══ */}
@@ -2206,6 +2328,7 @@ function AppInner() {
         onTrendReportToggle={() => setTrendReportOpen(o => !o)}
         fuelAnalysisOpen={fuelAnalysisOpen}
         onFuelAnalysisToggle={() => setFuelAnalysisOpen(o => !o)}
+        araon={araonInfo}
       />
 
       {/* Ship Specs Summary Modal */}

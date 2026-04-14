@@ -144,13 +144,15 @@ function DesignField({ label, value, unit, onChange }) {
   return (
     <div className="bp-design__field">
       <span className="bp-design__field-label">{label}</span>
-      <input
-        className="bp-design__input"
-        type="number"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      <span className="bp-design__field-unit">{unit}</span>
+      <span className="bp-design__field-value">
+        <input
+          className="bp-design__input"
+          type="number"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        {unit && <span className="bp-design__field-unit">{unit}</span>}
+      </span>
     </div>
   );
 }
@@ -164,7 +166,7 @@ function IceWeatherPanel({ hud }) {
   const windDir = Math.round(180 + Math.random() * 60);
 
   return (
-    <div className="bp-content">
+    <div className="bp-content" style={{ justifyContent: 'space-between', gap: 6 }}>
       <RioGauge value={rfiNum} level={rioLevel} />
       <div className="bp-info-stack" style={{ flex: '0 1 auto', minWidth: 0 }}>
         <DataRow label="Ice Class" value={hud.iceClass || 'PC2'} />
@@ -283,44 +285,48 @@ function DesignInfoPanel({
           />
           <div className="bp-design__field">
             <span className="bp-design__field-label">Ice Class</span>
-            <select
-              className="bp-design__select"
-              value={specs.iceClass}
-              onChange={(e) => onSpecChange('iceClass', e.target.value)}
-            >
-              <option value="PC1">PC1</option>
-              <option value="PC2">PC2</option>
-              <option value="PC3">PC3</option>
-              <option value="PC4">PC4</option>
-              <option value="PC5">PC5</option>
-              <option value="PC6">PC6</option>
-              <option value="PC7">PC7</option>
-              <option value="NONE">일반</option>
-            </select>
+            <span className="bp-design__field-value">
+              <select
+                className="bp-design__select"
+                value={specs.iceClass}
+                onChange={(e) => onSpecChange('iceClass', e.target.value)}
+              >
+                <option value="PC1">PC1</option>
+                <option value="PC2">PC2</option>
+                <option value="PC3">PC3</option>
+                <option value="PC4">PC4</option>
+                <option value="PC5">PC5</option>
+                <option value="PC6">PC6</option>
+                <option value="PC7">PC7</option>
+                <option value="NONE">일반</option>
+              </select>
+            </span>
           </div>
         </div>
       </div>
       <div className="bp-divider" />
       <div className="bp-content__col">
         <span className="bp-design__col-title">POLAR CODE 안전 설계 기준</span>
-        <DesignField
-          label="Draft"
-          value={specs.draft || 8.5}
-          unit="m"
-          onChange={(v) => onSpecChange('draft', Number(v))}
-        />
-        <DesignField
-          label="Rescue"
-          value={rescueDays}
-          unit="일"
-          onChange={(v) => setRescueDays(Number(v))}
-        />
-        <DesignField
-          label="온도여유"
-          value={tempMargin}
-          unit="°C"
-          onChange={(v) => setTempMargin(Number(v))}
-        />
+        <div className="bp-design__fields">
+          <DesignField
+            label="Draft"
+            value={specs.draft || 8.5}
+            unit="m"
+            onChange={(v) => onSpecChange('draft', Number(v))}
+          />
+          <DesignField
+            label="Rescue"
+            value={rescueDays}
+            unit="일"
+            onChange={(v) => setRescueDays(Number(v))}
+          />
+          <DesignField
+            label="온도여유"
+            value={tempMargin}
+            unit="°C"
+            onChange={(v) => setTempMargin(Number(v))}
+          />
+        </div>
         <span className="bp-design__col-title" style={{ marginTop: 4 }}>
           항행 설비 안전 체크리스트
         </span>
@@ -485,7 +491,7 @@ function EvalTooltipPortal({ anchorRect, evaluationResult }) {
 }
 
 /* ── Tab 3: Ship Service Info ── */
-function ServiceInfoPanel({ hud, currentRoute, evaluationResult, specs }) {
+function ServiceInfoPanel({ hud, currentRoute, evaluationResult, specs, araon }) {
   // //* [Modified Code] Portal 툴팁 상태 관리
   const [tooltipRect, setTooltipRect] = useState(null);
 
@@ -619,9 +625,9 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult, specs }) {
   };
 
   return (
-    <div className="bp-content">
+    <div className="bp-content bp-content--service">
       <SpeedGauge speed={hud.speed} />
-      <div className="bp-info-stack" style={{ minWidth: 150 }}>
+      <div className="bp-info-stack" style={{ minWidth: 140 }}>
         <DataRow
           label="침로"
           value={
@@ -633,6 +639,67 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult, specs }) {
         <DataRow label="현재단계" value={hud.phase} />
         <DataRow label="위치" value={hud.position} />
         <DataRow label="빙결상태" value={hud.iceState} />
+        {/* ── 아라온호 (KOPRI 한국 유일 쇄빙선) ────────────────── */}
+        <div
+          style={{
+            marginTop: 6,
+            paddingTop: 4,
+            borderTop: '1px dashed rgba(34, 211, 238, 0.4)',
+            fontSize: 10,
+          }}
+        >
+          <div
+            style={{
+              color: '#22d3ee',
+              fontWeight: 600,
+              marginBottom: 3,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            🚢 아라온 (KOPRI)
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 6,
+              padding: '1px 0',
+            }}
+          >
+            <span style={{ color: '#94a3b8' }}>좌표</span>
+            <span
+              style={{
+                color: '#e2e8f0',
+                fontVariantNumeric: 'tabular-nums',
+                whiteSpace: 'nowrap',
+              }}
+              title={(araon && araon.position) || ''}
+            >
+              {(araon && araon.position) || '71.0N 179.5E'}
+            </span>
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 6,
+              padding: '1px 0',
+            }}
+          >
+            <span style={{ color: '#94a3b8' }}>상태</span>
+            <span
+              style={{
+                color: '#e2e8f0',
+                whiteSpace: 'nowrap',
+              }}
+              title={(araon && araon.statusKo) || ''}
+            >
+              {(araon && araon.statusKo) || '대기'}
+            </span>
+          </div>
+        </div>
       </div>
       <div className="bp-divider" />
       <div
@@ -640,8 +707,8 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult, specs }) {
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          flex: 1,
-          minWidth: 0,
+          flex: '1 1 180px',
+          minWidth: 170,
         }}
       >
         {evaluationResult ? (
@@ -680,7 +747,7 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult, specs }) {
               marginBottom: 4,
             }}
           >
-            평가 대기 — 제원 데이터를 적용하세요
+            평가 대기
           </div>
         )}
         <span className="bp-service__table-title">Route Comparison</span>
@@ -715,7 +782,7 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult, specs }) {
       {isSuitable && (
         <>
           <div className="bp-divider" />
-          <div className="bp-info-stack" style={{ minWidth: 130 }}>
+          <div className="bp-info-stack" style={{ minWidth: 110 }}>
             <span className="bp-service__table-title">
               {currentRoute} vs SUEZ 절감
             </span>
@@ -748,7 +815,7 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult, specs }) {
           <div className="bp-divider" />
           <div style={{
             display: 'flex', flexDirection: 'column', justifyContent: 'center',
-            flex: 1, minWidth: 0, maxWidth: 320,
+            flex: '1 1 200px', minWidth: 190, maxWidth: 260,
           }}>
             <span className="bp-service__table-title" style={{ color: '#f59e0b' }}>
               ML 연료 비용 분석
@@ -841,6 +908,7 @@ export default function BottomPanel({
   onTrendReportToggle,
   fuelAnalysisOpen,
   onFuelAnalysisToggle,
+  araon,
 }) {
   return (
     <div className="bp" style={{ position: 'relative' }}>
@@ -943,6 +1011,7 @@ export default function BottomPanel({
             currentRoute={currentRoute}
             evaluationResult={evaluationResult}
             specs={specs}
+            araon={araon}
           />
         </div>
       </div>
