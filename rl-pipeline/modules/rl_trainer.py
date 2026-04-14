@@ -54,9 +54,9 @@ class CurriculumStage:
 
 
 CURRICULUM = [
-    CurriculumStage("stage_1_basic", "easy", 100_000, "단일 빙산, 개방 해수, 좋은 시정"),
-    CurriculumStage("stage_2_moderate", "medium", 200_000, "다중 빙산, 가벼운 해빙, 보통 시정"),
-    CurriculumStage("stage_3_hard", "hard", 200_000, "밀집 빙산군, 높은 해빙 농도, 낮은 시정"),
+    CurriculumStage("stage_1_basic",    "easy",    50_000, "단일 빙산, 개방 해수, 좋은 시정 — 기초 회피 학습"),
+    CurriculumStage("stage_2_moderate", "medium",  70_000, "다중 빙산, 가벼운 해빙, 보통 시정"),
+    CurriculumStage("stage_3_hard",     "hard",    30_000, "밀집 빙산군, 높은 해빙 농도, 낮은 시정"),
 ]
 
 
@@ -164,7 +164,13 @@ class RLTrainer:
             if not self.agent.load():
                 return {"error": "모델이 없습니다. 먼저 학습을 실행하세요."}
 
-        env = IcebergAvoidanceEnv(difficulty=difficulty)
+        # 학습과 동일한 route/ice_class 환경에서 평가 (불일치 방지)
+        env = IcebergAvoidanceEnv(
+            difficulty=difficulty,
+            fixed_route=self._fixed_route,
+            fixed_ice_class=self._fixed_ice_class,
+            ship_params=self._ship_params,
+        )
         rewards, deviations, episode_lengths = [], [], []
         collisions, successes = 0, 0
 
@@ -190,12 +196,13 @@ class RLTrainer:
             episode_lengths.append(steps)
 
         return {
-            "episodes": n_episodes, "difficulty": difficulty,
-            "mean_reward": float(np.mean(rewards)),
-            "collision_rate": collisions / n_episodes,
-            "success_rate": successes / n_episodes,
-            "mean_max_deviation_km": float(np.mean(deviations)),
-            "mean_episode_length": float(np.mean(episode_lengths)),
+            "episodes": len(rewards),
+            "difficulty": difficulty,
+            "mean_reward": float(np.mean(rewards)) if rewards else 0.0,
+            "collision_rate": collisions / n_episodes if n_episodes > 0 else 0.0,
+            "success_rate": successes / n_episodes if n_episodes > 0 else 0.0,
+            "mean_max_deviation_km": float(np.mean(deviations)) if deviations else 0.0,
+            "mean_episode_length": float(np.mean(episode_lengths)) if episode_lengths else 0.0,
         }
 
     def infer(self, ship_state: dict, icebergs: list[dict],

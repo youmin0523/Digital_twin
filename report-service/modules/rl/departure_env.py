@@ -26,10 +26,13 @@ Reward:
 import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import Optional
 
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
+
+from modules.route_scorer import ARCTIC_SEGMENTS
 
 logger = logging.getLogger("report-service.rl.departure_env")
 
@@ -57,15 +60,15 @@ class DepartureSchedulingEnv(gym.Env):
 
     def __init__(
         self,
-        monthly_ice: dict = None,
-        weather_data: dict = None,
+        monthly_ice: Optional[dict] = None,
+        weather_data: Optional[dict] = None,
         route_scorer=None,
         ice_class: str = "PC5",
         forecast_days: int = 30,
         transit_days: int = 14,
-        start_date: date = None,
+        start_date: Optional[date] = None,
         difficulty: str = "medium",
-        reward_weights: DepartureRewardWeights | None = None,
+        reward_weights: Optional[DepartureRewardWeights] = None,
     ):
         super().__init__()
 
@@ -115,7 +118,7 @@ class DepartureSchedulingEnv(gym.Env):
         return obs, {}
 
     def _build_observation(self, day_offset: int) -> np.ndarray:
-        """상태 벡터 구성 (27차원)."""
+        """상태 벡터 구성 (28차원: month_sin/cos(2) + conc(7) + wave(7) + vis(7) + ice(1) + transit(1) + forecast(1) + dow_sin/cos(2))."""
         dep_date = self.start_date + timedelta(days=day_offset)
         month = dep_date.month
 
@@ -173,7 +176,6 @@ class DepartureSchedulingEnv(gym.Env):
         if month_data is None or not self.route_scorer:
             return concs
 
-        from modules.route_scorer import ARCTIC_SEGMENTS
         cells = month_data.get("cells", [])
         segments = ARCTIC_SEGMENTS.get("NSR", [])
 

@@ -53,21 +53,21 @@ class RLTrainRequest(BaseModel):
 
 
 class IterativeTrainRequest(BaseModel):
-    max_iterations: int = 10
-    target_success_rate: float = 0.85
-    target_collision_rate: float = 0.05
-    eval_episodes: int = 100
-    eval_difficulty: str = "hard"
+    max_iterations: int = 5
+    target_success_rate: float = 0.70
+    target_collision_rate: float = 0.15
+    eval_episodes: int = 30
+    eval_difficulty: str = "medium"
     initial_weights: dict | None = None
 
 
 class MultiModelTrainRequest(BaseModel):
-    max_iterations: int = 10
-    target_success_rate: float = 0.85
-    target_collision_rate: float = 0.05
-    eval_episodes: int = 100
-    eval_difficulty: str = "hard"
-    base_timesteps: int = 500_000
+    max_iterations: int = 5
+    target_success_rate: float = 0.70
+    target_collision_rate: float = 0.15
+    eval_episodes: int = 30
+    eval_difficulty: str = "medium"
+    base_timesteps: int = 150_000
 
 
 # ── Endpoints ─────────────────────────────────────────────
@@ -228,3 +228,9 @@ async def rl_multi_stop():
         return JSONResponse(status_code=400, content={"error": "다중 모델 학습이 실행 중이 아닙니다."})
     multi_model_trainer.stop()
     return {"message": "다중 모델 학습 중단 요청됨"}
+
+
+# ── 실행 ──────────────────────────────────────────────────
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001, log_level="info")

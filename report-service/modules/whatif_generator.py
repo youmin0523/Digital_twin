@@ -20,6 +20,7 @@ import os
 from dataclasses import dataclass, field, asdict
 from datetime import date
 from pathlib import Path
+from typing import List, Optional
 
 from dotenv import load_dotenv
 
@@ -132,6 +133,8 @@ class WhatIfGenerator:
 
         messages = [{"role": "user", "content": prompt}]
         tool_calls_count = 0
+        # 도구 호출 결과 수집: score_route / score_route_modified_ice / compare_ice_classes 결과만 저장
+        collected_route_summaries: list[dict] = []
 
         # Claude tool_use 루프
         for iteration in range(self.MAX_TOOL_ITERATIONS):
@@ -161,12 +164,22 @@ class WhatIfGenerator:
                         logger.info("도구 호출 [%d]: %s(%s)",
                                     tool_calls_count, tool_name, json.dumps(tool_input, ensure_ascii=False)[:100])
 
-                        result = self.tool_executor.execute(tool_name, tool_input)
+                        exec_result = self.tool_executor.execute(tool_name, tool_input)
+
+                        # 항로 평가 결과 수집 (시나리오 route_summary 구성에 활용)
+                        if tool_name in ("score_route", "score_route_modified_ice"):
+                            if "avg_rio" in exec_result:
+                                collected_route_summaries.append(exec_result)
+                        elif tool_name == "compare_ice_classes":
+                            # compare 결과에서 각 ice_class별 summary 추출
+                            for ic_summary in exec_result.get("comparison", {}).values():
+                                if "avg_rio" in ic_summary:
+                                    collected_route_summaries.append(ic_summary)
 
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
-                            "content": json.dumps(result, ensure_ascii=False),
+                            "content": json.dumps(exec_result, ensure_ascii=False),
                         })
 
                 # 어시스턴트 메시지 + 도구 결과를 대화에 추가
@@ -176,7 +189,7 @@ class WhatIfGenerator:
             elif response.stop_reason == "end_turn":
                 # Claude가 분석을 완료함
                 final_text = self._extract_text(response.content)
-                result = self._parse_result(final_text)
+                result = self._parse_result(final_text, collected_route_summaries)
                 result.tool_calls_count = tool_calls_count
                 logger.info("What-If 분석 완료: %d 시나리오, %d 도구 호출",
                             len(result.scenarios), tool_calls_count)
@@ -188,7 +201,7 @@ class WhatIfGenerator:
         # 최대 반복 초과
         logger.warning("최대 반복(%d) 초과", self.MAX_TOOL_ITERATIONS)
         final_text = self._extract_text(messages[-1].get("content", []) if isinstance(messages[-1], dict) else [])
-        result = self._parse_result(final_text)
+        result = self._parse_result(final_text, collected_route_summaries)
         result.tool_calls_count = tool_calls_count
         return result
 
@@ -206,14 +219,21 @@ class WhatIfGenerator:
             return "\n".join(texts)
         return str(content)
 
-    def _parse_result(self, text: str) -> WhatIfResult:
-        """Claude의 텍스트 응답을 구조화된 WhatIfResult로 파싱합니다."""
+    def _parse_result(self, text: str, route_summaries: list[dict] | None = None) -> WhatIfResult:
+        """Claude의 텍스트 응답을 구조화된 WhatIfResult로 파싱합니다.
+
+        route_summaries: 도구 호출로 수집된 항로 평가 결과 목록.
+          시나리오 순서대로 매핑합니다.
+        """
         result = WhatIfResult()
         result.comparison_text = text
+        if route_summaries is None:
+            route_summaries = []
 
-        # 시나리오 파싱 (간략한 휴리스틱)
+        # 시나리오 파싱 (텍스트 휴리스틱)
         lines = text.split("\n")
         current_scenario = None
+        scenario_idx = 0
 
         for line in lines:
             stripped = line.strip()
@@ -224,10 +244,13 @@ class WhatIfGenerator:
             if any(kw in stripped.lower() for kw in ["시나리오", "scenario"]) and any(c.isdigit() for c in stripped):
                 if current_scenario:
                     result.scenarios.append(current_scenario)
+                    scenario_idx += 1
+                # 수집된 route_summary를 순서대로 매핑
+                rs = route_summaries[scenario_idx] if scenario_idx < len(route_summaries) else {}
                 current_scenario = ScenarioResult(
                     name=stripped.lstrip("#").strip(),
                     description="",
-                    route_summary={},
+                    route_summary=rs,
                     recommendation="",
                 )
             elif current_scenario:
@@ -243,7 +266,6 @@ class WhatIfGenerator:
 
             # 종합 추천 감지
             if "종합" in stripped and ("추천" in stripped or "결론" in stripped):
-                # 이후 텍스트를 ai_recommendation으로 수집
                 idx = lines.index(line)
                 result.ai_recommendation = "\n".join(
                     l.strip() for l in lines[idx:] if l.strip()
@@ -252,8 +274,17 @@ class WhatIfGenerator:
         if current_scenario:
             result.scenarios.append(current_scenario)
 
-        # 시나리오가 파싱되지 않았으면 전체 텍스트를 추천으로 사용
-        if not result.scenarios:
+        # 시나리오가 파싱되지 않았으면 수집된 route_summaries로 기본 시나리오 구성
+        if not result.scenarios and route_summaries:
+            for i, rs in enumerate(route_summaries):
+                result.scenarios.append(ScenarioResult(
+                    name=f"시나리오 {i + 1}",
+                    description=rs.get("scenario", f"{rs.get('route', '')} / {rs.get('ice_class', '')}"),
+                    route_summary=rs,
+                    recommendation="추천" if rs.get("green_days", 0) > rs.get("red_days", 0) else "조건부",
+                ))
+            result.ai_recommendation = text
+        elif not result.scenarios:
             result.ai_recommendation = text
 
         return result

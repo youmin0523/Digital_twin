@@ -138,11 +138,11 @@ def fill_sst(wp_results: list[dict]) -> list[dict]:
     try:
         import copernicusmarine  # noqa: F401
     except ImportError:
-        print("    [WARN] copernicusmarine not installed — skipping SST fetch")
+        print("    [WARN] copernicusmarine not installed - skipping SST fetch")
         return wp_results
 
     if not _copernicus_available():
-        print("    [WARN] Copernicus credentials missing — skipping SST fetch")
+        print("    [WARN] Copernicus credentials missing - skipping SST fetch")
         return wp_results
 
     target_dt = datetime.now(timezone.utc) - timedelta(days=1)

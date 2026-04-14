@@ -319,7 +319,7 @@ def _build_synthetic(count: int, output_dir: Path):
 
 
 def _build_from_real_tiles(tiles_dir: Path, output_dir: Path):
-    """실제 SAR 타일로 데이터셋 구축 (Ground Truth 매칭)."""
+    """실제 SAR 타일로 데이터셋 구축 (Ground Truth 빙산 좌표 매칭 + PNG 변환)."""
     bergs = load_berg_ground_truth()
     npy_files = sorted(tiles_dir.glob("**/*.npy"))
 
@@ -327,28 +327,98 @@ def _build_from_real_tiles(tiles_dir: Path, output_dir: Path):
         log.warning("실제 타일을 찾을 수 없습니다: %s", tiles_dir)
         return
 
-    # 메타데이터 로드
-    meta_files = sorted(tiles_dir.glob("**/tile_metadata.json"))
-    all_meta = []
-    for mf in meta_files:
-        with open(mf) as f:
-            data = json.load(f)
-            all_meta.extend(data.get("tiles", []))
+    # 타일 메타데이터 로드 (bbox 정보 포함)
+    meta_by_name: dict[str, dict] = {}
+    for mf in sorted(tiles_dir.glob("**/tile_metadata.json")):
+        try:
+            with open(mf) as f:
+                data = json.load(f)
+            for t in data.get("tiles", []):
+                name = t.get("filename") or t.get("name", "")
+                if name:
+                    meta_by_name[name] = t
+        except Exception:
+            pass
 
-    # 빙산과 타일 교차 레이블 생성
-    for i, npy_path in enumerate(npy_files):
-        tile = np.load(npy_path)
+    labeled_count = 0
+    for npy_path in npy_files:
+        try:
+            tile = np.load(npy_path)
+        except Exception as e:
+            log.warning("타일 로드 실패 %s: %s", npy_path.name, e)
+            continue
+
+        # (C,H,W) → (H,W,C) 변환, 채널 수 정규화
+        if tile.ndim == 3 and tile.shape[0] in (1, 3):
+            tile_hwc = np.transpose(tile, (1, 2, 0))
+        elif tile.ndim == 2:
+            tile_hwc = np.stack([tile, tile, tile], axis=-1)
+        else:
+            tile_hwc = tile
+
+        # 0~1 범위 → uint8 변환
+        if tile_hwc.dtype != np.uint8:
+            t_min, t_max = tile_hwc.min(), tile_hwc.max()
+            if t_max > t_min:
+                tile_hwc = ((tile_hwc - t_min) / (t_max - t_min) * 255).astype(np.uint8)
+            else:
+                tile_hwc = (tile_hwc * 255).clip(0, 255).astype(np.uint8)
+
+        # 3채널 보장
+        if tile_hwc.ndim == 2:
+            tile_hwc = np.stack([tile_hwc, tile_hwc, tile_hwc], axis=-1)
+        elif tile_hwc.shape[2] == 1:
+            tile_hwc = np.concatenate([tile_hwc] * 3, axis=-1)
+
         split = "train" if random.random() < TRAIN_RATIO else "val"
+        stem = npy_path.stem
+        img_path = output_dir / "images" / split / f"{stem}.png"
+        lbl_path = output_dir / "labels" / split / f"{stem}.txt"
 
-        # 이미지 복사
-        dst = output_dir / "images" / split / npy_path.name
-        np.save(dst, tile)
+        # PNG 저장
+        try:
+            import cv2
+            cv2.imwrite(str(img_path), tile_hwc)
+        except ImportError:
+            from PIL import Image
+            Image.fromarray(tile_hwc).save(img_path)
 
-        # 빈 레이블 (실제 매칭 로직은 좌표 기반)
-        lbl_path = output_dir / "labels" / split / npy_path.with_suffix(".txt").name
-        lbl_path.write_text("")  # 추후 수동 레이블링 또는 자동 매칭
+        # 메타데이터에서 bbox 정보로 빙산 좌표 매칭
+        meta = meta_by_name.get(npy_path.name) or meta_by_name.get(stem)
+        yolo_lines = []
 
-    log.info("실제 타일 %d개를 데이터셋에 추가", len(npy_files))
+        if meta and bergs:
+            min_lon = meta.get("min_lon")
+            max_lon = meta.get("max_lon")
+            min_lat = meta.get("min_lat")
+            max_lat = meta.get("max_lat")
+
+            if None not in (min_lon, max_lon, min_lat, max_lat):
+                lon_range = max_lon - min_lon
+                lat_range = max_lat - min_lat
+                if lon_range > 0 and lat_range > 0:
+                    for berg in bergs:
+                        blon = berg.get("lon", 0)
+                        blat = berg.get("lat", 0)
+                        if min_lon <= blon <= max_lon and min_lat <= blat <= max_lat:
+                            cx = (blon - min_lon) / lon_range
+                            cy = 1.0 - (blat - min_lat) / lat_range  # y축 반전
+                            # 빙산 크기 → 타일 내 상대 크기 추정 (25m/px 기준)
+                            size_m = berg.get("length_m", 100)
+                            tile_h, tile_w = tile_hwc.shape[:2]
+                            px_per_deg_lon = tile_w / lon_range
+                            px_per_deg_lat = tile_h / lat_range
+                            w = min(size_m / 111320.0 / lon_range, 0.5)
+                            h = min(size_m / 110540.0 / lat_range, 0.5)
+                            # 경계 범위 클리핑
+                            cx = max(w / 2 + 0.01, min(1 - w / 2 - 0.01, cx))
+                            cy = max(h / 2 + 0.01, min(1 - h / 2 - 0.01, cy))
+                            yolo_lines.append(f"0 {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
+                            labeled_count += 1
+
+        lbl_path.write_text("\n".join(yolo_lines))
+
+    log.info("실제 타일 %d개 처리 완료, 빙산 레이블 %d개 생성", len(npy_files), labeled_count)
 
 
 if __name__ == "__main__":

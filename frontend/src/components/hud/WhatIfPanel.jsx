@@ -49,14 +49,20 @@ export default function WhatIfPanel({ route = 'NSR', iceClass = 'PC5' }) {
 
       sarPollRef.current = setInterval(async () => {
         try {
+          const health = await fetch('/api/health/services').then(r => r.ok ? r.json() : null).catch(() => null);
+          if (!health?.report) return;
           const sr = await fetch('/api/report/sar/train-status');
           const st = await sr.json();
           setSarProgress(st.progress || 0);
           setSarStage(st.stage || '');
+          if (st.is_training) {
+            console.log(`[Train YOLOv8] SAR 빙산 탐지 모델 학습 — ${st.progress ?? 0}% | 단계: ${st.stage ?? '—'}`);
+          }
           if (!st.is_training && st.progress >= 100) {
             clearInterval(sarPollRef.current);
             setSarTraining(false);
             setSarStage('학습 완료!');
+            console.log('[Train YOLOv8] SAR 빙산 탐지 모델 학습 완료 (100%)');
           } else if (!st.is_training && st.error) {
             clearInterval(sarPollRef.current);
             setSarTraining(false);
@@ -99,10 +105,13 @@ export default function WhatIfPanel({ route = 'NSR', iceClass = 'PC5' }) {
           const st = await sr.json();
           setProgress(st.progress || 0);
 
-          if (st.status === 'completed' && st.result) {
+          if (st.status === 'running' || st.status === 'pending') {
+            console.log(`[What-If Scenario] AI 시나리오 분석 중 — ${st.progress ?? 0}% (항로: ${route} | 빙급: ${iceClass})`);
+          } else if (st.status === 'completed' && st.result) {
             clearInterval(pollRef.current);
             setResult(st.result);
             setRunning(false);
+            console.log(`[What-If Scenario] 분석 완료 — ${st.result?.scenarios?.length ?? 0}개 시나리오 생성 (항로: ${route} | 빙급: ${iceClass})`);
           } else if (st.status === 'failed') {
             clearInterval(pollRef.current);
             setError(st.error || '분석 실패');

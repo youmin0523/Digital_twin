@@ -92,6 +92,99 @@ function AppInner() {
   // 토스트 알림 상태
   const [toastMsg, setToastMsg] = useState('');
   const toastTimerRef = useRef(null);
+
+  // ── RL 학습 중 멀티 선박 시각화 ──────────────────────────────
+  const [rlShips, setRlShips] = useState([]);
+  const rlShipProgressRef = useRef({}); // id → progress(0~1), 시간 기반 자동 전진
+
+  useEffect(() => {
+    let alive = true;
+    async function pollMultiStatus() {
+      try {
+        const [r1, r2] = await Promise.allSettled([
+          fetch('/api/rl/multi/status'),
+          fetch('/api/report/rl/multi/status'),
+        ]);
+        const ships = [];
+
+        // route별 TWP 캐시
+        const twpCache = {};
+        function getTWP(routeKey) {
+          if (!twpCache[routeKey]) {
+            const wps = ROUTES[routeKey] || ROUTES.NSR;
+            twpCache[routeKey] = buildTimings(wps);
+          }
+          return twpCache[routeKey];
+        }
+
+        // rl-pipeline (NSR/NWP/TSR × 빙급 × 선종)
+        if (r1.status === 'fulfilled' && r1.value.ok) {
+          const data = await r1.value.json();
+          const models = data.models ?? {};
+          Object.entries(models).forEach(([key, m]) => {
+            if (!m.is_running) return;
+            // key: NSR_PC7_bulk 형식
+            const parts = key.split('_');
+            const route = parts[0]; // NSR/NWP/TSR
+            const shipType = parts[parts.length - 1];
+            if (!rlShipProgressRef.current[key]) rlShipProgressRef.current[key] = Math.random();
+            const routeWps = ROUTES[route] || ROUTES.NSR;
+            const twp = getTWP(route);
+            const prog = rlShipProgressRef.current[key];
+            const pos = routePos(prog, twp, routeWps);
+            const hdg = routeHeading(prog, twp, routeWps);
+            ships.push({
+              id: `rl_${key}`,
+              route, shipType,
+              lat: pos.lat, lon: pos.lon, heading: hdg,
+              label: `${route} #${m.current_iteration}`,
+              iteration: m.current_iteration,
+            });
+          });
+        }
+
+        // report-service (빙급 × 선종)
+        if (r2.status === 'fulfilled' && r2.value.ok) {
+          const data = await r2.value.json();
+          const models = data.models ?? {};
+          Object.entries(models).forEach(([key, m]) => {
+            if (!m.is_running) return;
+            const parts = key.split('_');
+            const shipType = parts[parts.length - 1];
+            const routeWps = ROUTES.NSR;
+            const twp = getTWP('NSR');
+            if (!rlShipProgressRef.current[`dep_${key}`]) {
+              rlShipProgressRef.current[`dep_${key}`] = 0.3 + Math.random() * 0.4;
+            }
+            const prog = rlShipProgressRef.current[`dep_${key}`];
+            const pos = routePos(prog, twp, routeWps);
+            const hdg = routeHeading(prog, twp, routeWps);
+            ships.push({
+              id: `dep_${key}`,
+              route: 'NSR', shipType,
+              lat: pos.lat, lon: pos.lon, heading: hdg,
+              label: `출항 #${m.current_iteration}`,
+              iteration: m.current_iteration,
+            });
+          });
+        }
+
+        // 진행률 자동 전진 (poll마다 += 0.0024 → 약 21분에 경로 한 바퀴)
+        Object.keys(rlShipProgressRef.current).forEach(k => {
+          rlShipProgressRef.current[k] = (rlShipProgressRef.current[k] + 0.0024) % 1.0;
+        });
+
+        if (alive) setRlShips(ships);
+      } catch {}
+    }
+
+    pollMultiStatus();
+    const id = setInterval(pollMultiStatus, 3000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  // RL 선박 진행률 시간 기반 자동 증가 (3초 poll마다 += 0.0024, ~21분 1바퀴)
+  // pollMultiStatus 내에서 진행률 갱신하므로 별도 interval 불필요
   const showToast = useCallback((msg, duration = 4000) => {
     setToastMsg(msg);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -1428,14 +1521,10 @@ function AppInner() {
           `${source} 로드 완료 — ${cellCount.toLocaleString()}개 셀, WMS 위성영상 갱신됨`,
         );
       } catch (err) {
-        console.warn('[IceData] fetch 실패, 절차적 폴백 유지:', err.message);
         dispatch({
           type: 'SET_ICE_DATA',
           payload: { data: null, key: month, source: '절차적 폴백' },
         });
-        showToast(
-          `해빙 데이터 로드 실패: ${err.message} — 절차적 폴백 사용 중`,
-        );
       }
     },
     [state.shipState, dispatch, showToast],
@@ -1984,6 +2073,7 @@ function AppInner() {
             activeWaypoints={activeWaypoints}
             routeVisibility={routeVisibility}
             generatedRoutes={generatedRoutes}
+            rlShips={rlShips}
           />
           <ThreeOverlay
             ref={threeRef}

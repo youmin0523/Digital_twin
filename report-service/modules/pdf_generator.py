@@ -364,8 +364,7 @@ class PdfGenerator:
         plt.close(fig)
         buf.seek(0)
 
-        from reportlab.platypus import Image as RLImage
-        return RLImage(buf, width=160*mm, height=65*mm)
+        return Image(buf, width=160*mm, height=65*mm)
 
     def generate(
         self,

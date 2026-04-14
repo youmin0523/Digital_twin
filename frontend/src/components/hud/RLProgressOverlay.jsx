@@ -27,6 +27,8 @@ export default function RLProgressOverlay() {
   const [status, setStatus]           = useState(null);
   const [iterStatus, setIterStatus]   = useState(null);
   const [multiStatus, setMultiStatus] = useState(null);
+  const [serverUp, setServerUp]       = useState(true);
+  const [lastSeen, setLastSeen]       = useState(null); // last active state snapshot
   const [mode, setMode]               = useState('curriculum');
   const [difficulty, setDifficulty]   = useState('medium');
   const [timesteps, setTimesteps]     = useState(100000);
@@ -39,15 +41,55 @@ export default function RLProgressOverlay() {
 
     async function poll() {
       try {
-        const [r1, r2, r3] = await Promise.all([
+        // RL 서버가 준비됐을 때만 폴링
+        const health = await fetch('/api/health/services').then(r => r.ok ? r.json() : null).catch(() => null);
+        if (!health?.rl) { if (alive) setServerUp(false); return; }
+
+        const [r1, r2, r3] = await Promise.allSettled([
           fetch('/api/rl/status'),
           fetch('/api/rl/train/iterative/status'),
           fetch('/api/rl/multi/status'),
         ]);
-        if (r1.ok && alive) setStatus(await r1.json());
-        if (r2.ok && alive) setIterStatus(await r2.json());
-        if (r3.ok && alive) setMultiStatus(await r3.json());
-      } catch { /* 서버 없으면 숨김 */ }
+        let gotAny = false;
+        let s = null, it = null, ms = null;
+        if (r1.status === 'fulfilled' && r1.value.ok && alive) {
+          s = await r1.value.json(); setStatus(s); gotAny = true;
+        } else if (r1.status === 'fulfilled' && !r1.value.ok) {
+          gotAny = true; // 서버는 살아있으나 아직 준비 중 — 에러 아님
+        }
+        if (r2.status === 'fulfilled' && r2.value.ok && alive) {
+          it = await r2.value.json(); setIterStatus(it); gotAny = true;
+        } else if (r2.status === 'fulfilled' && !r2.value.ok) {
+          gotAny = true;
+        }
+        if (r3.status === 'fulfilled' && r3.value.ok && alive) {
+          ms = await r3.value.json(); setMultiStatus(ms); gotAny = true;
+        } else if (r3.status === 'fulfilled' && !r3.value.ok) {
+          gotAny = true;
+        }
+        if (alive) setServerUp(gotAny);
+
+        // 콘솔 학습 진행 로그
+        if (alive) {
+          if (ms?.is_running) {
+            const cur = ms.running_models ?? 0;
+            const tot = ms.total_models ?? 0;
+            const conv = ms.converged_models ?? 0;
+            console.log(`[빙산회피 RL] 전체 병렬 학습 — 학습중 ${cur}/${tot}개 | 수렴 ${conv}개`);
+          } else if (it?.is_running) {
+            const iter = it.current_iteration ?? 0;
+            const maxIt = it.max_iterations ?? '?';
+            console.log(`[빙산회피 RL] 반복 학습 — ${iter}/${maxIt}번째 진행 중`);
+          } else if (s?.is_training) {
+            const stage = s.current_stage ?? '—';
+            const m = s.agent_status?.metrics ?? {};
+            const pct = m.timestep != null && m.total_timesteps != null
+              ? ((m.timestep / m.total_timesteps) * 100).toFixed(1)
+              : '—';
+            console.log(`[빙산회피 RL] 커리큘럼 학습 — 단계: ${stage} | 진행: ${pct}%`);
+          }
+        }
+      } catch { if (alive) setServerUp(false); }
     }
 
     poll();
@@ -55,10 +97,24 @@ export default function RLProgressOverlay() {
     return () => { alive = false; clearInterval(id); };
   }, []);
 
+  // 학습 중일 때 마지막 상태 스냅샷 저장
+  useEffect(() => {
+    const running = multiStatus?.is_running || iterStatus?.is_running || status?.is_training;
+    if (running) {
+      setLastSeen({
+        multiStatus,
+        iterStatus,
+        status,
+        ts: Date.now(),
+      });
+    }
+  }, [multiStatus, iterStatus, status]);
+
   const isMultiRunning = multiStatus?.is_running ?? false;
   const isIterRunning  = iterStatus?.is_running ?? false;
   const isTraining     = status?.is_training ?? false;
   const anyActive      = isTraining || isIterRunning || isMultiRunning;
+  const wasRunning     = lastSeen != null;
 
   const stage = status?.current_stage ?? null;
   const metrics = status?.agent_status?.metrics ?? {};
@@ -173,6 +229,67 @@ export default function RLProgressOverlay() {
               : (status === null ? '대기' : (STAGE_LABEL[stage] ?? stage ?? '—'))}
         </span>
       </div>
+
+      {/* 서버 다운 배너 */}
+      {!serverUp && wasRunning && (
+        <div style={{
+          marginBottom: 8, padding: '4px 8px',
+          background: 'rgba(239,68,68,0.1)', border: '1px solid #ef444455',
+          borderRadius: 4, fontSize: 9, color: '#fca5a5',
+        }}>
+          ⚠ RL 서버 재연결 중... (학습은 계속 실행 중)
+        </div>
+      )}
+      {!serverUp && !wasRunning && (
+        <div style={{
+          marginBottom: 8, padding: '4px 8px',
+          background: 'rgba(71,85,105,0.3)', border: '1px solid #33415533',
+          borderRadius: 4, fontSize: 9, color: '#64748b',
+        }}>
+          RL 서버 대기 중
+        </div>
+      )}
+
+      {/* 서버 다운 시 마지막 학습 상태 표시 */}
+      {!serverUp && wasRunning && (() => {
+        const ls = lastSeen;
+        const lm = ls.multiStatus;
+        const li = ls.iterStatus;
+        if (lm?.is_running) {
+          const running = Object.values(lm.models ?? {}).filter(m => m.is_running);
+          const best = running[0];
+          return (
+            <div style={{
+              marginBottom: 8, padding: '5px 8px',
+              background: 'rgba(245,158,11,0.06)', border: '1px solid #f59e0b33',
+              borderRadius: 4,
+            }}>
+              <div style={{ fontSize: 9, color: '#f59e0b', marginBottom: 3 }}>마지막 확인 (병렬 학습)</div>
+              <div style={{ fontSize: 10, color: '#fde68a' }}>
+                {lm.running_models ?? 0}/{lm.total_models ?? 84} 실행중 · 수렴 {lm.converged_models ?? 0}개
+              </div>
+              {best && (
+                <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 2 }}>
+                  {best.label ?? best.route} #{best.current_iteration}회
+                </div>
+              )}
+            </div>
+          );
+        }
+        if (li?.is_running) {
+          return (
+            <div style={{
+              marginBottom: 8, padding: '5px 8px',
+              background: 'rgba(167,139,250,0.06)', border: '1px solid #a78bfa33',
+              borderRadius: 4,
+            }}>
+              <div style={{ fontSize: 9, color: '#a78bfa', marginBottom: 2 }}>마지막 확인 (반복 학습)</div>
+              <div style={{ fontSize: 10, color: '#c4b5fd' }}>반복 {li.current_iteration}회</div>
+            </div>
+          );
+        }
+        return null;
+      })()}
 
       {/* 중단 버튼 */}
       {anyActive && (
@@ -300,12 +417,12 @@ export default function RLProgressOverlay() {
         />
       </div>)}
 
-      {/* 학습 설정 (학습 중이 아닐 때) */}
-      {!anyActive && (
-        <div style={{
+      {/* 학습 설정 (항상 표시, 학습 중엔 비활성화) */}
+      <div style={{
           marginTop: 10, padding: 8,
           background: 'rgba(255,255,255,0.03)',
-          borderRadius: 4, border: '1px solid #1e293b',
+          borderRadius: 4, border: `1px solid ${anyActive ? '#334155' : '#1e293b'}`,
+          opacity: anyActive ? 0.6 : 1,
         }}>
           <div style={{ fontSize: 10, color: '#64748b', marginBottom: 5 }}>학습 모드 설정</div>
 
@@ -433,26 +550,30 @@ export default function RLProgressOverlay() {
           )}
 
           {/* 시작 버튼 */}
-          <button onClick={handleStart} style={{
+          <button onClick={anyActive ? undefined : handleStart} disabled={anyActive} style={{
             width: '100%', marginTop: 6, padding: '8px 0',
-            background: mode === 'multi'
-              ? 'linear-gradient(135deg,#d97706,#f59e0b)'
-              : mode === 'iterative'
-                ? 'linear-gradient(135deg,#6d28d9,#4c1d95)'
-                : 'linear-gradient(135deg,#2563eb,#1d4ed8)',
-            border: `1px solid ${mode === 'multi' ? '#f59e0b' : mode === 'iterative' ? '#7c3aed' : '#3b82f6'}`,
-            borderRadius: 4, color: '#fff',
-            fontSize: 11, fontWeight: 'bold', cursor: 'pointer',
+            background: anyActive
+              ? 'rgba(100,116,139,0.3)'
+              : mode === 'multi'
+                ? 'linear-gradient(135deg,#d97706,#f59e0b)'
+                : mode === 'iterative'
+                  ? 'linear-gradient(135deg,#6d28d9,#4c1d95)'
+                  : 'linear-gradient(135deg,#2563eb,#1d4ed8)',
+            border: `1px solid ${anyActive ? '#475569' : mode === 'multi' ? '#f59e0b' : mode === 'iterative' ? '#7c3aed' : '#3b82f6'}`,
+            borderRadius: 4, color: anyActive ? '#64748b' : '#fff',
+            fontSize: 11, fontWeight: 'bold', cursor: anyActive ? 'not-allowed' : 'pointer',
           }}>
-            {mode === 'multi' ? '전체 병렬 학습 시작 (84개)'
-              : mode === 'iterative' ? '반복 학습 시작'
-              : '학습 시작 (Start Training)'}
+            {anyActive
+              ? (isMultiRunning ? '병렬 학습 진행 중...' : isIterRunning ? '반복 학습 진행 중...' : '학습 진행 중...')
+              : mode === 'multi' ? '전체 병렬 학습 시작 (84개)'
+                : mode === 'iterative' ? '반복 학습 시작'
+                : '학습 시작 (Start Training)'}
           </button>
         </div>
-      )}
     </div>
   );
 }
+
 
 function ProgressBar({ pct, color, height = 4 }) {
   return (
