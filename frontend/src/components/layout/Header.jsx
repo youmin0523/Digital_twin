@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import './Header.css';
 
-export default function Header() {
+const NAV_ITEMS = [
+  { id: 'rl_curriculum',  label: 'RL 커리큘럼 학습',  short: 'RL CURR' },
+  { id: 'trend_learning', label: 'Trend Report 학습', short: 'TR LEARN' },
+  { id: 'whatif',         label: 'WHAT-IF SCENARIO',  short: 'WHAT-IF' },
+  { id: 'sar',            label: 'SAR ICEBERG DETECTION', short: 'SAR' },
+  { id: 'trend_report',   label: 'TREND REPORT',      short: 'TREND' },
+  { id: 'fuel',           label: 'FUEL ANALYSIS',     short: 'FUEL' },
+];
+
+export default function Header({ activePanel = null, onSelectPanel = () => {} }) {
   const [kst, setKst] = useState('');
 
   useEffect(() => {
@@ -29,6 +38,25 @@ export default function Header() {
         <span className="dt-header__logo-main">ARCTIC</span>
         <span className="dt-header__logo-sub">DIGITAL TWIN CENTER</span>
       </div>
+
+      <nav className="dt-header__nav">
+        {NAV_ITEMS.map(item => {
+          const active = activePanel === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`dt-header__nav-btn${active ? ' dt-header__nav-btn--active' : ''}`}
+              onClick={() => onSelectPanel(item.id)}
+              title={item.label}
+            >
+              <span className="dt-header__nav-label-full">{item.label}</span>
+              <span className="dt-header__nav-label-short">{item.short}</span>
+            </button>
+          );
+        })}
+      </nav>
+
       <div className="dt-header__status">
         <div className="dt-header__indicator">
           <span className="dt-header__dot dt-header__dot--ok" />

@@ -21,6 +21,7 @@ import RLProgressOverlay from './components/hud/RLProgressOverlay';
 import TrendReportProgressOverlay from './components/hud/TrendReportProgressOverlay';
 import TrendReportPanel from './components/hud/TrendReportPanel';
 import WhatIfPanel from './components/hud/WhatIfPanel';
+import SarTrainingPanel from './components/hud/SarTrainingPanel';
 import FuelAnalysisPanel from './components/hud/FuelAnalysisPanel';
 import Header from './components/layout/Header';
 import Sidebar from './components/layout/Sidebar';
@@ -130,10 +131,17 @@ function AppInner() {
 
   // 텔레포트 오버레이 상태
   const [teleportOpen, setTeleportOpen] = useState(false);
-  // Trend Report 패널 상태
-  const [trendReportOpen, setTrendReportOpen] = useState(false);
-  // ML 연료 분석 패널 상태
-  const [fuelAnalysisOpen, setFuelAnalysisOpen] = useState(false);
+
+  // 상단바 메뉴에서 제어하는 활성 패널
+  // 'rl_curriculum' | 'trend_learning' | 'whatif' | 'sar' | 'trend_report' | 'fuel' | null
+  const [activePanel, setActivePanel] = useState(null);
+  const handleSelectPanel = useCallback((id) => {
+    setActivePanel(prev => (prev === id ? null : id));
+  }, []);
+  const trendReportOpen = activePanel === 'trend_report';
+  const fuelAnalysisOpen = activePanel === 'fuel';
+  const toggleTrendReport = useCallback(() => handleSelectPanel('trend_report'), [handleSelectPanel]);
+  const toggleFuelAnalysis = useCallback(() => handleSelectPanel('fuel'), [handleSelectPanel]);
 
   // 토스트 알림 상태
   const [toastMsg, setToastMsg] = useState('');
@@ -2082,7 +2090,7 @@ function AppInner() {
   return (
     <div className="dt-app">
       {/* ═══ Header ═══ */}
-      <Header />
+      <Header activePanel={activePanel} onSelectPanel={handleSelectPanel} />
 
       {/* ═══ Main Area (Sidebar + Viewport) ═══ */}
       <div className="dt-main">
@@ -2213,19 +2221,24 @@ function AppInner() {
           <div id="banner" />
           <div id="gebco-depth-popup" />
 
-          {/* RL 커리큘럼 학습 진행 오버레이 */}
-          <div style={{ position: 'absolute', left: 10, top: 10, zIndex: 300, display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 8, maxHeight: 'calc(100vh - 20px)' }}>
-            <RLProgressOverlay />
-            <TrendReportProgressOverlay />
-          </div>
-          <TrendReportPanel open={trendReportOpen} onToggle={() => setTrendReportOpen(o => !o)} />
+          {/* 상단바 메뉴에서 토글되는 패널들 */}
+          {(activePanel === 'rl_curriculum' || activePanel === 'trend_learning') && (
+            <div style={{ position: 'absolute', left: 10, top: 10, zIndex: 300, display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 8, maxHeight: 'calc(100vh - 20px)' }}>
+              {activePanel === 'rl_curriculum' && <RLProgressOverlay />}
+              {activePanel === 'trend_learning' && <TrendReportProgressOverlay />}
+            </div>
+          )}
+          <TrendReportPanel open={trendReportOpen} onToggle={toggleTrendReport} />
           <FuelAnalysisPanel
             open={fuelAnalysisOpen}
-            onToggle={() => setFuelAnalysisOpen(o => !o)}
+            onToggle={toggleFuelAnalysis}
             currentRoute={state.currentRouteKey}
             shipSpecs={state.shipSpecs}
           />
-          <WhatIfPanel route={state.currentRouteKey} iceClass={state.shipSpecs?.iceClass || 'PC5'} />
+          {activePanel === 'whatif' && (
+            <WhatIfPanel route={state.currentRouteKey} iceClass={state.shipSpecs?.iceClass || 'PC5'} />
+          )}
+          {activePanel === 'sar' && <SarTrainingPanel />}
         </div>
 
         {/* ═══ Right Sidebar — 좌측 Sidebar와 대칭 구조 (static flex item) ═══ */}
@@ -2325,9 +2338,9 @@ function AppInner() {
         onRouteChange={handleRouteChange}
         onReset={handleResetEvaluation}
         trendReportOpen={trendReportOpen}
-        onTrendReportToggle={() => setTrendReportOpen(o => !o)}
+        onTrendReportToggle={toggleTrendReport}
         fuelAnalysisOpen={fuelAnalysisOpen}
-        onFuelAnalysisToggle={() => setFuelAnalysisOpen(o => !o)}
+        onFuelAnalysisToggle={toggleFuelAnalysis}
         araon={araonInfo}
       />
 
