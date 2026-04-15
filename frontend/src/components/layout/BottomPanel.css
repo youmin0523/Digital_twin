@@ -143,6 +143,15 @@
   overflow: hidden;
 }
 
+/* 컴팩트 모드: 행 간격·line-height 타이트하게 (Service Info 컬럼 전용) */
+.bp-info-stack--compact {
+  gap: 1px;
+}
+.bp-info-stack--compact .bp-row {
+  line-height: 1.22;
+  padding: 0;
+}
+
 /* ── Data Row ── */
 .bp-row {
   display: flex;

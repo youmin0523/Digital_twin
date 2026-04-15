@@ -18,6 +18,7 @@ export default function Minimap({
   onOpenTeleport,
   departurePort,
   arrivalPort,
+  araonPos, // { lat, lon, status }
 }) {
   const canvasRef = useRef(null);
   const [blink, setBlink] = useState(true);
@@ -30,7 +31,17 @@ export default function Minimap({
   useEffect(() => {
     drawMinimap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shipPos?.lat, shipPos?.lon, progress, heading, blink, waypoints]);
+  }, [
+    shipPos?.lat,
+    shipPos?.lon,
+    progress,
+    heading,
+    blink,
+    waypoints,
+    araonPos?.lat,
+    araonPos?.lon,
+    araonPos?.status,
+  ]);
 
   function drawMinimap() {
     const canvas = canvasRef.current;
@@ -131,7 +142,7 @@ export default function Minimap({
     ctx.fillStyle = '#60a5fa';
     ctx.fill();
 
-    // 현재 위치
+    // 현재 위치 (본선)
     const p = latLonToMM(lat, lon);
     const inCircle = Math.hypot(p.x - cx, p.y - cy) <= R;
     if (inCircle) {
@@ -156,6 +167,34 @@ export default function Minimap({
       ctx.font = '8px Courier New';
       ctx.textAlign = 'center';
       ctx.fillText('\u25bc ' + lat.toFixed(1) + '\u00b0N', cx, H - 6);
+    }
+
+    // 🚢 아라온 마커 — 평소 노랑, 호위 중엔 주황
+    if (
+      araonPos &&
+      typeof araonPos.lat === 'number' &&
+      typeof araonPos.lon === 'number'
+    ) {
+      const ap = latLonToMM(araonPos.lat, araonPos.lon);
+      const inCircleA = Math.hypot(ap.x - cx, ap.y - cy) <= R;
+      if (inCircleA) {
+        const isEscorting = araonPos.status === 'escorting';
+        const mainColor = isEscorting ? '#fb923c' : '#facc15'; // 주황 vs 노랑
+        const ringColor = isEscorting
+          ? 'rgba(251,146,60,0.4)'
+          : 'rgba(250,204,21,0.4)';
+        // 외곽 링
+        ctx.beginPath();
+        ctx.arc(ap.x, ap.y, 6, 0, Math.PI * 2);
+        ctx.strokeStyle = ringColor;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // 본체 점
+        ctx.beginPath();
+        ctx.arc(ap.x, ap.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = mainColor;
+        ctx.fill();
+      }
     }
 
     ctx.textAlign = 'left';

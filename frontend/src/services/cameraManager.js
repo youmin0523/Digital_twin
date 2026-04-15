@@ -105,13 +105,6 @@ export function computeTargetCamera(params) {
       : 0.04;
   state.fovCurrent += (state.fovTarget - state.fovCurrent) * fovLerpRate;
 
-  if (currentMode === 'BRIDGE') {
-    // BRIDGE 모드(자동·수동 모두): cameraPivot3 계층으로 처리 → applyCamera()에서 담당
-    tCamera.fov = isManual ? state.fovCurrent : 75;
-    tCamera.updateProjectionMatrix();
-    return;
-  }
-
   if (currentMode === 'FOLLOW') {
     // FOLLOW는 updateFollowCamera()가 전담 — FOV만 여기서 설정
     tCamera.fov = 65;
@@ -120,7 +113,7 @@ export function computeTargetCamera(params) {
   }
 
   if (!isManual) {
-    tCamera.fov = currentMode === 'BRIDGE' ? 75 : 65;
+    tCamera.fov = 65;
     const fast = keys['ShiftLeft'] || keys['ShiftRight'];
     const spd = 300 * (fast ? 5 : 1);
 
@@ -203,52 +196,7 @@ export function applyCamera(params) {
     shipMesh3.position.y = shipHeave;
   }
 
-  // ── 2. 선교 창틀 오버레이 CSS tilt ────────────────────────────────
-  const bridgeFrame = document.getElementById('bridge-frame');
-  if (bridgeFrame) {
-    if (currentMode === 'BRIDGE' && isManual)
-      bridgeFrame.style.transform = `rotate(${(shipRoll + impactRoll) * 0.3}rad)`;
-    else bridgeFrame.style.transform = '';
-  }
-
-  // ── 3. BRIDGE 모드(자동·수동 모두): cameraPivot3 계층에 붙임 ─────
-  if (currentMode === 'BRIDGE') {
-    if (!state.cameraInShip) {
-      cameraPivot3.add(tCamera);
-      state.cameraInShip = true;
-    }
-    // 줌에 따른 선교 위치 (cameraPivot3 로컬)
-    const zR =
-      state.zoomCurrent > 0 ? state.zoomCurrent / ZOOM_MAX : -state.zoomCurrent / ZOOM_MIN;
-    const camH = isManual
-      ? state.zoomCurrent >= 0
-        ? 18 + zR * 120
-        : Math.max(10, 18 - zR * 13)
-      : 18;
-    cameraPivot3.position.set(
-      0,
-      camH,
-      isManual ? Math.min(80, Math.max(-75, -10 + state.zoomCurrent)) : -10,
-    );
-    // 마우스 시야 — 수동: manViewYaw/Pitch, 자동: camYaw/camPitch (mouse drag)
-    const pivotYaw = isManual ? state.manViewYaw : state.camYaw;
-    const pivotPitch = isManual ? state.manViewPitch : state.camPitch;
-    cameraPivot3.rotation.order = 'YXZ';
-    cameraPivot3.rotation.y = pivotYaw;
-    cameraPivot3.rotation.x = pivotPitch;
-    cameraPivot3.rotation.z = 0;
-    // 카메라 자체는 완전히 고정
-    tCamera.position.set(0, 0, 0);
-    tCamera.rotation.set(0, 0, 0);
-    if (state.screenShakeT > 0) {
-      const amp = state.screenShakeT * 10;
-      tCamera.position.x += (Math.random() - 0.5) * amp;
-      tCamera.position.y += (Math.random() - 0.5) * amp * 0.5;
-    }
-    return;
-  }
-
-  // ── 4. FOLLOW/자유 모드: 카메라를 세계좌표(tScene)로 복귀 ──────────
+  // ── 2. FOLLOW/자유 모드: 카메라를 세계좌표(tScene)로 복귀 ──────────
   if (state.cameraInShip) {
     tScene.add(tCamera);
     state.cameraInShip = false;
