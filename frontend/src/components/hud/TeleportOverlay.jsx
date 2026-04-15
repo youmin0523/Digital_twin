@@ -24,6 +24,7 @@ const DEFAULT_PRESETS = [
  *   waypoints    - Array<{ lat, lon, ... }> route waypoints
  *   shipPos      - { lat, lon } current ship position
  *   heading      - radians
+ *   araonPos     - { lat, lon, status? } 아라온 현재 위치 (옵션)
  *   presets      - optional preset list (defaults to NSR presets)
  *   onTeleport   - (lat, lon, name?) => void
  *   onClose      - () => void
@@ -33,6 +34,7 @@ export default function TeleportOverlay({
   waypoints,
   shipPos,
   heading,
+  araonPos,
   presets,
   onTeleport,
   onClose,
@@ -66,7 +68,7 @@ export default function TeleportOverlay({
         drawMap();
       });
     }
-  }, [visible, mapLoaded, waypoints, shipPos, heading, toPixel]);
+  }, [visible, mapLoaded, waypoints, shipPos, heading, araonPos, toPixel]);
 
   /* ---------- draw the teleport map ---------- */
   const drawMap = useCallback(() => {
@@ -174,10 +176,52 @@ export default function TeleportOverlay({
     ctx.strokeStyle = '#ef4444';
     ctx.lineWidth = 3;
     ctx.stroke();
+
+    // ── 🚢 아라온 마커 ──────────────────────────────────────
+    if (araonPos && typeof araonPos.lat === 'number') {
+      const ap = toPixel(araonPos.lat, araonPos.lon, W, H);
+      // 외곽 글로우 링
+      ctx.beginPath();
+      ctx.arc(ap.x, ap.y, 14, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(250, 204, 21, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // 본체 점 (노란색)
+      ctx.beginPath();
+      ctx.arc(ap.x, ap.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#facc15';
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = '#facc15';
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // 테두리
+      ctx.beginPath();
+      ctx.arc(ap.x, ap.y, 6, 0, Math.PI * 2);
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // 라벨 "🚢 아라온"
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillStyle = '#facc15';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.shadowBlur = 3;
+      ctx.shadowColor = '#000';
+      const labelX = ap.x + 12;
+      const labelY = ap.y - 10;
+      ctx.fillText('🚢 아라온', labelX, labelY);
+      if (araonPos.status) {
+        ctx.font = '9px sans-serif';
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillText(araonPos.status, labelX, labelY + 12);
+      }
+      ctx.shadowBlur = 0;
+    }
   }, [
     waypoints,
     shipPos,
     heading,
+    araonPos,
     teleportPresets,
     toPixel,
     mapLoaded,

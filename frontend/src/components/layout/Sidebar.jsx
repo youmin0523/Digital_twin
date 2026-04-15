@@ -12,7 +12,6 @@ const ROUTE_META = [
 ];
 
 const VIEW_MODES = [
-  { key: 'BRIDGE', label: '선교 1인칭' },
   { key: 'FOLLOW', label: '선미 추적' },
   { key: 'SATELLITE', label: '위성 조감' },
   { key: 'WIDE', label: '광역 항로' },
@@ -87,7 +86,7 @@ export default function Sidebar({
 
   const handleViewMode = (mode) => {
     onModeChange(mode);
-    // 수동 조종 중에도 BRIDGE/FOLLOW로 뷰를 전환할 수 있도록 manualMode를 유지
+    // 수동 조종 중에도 FOLLOW로 뷰를 전환할 수 있도록 manualMode를 유지
   };
 
   return (

@@ -627,7 +627,10 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult, specs, araon })
   return (
     <div className="bp-content bp-content--service">
       <SpeedGauge speed={hud.speed} />
-      <div className="bp-info-stack" style={{ minWidth: 140 }}>
+      <div
+        className="bp-info-stack bp-info-stack--compact"
+        style={{ minWidth: 140, paddingTop: 4 }}
+      >
         <DataRow
           label="침로"
           value={
@@ -904,10 +907,6 @@ export default function BottomPanel({
   currentRoute,
   onRouteChange,
   onReset,
-  trendReportOpen,
-  onTrendReportToggle,
-  fuelAnalysisOpen,
-  onFuelAnalysisToggle,
   araon,
 }) {
   return (
@@ -940,50 +939,7 @@ export default function BottomPanel({
         {/* 우: Service */}
         <div className="bp-section">
           <div className="bp-section__title bp-section__title--centered">
-            {/* TREND REPORT 토글 — 타이틀 좌측 absolute */}
-            <button
-              onClick={onTrendReportToggle}
-              style={{
-                position: 'absolute',
-                left: 8,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                padding: '2px 8px',
-                background: trendReportOpen ? 'rgba(37,99,235,0.35)' : 'transparent',
-                border: `1px solid ${trendReportOpen ? '#3b82f6' : '#1e3a8a'}`,
-                borderRadius: 3,
-                color: trendReportOpen ? '#93c5fd' : '#4a6490',
-                fontSize: 9,
-                fontWeight: 700,
-                letterSpacing: 0.5,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              TREND REPORT {trendReportOpen ? '▲' : '▼'}
-            </button>
-            {/* FUEL ANALYSIS 토글 — TREND REPORT 옆 */}
-            <button
-              onClick={onFuelAnalysisToggle}
-              style={{
-                position: 'absolute',
-                left: 118,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                padding: '2px 8px',
-                background: fuelAnalysisOpen ? 'rgba(245,158,11,0.35)' : 'transparent',
-                border: `1px solid ${fuelAnalysisOpen ? '#f59e0b' : '#1e3a8a'}`,
-                borderRadius: 3,
-                color: fuelAnalysisOpen ? '#fbbf24' : '#4a6490',
-                fontSize: 9,
-                fontWeight: 700,
-                letterSpacing: 0.5,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              FUEL ANALYSIS {fuelAnalysisOpen ? '▲' : '▼'}
-            </button>
+            {/* TREND REPORT / FUEL ANALYSIS 토글은 상단 메뉴로 이동해 중복 제거됨 */}
             Ship Service Info
             {/* //* [Modified Code] 초기화 아이콘 버튼 */}
             <button

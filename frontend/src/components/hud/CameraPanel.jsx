@@ -1,7 +1,6 @@
 import React from 'react';
 
 const CAMERA_MODES = [
-  { mode: 'BRIDGE', label: '선교 1인칭' },
   { mode: 'FOLLOW', label: '선미 추적' },
   { mode: 'SATELLITE', label: '위성 조감' },
   { mode: 'WIDE', label: '광역 항로' },
