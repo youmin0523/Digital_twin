@@ -4,14 +4,14 @@
 // ═══════════════════════════════════════════════════════════════
 
 export const SHIP_PRESETS = {
-  icebreaker: {
-    type: 'icebreaker',
-    disp: 20000,
-    len: 160,
-    width: 30,
-    gm: 3.2,
-    iceClass: 'PC2',
-    draft: 8.5,
+  bulk: {
+    type: 'bulk',
+    disp: 55000,
+    len: 225,
+    width: 32,
+    gm: 3.8,
+    iceClass: 'Arc4',
+    draft: 14.5,
   },
   lng: { type: 'lng', disp: 95000, len: 295, width: 46, gm: 5.1, iceClass: 'PC4', draft: 12.0 },
   container: {
