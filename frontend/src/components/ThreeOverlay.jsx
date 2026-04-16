@@ -780,7 +780,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
 
   // -- Ship --
   const buildShip = useCallback(
-    (shipType = 'icebreaker') => {
+    (shipType = 'bulk') => {
       const { scene } = ctx.current;
       if (ctx.current.shipGroup3) {
         scene.remove(ctx.current.shipGroup3);
@@ -845,71 +845,69 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
         gold: matScale(0xb45309, 0.9, 0.1), // 안테나/센서용
       };
 
-      if (shipType === 'icebreaker') {
-        // 🧊 [ICEBREAKER] 육중하고 강인한 쇄빙선
-        // 선체 보정: 더 날카로운 선수와 육중한 볼륨
-        mkH(new THREE.BoxGeometry(32, 12, 170), C.iceRed, 0, 0, 10);
-        mkH(new THREE.BoxGeometry(33, 5, 175), C.iceDark, 0, -6, 5);
+      if (shipType === 'bulk') {
+        // 🚢 [BULK CARRIER] 대형 벌크선 — 빨간 선체 + 화물창 커버 + 선미 거주구역
+        // 사진 레퍼런스: Capesize/Supramax 벌크 캐리어
 
-        // 쇄빙용 특수 선수 (Spoon Bow 스타일)
-        for (let i = 0; i < 5; i++) {
-          const s = 1 - i * 0.15;
-          mkH(
-            new THREE.BoxGeometry(32 * s, 3, 15),
-            C.iceRed,
-            0,
-            -1 - i * 1.5,
-            -80 - i * 4,
-          );
+        // ── 선체 (짙은 빨강/검정, 넓고 낮음) ──
+        const bulkHull = matScale(0x8b1a1a, 0.5, 0.4);    // 짙은 빨강
+        const bulkBottom = matScale(0x3a0e0e, 0.6, 0.3);  // 흘수선 아래 어두운 빨강
+        const bulkDeck = matScale(0x2d3748, 0.3, 0.6);    // 갑판 회색
+        const holdCover = matScale(0xb91c1c, 0.3, 0.5);   // 화물창 커버 빨강
+        const holdFrame = matScale(0x1e293b, 0.4, 0.4);   // 화물창 프레임
+
+        // 메인 선체
+        mkH(new THREE.BoxGeometry(36, 14, 230), bulkHull, 0, 0, 0);
+        mkH(new THREE.BoxGeometry(37, 6, 235), bulkBottom, 0, -8, 0);
+
+        // 선수 (일반 상선 뱃머리 — V형)
+        mkH(new THREE.CylinderGeometry(0, 20, 40, 4), bulkHull, 0, -2, -120, 0, Math.PI / 4);
+        mkH(new THREE.BoxGeometry(30, 8, 20), bulkHull, 0, 3, -115);
+        // 선수루 (forecastle)
+        mkH(new THREE.BoxGeometry(34, 5, 25), bulkDeck, 0, 9, -105);
+
+        // 갑판
+        mkH(new THREE.BoxGeometry(36, 1, 230), bulkDeck, 0, 7.5, 0);
+
+        // ── 화물창 커버 (6개, 빨간 직사각형 해치) ──
+        for (let i = 0; i < 6; i++) {
+          const pz = -80 + i * 30;
+          // 화물창 커버 본체
+          mkH(new THREE.BoxGeometry(28, 3, 24), holdCover, 0, 9.5, pz);
+          // 커버 프레임 (테두리)
+          mkH(new THREE.BoxGeometry(30, 0.5, 26), holdFrame, 0, 11.2, pz);
+          // 커버 중앙선
+          mkH(new THREE.BoxGeometry(0.8, 3.5, 24), holdFrame, 0, 9.5, pz);
         }
-        mkH(
-          new THREE.CylinderGeometry(0, 18, 30, 4),
-          C.iceRed,
-          0,
-          0,
-          -95,
-          0,
-          Math.PI / 4,
-        );
 
-        // 상부 구조물: 레이어드 디자인
-        mkU(new THREE.BoxGeometry(26, 12, 60), C.white, 0, 12, -30);
-        mkU(new THREE.BoxGeometry(24, 8, 40), C.white, 0, 22, -35); // 2단
-        mkU(new THREE.BoxGeometry(30, 6, 20), C.white, 0, 28, -45); // 브릿지 윙 확장
-        mkU(new THREE.BoxGeometry(28, 4, 18), C.window, 0, 28.5, -46); // 파노라마 창
-
-        // 정밀 마스트 및 레이더
-        mkU(new THREE.CylinderGeometry(0.8, 1.2, 25, 8), C.dark, 0, 40, -40);
-        for (let i = 0; i < 3; i++) {
-          mkU(
-            new THREE.BoxGeometry(10 - i * 2, 0.5, 3),
-            C.dark,
-            0,
-            35 + i * 5,
-            -40,
-          ); // 마스트 횡단보도
-        }
-        // 회전 레이더 가이드
-        mkU(new THREE.BoxGeometry(8, 1, 2), C.gold, 0, 52, -40);
-
-        // 선미 헬기 데크 및 안전 난간
-        mkH(new THREE.BoxGeometry(30, 1, 50), C.deck, 0, 6.5, 60);
-        mkH(
-          new THREE.BoxGeometry(20, 0.1, 20),
-          C.white,
-          0,
-          7.1,
-          60,
-          0,
-          Math.PI / 4,
-        ); // 정교한 H
+        // ── 갑판 통로 (좌우 난간) ──
         for (let i = -1; i <= 1; i += 2) {
-          mkH(new THREE.BoxGeometry(0.5, 2, 50), C.dark, 14.5 * i, 8, 60); // 난간
+          mkH(new THREE.BoxGeometry(0.5, 2.5, 200), C.dark, 17 * i, 9, -10);
         }
 
-        // 대형 크레인 (Hydraulic 스타일)
-        mkU(new THREE.CylinderGeometry(2, 2.5, 6, 12), C.dark, 8, 8, 20);
-        mkU(new THREE.BoxGeometry(1.5, 1.5, 45), C.dark, 8, 18, 40, 0.5);
+        // ── 선미 거주구역 (흰색, 다층) ──
+        mkU(new THREE.BoxGeometry(34, 20, 40), C.white, 0, 18, 85);
+        mkU(new THREE.BoxGeometry(36, 3, 38), C.white, 0, 30, 84);  // 브릿지 데크
+        mkU(new THREE.BoxGeometry(38, 5, 22), C.white, 0, 33, 78);  // 브릿지 윙
+        mkU(new THREE.BoxGeometry(36, 3, 20), C.window, 0, 33.5, 77); // 브릿지 창
+
+        // 층간 라인 (각 층 구분)
+        for (let i = 0; i < 4; i++) {
+          mkU(new THREE.BoxGeometry(34.5, 0.5, 40), bulkDeck, 0, 10 + i * 5, 85);
+        }
+
+        // ── 펀넬 (연돌) ──
+        mkU(new THREE.BoxGeometry(8, 14, 8), C.white, 0, 38, 95);
+        mkU(new THREE.BoxGeometry(8.5, 2, 8.5), C.dark, 0, 44.5, 95);  // 상단 검정 띠
+        mkU(new THREE.BoxGeometry(6, 1, 6), matScale(0xef4444, 0.3, 0.5), 0, 42, 95);  // 빨간 라인
+
+        // ── 마스트 ──
+        mkU(new THREE.CylinderGeometry(0.6, 0.8, 20, 8), C.dark, 0, 43, 78);
+        mkU(new THREE.BoxGeometry(8, 0.5, 2), C.dark, 0, 50, 78);   // 레이더 가이드
+        mkU(new THREE.BoxGeometry(6, 0.5, 1.5), C.gold, 0, 53, 78); // 안테나
+
+        // 선수 마스트
+        mkH(new THREE.CylinderGeometry(0.5, 0.7, 15, 8), C.dark, 0, 16, -100);
       } else if (shipType === 'lng') {
         // 🛢 [LNG CARRIER] 압도적인 크기의 에너지 운반선
         // 거대 선체 (Freeboard가 높음)
@@ -1205,6 +1203,9 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
         };
       }
 
+      // 육지: 반투명 평면으로 "저기 육지다" 감각만 제공.
+      // 높이 2 유닛, 수면 아래(y=-1) 배치 → 선박과 절대 충돌 안 함.
+      // opacity 0.18 → 물 위에 은은한 녹색 윤곽. 조악한 벽 느낌 제거.
       function addLand(lat1, lon1, lat2, lon2, h, color) {
         const p1 = ll(lat1, lon1);
         const p2 = ll(lat2, lon2);
@@ -1213,43 +1214,74 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
         if (w < 100 || d < 100) return;
         const geo = trackDisposable(new THREE.BoxGeometry(w, h, d));
         const mat = trackDisposable(
-          new THREE.MeshPhongMaterial({ color, shininess: 5 }),
+          new THREE.MeshStandardMaterial({
+            color,
+            roughness: 0.9,
+            metalness: 0.0,
+            transparent: true,
+            opacity: 0.18,
+            depthWrite: false,
+          }),
         );
         const m = new THREE.Mesh(geo, mat);
-        m.position.set((p1.x + p2.x) / 2, h / 2, (p1.z + p2.z) / 2);
-        m.receiveShadow = true;
+        // 윗면 y=-1 (수면 아래) → 파도 메쉬 아래에서 은은하게 비침
+        m.position.set((p1.x + p2.x) / 2, -h / 2 - 1, (p1.z + p2.z) / 2);
+        m.renderOrder = -1; // 바다보다 먼저 렌더 → 블렌딩 자연스럽게
         landGroup.add(m);
       }
 
+      // ── 해안 1단 (얇고 넓음, 어두운 녹색) ──
       // Korean Peninsula
-      addLand(34.0, 126.0, 38.5, 130.0, 800, 0x3a5a2a);
+      addLand(34.0, 126.0, 38.5, 130.0, 6, 0x2a3f22);
+      addLand(37.5, 125.5, 39.5, 127.0, 10, 0x354a2c); // 내륙 고지
       // Japan Honshu
-      addLand(33.0, 130.0, 40.0, 142.0, 1200, 0x3a5a2a);
+      addLand(33.0, 130.0, 40.0, 142.0, 6, 0x2a3f22);
+      addLand(35.0, 136.0, 38.0, 141.0, 12, 0x354a2c); // 중앙 산지
       // Hokkaido
-      addLand(41.5, 140.0, 45.5, 145.5, 900, 0x3a5a2a);
+      addLand(41.5, 140.0, 45.5, 145.5, 6, 0x2a3f22);
+      addLand(42.5, 142.0, 44.5, 144.5, 10, 0x3a5030);
       // Russian Primorsky
-      addLand(42.0, 130.0, 55.0, 145.0, 600, 0x4a6a3a);
+      addLand(42.0, 130.0, 55.0, 145.0, 5, 0x2a3822);
+      addLand(45.0, 132.0, 53.0, 142.0, 9, 0x334528);
       // Russian Chukchi / East Siberia
-      addLand(60.0, 160.0, 72.0, 180.0, 500, 0x5a6a4a);
-      addLand(60.0, -180.0, 70.0, -160.0, 500, 0x5a6a4a);
+      addLand(60.0, 160.0, 72.0, 180.0, 5, 0x3a4535);
+      addLand(63.0, 165.0, 70.0, 178.0, 8, 0x454f40);
+      addLand(60.0, -180.0, 70.0, -160.0, 5, 0x3a4535);
       // Kamchatka
-      addLand(51.0, 156.0, 60.0, 163.0, 1500, 0x4a6a3a);
+      addLand(51.0, 156.0, 60.0, 163.0, 8, 0x3a4530);
+      addLand(53.0, 157.5, 58.0, 161.0, 14, 0x4a5540); // 화산 산맥
       // Alaska
-      addLand(60.0, -168.0, 71.0, -141.0, 800, 0x5a6a4a);
+      addLand(60.0, -168.0, 71.0, -141.0, 6, 0x3f4a38);
+      addLand(62.0, -155.0, 68.0, -148.0, 12, 0x4a5540); // 내륙
       // Greenland
-      addLand(60.0, -50.0, 83.0, -18.0, 2000, 0x8a9a9a);
+      addLand(60.0, -50.0, 83.0, -18.0, 8, 0x6a7a78);
+      addLand(64.0, -46.0, 80.0, -25.0, 15, 0x8a9a95); // 빙상 고원
       // Norway / Scandinavia
-      addLand(57.0, 5.0, 71.0, 30.0, 800, 0x3a5a2a);
+      addLand(57.0, 5.0, 71.0, 30.0, 6, 0x2a3f22);
+      addLand(60.0, 7.0, 69.0, 18.0, 12, 0x3a4a30); // 피오르드 산맥
       // Svalbard
-      addLand(76.5, 14.0, 80.5, 28.0, 500, 0x8a9a8a);
+      addLand(76.5, 14.0, 80.5, 28.0, 6, 0x6a7a72);
+      addLand(77.5, 16.0, 79.5, 24.0, 10, 0x8a9a8a);
       // United Kingdom
-      addLand(50.0, -6.0, 59.0, 2.0, 400, 0x3a5a2a);
+      addLand(50.0, -6.0, 59.0, 2.0, 5, 0x2a3f22);
       // Netherlands / German coast
-      addLand(51.0, 3.0, 54.0, 10.0, 100, 0x4a6a3a);
+      addLand(51.0, 3.0, 54.0, 10.0, 3, 0x354a2c);
       // Iceland
-      addLand(63.5, -24.0, 66.5, -13.0, 600, 0x6a7a6a);
+      addLand(63.5, -24.0, 66.5, -13.0, 6, 0x4a5a4a);
+      addLand(64.0, -21.0, 66.0, -16.0, 11, 0x5a6a5a); // 중앙 고지
       // Northern Canada
-      addLand(70.0, -100.0, 78.0, -60.0, 400, 0x5a6a4a);
+      addLand(70.0, -100.0, 78.0, -60.0, 5, 0x3f4a3a);
+      addLand(72.0, -90.0, 76.0, -70.0, 10, 0x4a5545);
+      // Novaya Zemlya
+      addLand(70.5, 50.0, 77.0, 60.0, 6, 0x5a6a60);
+      // Franz Josef Land
+      addLand(79.5, 44.0, 81.5, 62.0, 5, 0x7a8a80);
+      // Severnaya Zemlya
+      addLand(78.0, 90.0, 81.5, 107.0, 5, 0x6a7a70);
+      // New Siberian Islands
+      addLand(73.0, 135.0, 76.0, 150.0, 4, 0x5a6a55);
+      // Wrangel Island (아라온 정박지)
+      addLand(70.5, 178.5, 71.5, -178.0, 4, 0x5a6a55);
 
       scene.add(landGroup);
       ctx.current.landGroup = landGroup;
@@ -1467,7 +1499,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
       Tp = st.Tp;
     }
     c.lastWaveSource = waveSource;
-    c.motionWavePhase += dt * ((2 * Math.PI) / Tp);
+    c.motionWavePhase = (c.motionWavePhase + dt * ((2 * Math.PI) / Tp)) % (Math.PI * 200);
 
     const zetaR = 0.05;
     const zetaP = 0.04;
@@ -1529,7 +1561,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
       // 호위 받으면 effective thickness 가 낮아졌을 것 — 추가 감쇠
       const effH = isEscorted ? h * 0.55 : h;
 
-      c.iceMotionPhase += dt * 1.2; // 램 사이클 속도
+      c.iceMotionPhase = (c.iceMotionPhase + dt * 1.2) % (Math.PI * 200);
 
       if (effH < 0.8) {
         // 얇은 얼음: 거의 자연 항해
@@ -1912,7 +1944,8 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
 
     // Scene
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x7a9fb5, 0.000085);
+    // 수평선 안개 — 먼 거리 자연스럽게 흐려지고 북극 분위기 연출
+    scene.fog = new THREE.FogExp2(0x7a9fb5, 0.00012);
     ctx.current.scene = scene;
 
     // Camera
@@ -2189,6 +2222,8 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
   // ── 자체 렌더 루프: visible일 때만 실행 ────────────────────────────────
   useEffect(() => {
     if (!visible) return;
+    // 육지 다시 표시 (높이 6~15 로 낮춰 해안선 실루엣으로 정리됨)
+    if (ctx.current.landGroup) ctx.current.landGroup.visible = true;
     let rafId;
     let lastMotionTs = 0;
     function loop(now) {
@@ -2202,14 +2237,25 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
 
         // Ship motion (roll/pitch/heave) — 모드와 무관하게 항상 업데이트.
         // realWaveInput 이 있으면 실제 파고/파향 사용, 없으면 위도 합성.
-        {
-          const motionDt = lastMotionTs === 0 ? 0.016 : Math.min(0.1, (now - lastMotionTs) / 1000);
-          lastMotionTs = now;
-          const shipLat = (shipState && typeof shipState.lat === 'number')
-            ? shipState.lat
-            : 70;
-          updateShipMotion(motionDt, shipLat);
+        const motionDt = lastMotionTs === 0 ? 0.016 : Math.min(0.1, (now - lastMotionTs) / 1000);
+        lastMotionTs = now;
+        const shipLat = (shipState && typeof shipState.lat === 'number')
+          ? shipState.lat
+          : 70;
+        updateShipMotion(motionDt, shipLat);
+
+        // Foam (뱃머리 물보라) — 선박 이동 시 스프레이 파티클
+        if (shipGroup3) {
+          const hdg = shipGroup3.rotation.y;
+          // 속도 추정: 수동이면 manualSpeed, 아니면 hud 기반 (~15kn ≈ 7.7 m/s)
+          const speedMS = manualMode
+            ? Math.abs(parseFloat(shipState?.manualSpeed) || 0) * 0.5
+            : 7.7;
+          updateFoam(motionDt, -hdg, speedMS, shipGroup3.position);
         }
+
+        // Night mode (극야) — 고위도(82°N+)에서 조명 어둡게
+        updateNightMode(shipLat);
 
         // 부표 그리드를 선박 주변으로 재중심화 (이동해도 항상 부표가 보이도록)
         if (ctx.current.buoyGroup && shipGroup3) {
@@ -2233,9 +2279,13 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
           const d2 = (sp.x - cx) * (sp.x - cx) + (sp.z - cz) * (sp.z - cz);
           if (d2 > 60000 * 60000) {
             buildIcebergs(sp.x, sp.z);
-            // 위도 체크하여 visible 설정
+            // 위도 60°N 이상일 때만 빙하 표시 (저위도 깜빡임 방지)
+            const curLat = (shipState && typeof shipState.lat === 'number')
+              ? shipState.lat
+              : 70;
+            const showIce = manualMode || curLat >= 60;
             for (const ice of ctx.current.tIcebergs) {
-              ice.grp.visible = true;
+              ice.grp.visible = showIce;
             }
           }
         }

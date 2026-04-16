@@ -235,9 +235,9 @@ function DesignInfoPanel({
         <div className="bp-design__presets">
           <button
             className="bp-design__preset-btn"
-            onClick={() => onPresetLoad('icebreaker')}
+            onClick={() => onPresetLoad('bulk')}
           >
-            쇄빙선
+            벌크선
           </button>
           <button
             className="bp-design__preset-btn"
@@ -509,10 +509,10 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult, specs, araon })
   const handleBadgeLeave = useCallback(() => setTooltipRect(null), []);
 
   // ── 선종 매핑 (shipSpecs.type → API vessel_type) ────────────
-  const vesselTypeMap = { icebreaker: 'icebreaker', lng_tanker: 'lng', container: 'container' };
+  const vesselTypeMap = { bulk: 'bulk', lng_tanker: 'lng', container: 'container' };
   const iceClassCodeMap = { PC2: 2, PC3: 3, PC4: 4, PC5: 5, PC6: 6, PC7: 7, NONE: 0 };
   // 선종별 기본 엔진 출력 (kW)
-  const defaultEnginePower = { icebreaker: 32000, lng_tanker: 37000, container: 28000 };
+  const defaultEnginePower = { bulk: 18000, lng_tanker: 37000, container: 28000 };
 
   // NSR 항로 거리 (해리) — ai-pipeline/config.py 기준
   const routeDistanceNm = { NSR: 7200, NWP: 8100, TSR: 6600 };

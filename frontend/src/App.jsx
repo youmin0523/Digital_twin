@@ -74,6 +74,7 @@ import VoyageEventToast from './components/VoyagePlayback/VoyageEventToast';
 import AraonLiveMarker from './components/VoyagePlayback/AraonLiveMarker';
 import VoyageAutoCam from './components/VoyagePlayback/VoyageAutoCam';
 import ForwardPreviewHUD from './components/hud/ForwardPreviewHUD';
+import FollowMiniMap from './components/hud/FollowMiniMap';
 import VoyageInfoPanel from './components/hud/VoyageInfoPanel';
 import { sampleShipAt, sampleIcebreakersAt } from './services/voyageTrace';
 import {
@@ -203,6 +204,36 @@ function AppInner() {
         lat: ship.position.lat,
         lon: ship.position.lon,
         heading: voyHeading || 0,
+      },
+    });
+
+    // Voyage 모드 HUD 데이터 동기화 (BottomPanel 속도계·상태 표시용)
+    const totalKm = voyage.trace.summary?.total_route_km || 0;
+    const sicVal = h > 0 ? Math.min(1, h / 3) : 0;
+    const phase = ship.km_along_route < 100
+      ? '출항'
+      : ship.position.lat > 66
+        ? '북극 항해 중'
+        : (ship.km_along_route || 0) > 12000
+          ? '입항 접근'
+          : '항해 중';
+    const dangerLabel = rio < -6 ? '위험 🔴' : rio < -3 ? '주의 🟠' : rio < 0 ? '경고 🟡' : '낮음 🟢';
+    const dangerCls = rio < -6 ? 'danger' : rio < -3 ? 'warn' : rio < 0 ? 'caution' : 'safe';
+    dispatch({
+      type: 'UPDATE_HUD',
+      payload: {
+        speed: speedKn.toFixed(1) + ' kn',
+        throttle: '자동 (Voyage)',
+        progress: totalKm > 0
+          ? ((ship.km_along_route || 0) / totalKm * 100).toFixed(1) + '%'
+          : '—',
+        position: ship.position.lat.toFixed(2) + '°N, ' + ship.position.lon.toFixed(2) + '°E',
+        iceState: h > 0.5 ? '결빙 수역' : h > 0.15 ? '해빙 경계' : '개방 수역',
+        phase,
+        danger: dangerLabel,
+        dangerClass: dangerCls,
+        sic: Math.round(sicVal * 100) + '%',
+        rfi: rio.toFixed(1),
       },
     });
 
@@ -2485,6 +2516,17 @@ function AppInner() {
               />
             </>
           )}
+          {/* 선미추적 미니 세계지도 — FOLLOW 뷰에서 지리적 맥락 제공 */}
+          <FollowMiniMap
+            visible={state.currentMode === 'FOLLOW'}
+            shipPos={state.shipState}
+            heading={state.shipState.heading}
+            waypoints={waypoints}
+            departurePort={PORTS[state.departurePort] || PORTS.BUSAN}
+            arrivalPort={PORTS[state.arrivalPort] || PORTS.ROTTERDAM}
+            araonPos={araonDisplayPos}
+          />
+
           {/* VoyageInfoPanel — Voyage/Live 이중 모드, 사용자가 X로 닫을 수 있음 */}
           {infoPanelVisible && (
             <VoyageInfoPanel
