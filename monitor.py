@@ -3,17 +3,31 @@ monitor.py — 강화학습 실시간 진행 모니터
 실행: python monitor.py
 """
 import os, sys, json, glob, time, re
+from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 from urllib import request, error as url_error
+
+
+def _tail(seq: Any, n: int) -> "deque[Any]":
+    """리스트/Any에서 마지막 n개를 반환 (슬라이싱 타입 오류 우회)."""
+    return deque(seq, maxlen=n)
 
 BASE = Path(__file__).parent
 RL_MODELS     = BASE / "rl-pipeline" / "models"
 REPORT_DATA   = BASE / "report-service" / "data"
 SAR_META      = BASE / "backend" / "pipeline" / "models" / "iceberg_yolov8_meta.json"
+SAR_ITER_HIST = BASE / "backend" / "pipeline" / "models" / "iceberg_iterative_history.json"
+FUEL_ITER_HIST = BASE / "ml-pipeline" / "models" / "fuel_iterative_history.json"
+ML_STATE_FILE  = BASE / "ml-pipeline" / "models" / "training_state.json"
+WHATIF_ITER_HIST = BASE / "report-service" / "data" / "whatif_iterative_history.json"
 
 MAX_ITER_RL   = 15      # rl-pipeline 목표 반복 수
 MAX_ITER_DEP  = 15      # report-service 목표 반복 수
+MAX_ITER_SAR  = 3       # SAR YOLOv8 목표 반복 수
+MAX_ITER_FUEL = 5       # Fuel XGBoost 목표 반복 수
+MAX_ITER_WHATIF = 3     # What-if 목표 반복 수
 STEPS_PER_ITER_RL  = 500_000   # easy 100k + medium 200k + hard 200k
 STEPS_PER_ITER_DEP = 250_000   # easy 50k + medium 100k + hard 100k
 REFRESH = 15            # 화면 갱신 주기 (초)
@@ -157,6 +171,69 @@ def read_sar_server():
     return True, api
 
 
+def read_sar_iterative():
+    """SAR YOLOv8 반복 학습 히스토리 + API 상태 읽기."""
+    api = fetch_api("http://127.0.0.1:8003/api/sar/status")
+    server_alive = api is not None
+
+    hist: list[Any] = []
+    if SAR_ITER_HIST.exists():
+        try:
+            hist = list(json.loads(SAR_ITER_HIST.read_text(encoding="utf-8")))
+        except Exception:
+            hist = []
+
+    state = api or {}
+    return server_alive, state, hist
+
+
+def read_ml_training():
+    """ML Training Service(8004) — Fuel + What-if 상태 읽기."""
+    api = fetch_api("http://127.0.0.1:8004/api/ml/status")
+    server_alive = api is not None
+
+    # 디스크 fallback
+    fuel_hist: list[Any] = []
+    whatif_hist: list[Any] = []
+    if FUEL_ITER_HIST.exists():
+        try:
+            fuel_hist = json.loads(FUEL_ITER_HIST.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    if WHATIF_ITER_HIST.exists():
+        try:
+            whatif_hist = json.loads(WHATIF_ITER_HIST.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    fuel_state  = (api or {}).get("fuel", {})
+    whatif_state = (api or {}).get("whatif", {})
+
+    # API가 없으면 디스크 히스토리로 보정
+    if not fuel_state and fuel_hist:
+        best = max(fuel_hist, key=lambda r: r.get("metrics", {}).get("R2", 0))
+        fuel_state = {
+            "is_training": False,
+            "stage": f"완료 (iter {len(fuel_hist)})",
+            "metrics": best.get("metrics", {}),
+            "iteration": len(fuel_hist),
+            "max_iterations": MAX_ITER_FUEL,
+            "mode": "iterative",
+        }
+    if not whatif_state and whatif_hist:
+        best_w = max(whatif_hist, key=lambda r: r.get("quality", {}).get("scenarios_count", 0))
+        whatif_state = {
+            "is_running": False,
+            "stage": f"완료 (iter {len(whatif_hist)})",
+            "iteration": len(whatif_hist),
+            "max_iterations": MAX_ITER_WHATIF,
+            "scenarios_count": best_w.get("quality", {}).get("scenarios_count", 0),
+            "mode": "iterative",
+        }
+
+    return server_alive, fuel_state, whatif_state, fuel_hist, whatif_hist
+
+
 def read_report_service():
     api = fetch_api("http://127.0.0.1:8002/api/report/rl/multi/status")
     server_alive = api is not None
@@ -295,24 +372,135 @@ def render():
     else:
         lines.append(f"  {Y}히스토리 파일 없음 — 아직 첫 iter 진행중{RST}")
 
-    # ── SAR 서버 ─────────────────────────────────────────────
-    sar_alive, sar = read_sar_server()
+    # ── SAR 서버 (반복 학습) ──────────────────────────────────
+    sar_alive, sar, sar_hist = read_sar_iterative()
     sar_status_txt = f"{G}ALIVE{RST}" if sar_alive else f"{DIM}미실행{RST}"
     lines.append(f"\n{BOLD}{W}[ SAR-SERVER  포트 8003 ]  서버: {sar_status_txt}{RST}")
-    lines.append(f"{DIM}  YOLOv8 빙산 탐지 딥러닝{RST}\n")
-    if sar:
-        stage = sar.get("stage", "")
-        prog  = sar.get("progress", 0)
-        err   = sar.get("error")
-        trained_at = sar.get("trained_at", "")
-        if err:
-            lines.append(f"  {R}에러: {err}{RST}")
-        elif prog == 100 or "완료" in stage:
-            lines.append(f"  {G}학습 완료{RST}  {DIM}{trained_at}{RST}")
+    lines.append(f"{DIM}  YOLOv8 빙산 탐지 딥러닝  (자동 반복 최대 {MAX_ITER_SAR}회){RST}\n")
+
+    if sar or sar_hist:
+        sar_stage    = str(sar.get("stage", ""))
+        sar_prog     = int(sar.get("progress", 0) or 0)
+        sar_err      = sar.get("error")
+        sar_cur_iter = int(sar.get("iteration", len(sar_hist)) or 0)
+        sar_max_iter = int(sar.get("max_iterations", MAX_ITER_SAR) or MAX_ITER_SAR)
+        sar_metrics  = dict(sar.get("metrics", {}) or {})
+        sar_trained  = str(sar.get("trained_at", "") or "")
+
+        if sar_err:
+            lines.append(f"  {R}에러: {sar_err}{RST}")
         else:
-            lines.append(f"  진행: {bar(prog/100, 30)}  {stage}")
+            sar_ratio = sar_cur_iter / max(sar_max_iter, 1)
+            lines.append(f"  반복 진행: {bar(sar_ratio, 22)}  ({sar_cur_iter}/{sar_max_iter} iter)")
+            if 0 < sar_prog < 100:
+                lines.append(f"  현재 작업: {bar(sar_prog / 100, 22)}  {sar_stage}")
+            elif "완료" in sar_stage or "수렴" in sar_stage:
+                s_map50 = float(sar_metrics.get("mAP50") or 0.0)
+                s_prec  = float(sar_metrics.get("precision") or 0.0)
+                s_rec   = float(sar_metrics.get("recall") or 0.0)
+                lines.append(f"  {G}학습 완료{RST}  mAP50={s_map50:.4f}  P={s_prec:.4f}  R={s_rec:.4f}  {DIM}{sar_trained}{RST}")
+
+        # 히스토리 요약
+        if sar_hist:
+            lines.append(f"\n  {'iter':^6} {'mAP50':^8} {'Prec':^8} {'Recall':^8} {'시그널':<20} {'개선':^5}")
+            lines.append(f"  {'─'*6} {'─'*8} {'─'*8} {'─'*8} {'─'*20} {'─'*5}")
+            for rec in _tail(sar_hist, 3):
+                rm    = dict(rec.get("metrics", {}) or {})
+                sigs  = str(",".join(list(rec.get("signals", []))))[:18]
+                imp   = f"{G}↑{RST}" if rec.get("improved") else f"{DIM}─{RST}"
+                conv  = f" {G}✓수렴{RST}" if rec.get("converged") else ""
+                lines.append(
+                    f"  {int(rec['iteration']):^6} "
+                    f"{float(rm.get('mAP50') or 0):^8.4f} "
+                    f"{float(rm.get('precision') or 0):^8.4f} "
+                    f"{float(rm.get('recall') or 0):^8.4f} "
+                    f"{sigs:<20} {imp}{conv}"
+                )
     else:
         lines.append(f"  {DIM}학습 이력 없음{RST}")
+
+    # ── ML Training Service (Fuel + What-if) ────────────────
+    ml_alive, fuel_st, whatif_st, fuel_hist, whatif_hist = read_ml_training()
+    ml_status_txt = f"{G}ALIVE{RST}" if ml_alive else f"{DIM}미실행{RST}"
+    lines.append(f"\n{BOLD}{W}[ ML-TRAINING-SERVICE  포트 8004 ]  서버: {ml_status_txt}{RST}")
+    lines.append(f"{DIM}  Fuel XGBoost 자동 반복 (최대 {MAX_ITER_FUEL}회)  +  What-if Analysis (최대 {MAX_ITER_WHATIF}회){RST}\n")
+
+    # Fuel 상태
+    lines.append(f"  {BOLD}▸ Fuel XGBoost{RST}")
+    if fuel_st:
+        f_iter  = int(fuel_st.get("iteration", len(fuel_hist)) or 0)
+        f_max   = int(fuel_st.get("max_iterations", MAX_ITER_FUEL) or MAX_ITER_FUEL)
+        f_stage = str(fuel_st.get("stage", "") or "")
+        f_prog  = int(fuel_st.get("progress", 0) or 0)
+        f_err   = fuel_st.get("error")
+        f_m     = dict(fuel_st.get("metrics", {}) or {})
+
+        if f_err:
+            lines.append(f"    {R}에러: {f_err}{RST}")
+        else:
+            f_ratio = f_iter / max(f_max, 1)
+            lines.append(f"    반복 진행: {bar(f_ratio, 20)}  ({f_iter}/{f_max} iter)")
+            if 0 < f_prog < 100:
+                lines.append(f"    현재 작업: {bar(f_prog / 100, 20)}  {f_stage}")
+            elif "완료" in f_stage or "수렴" in f_stage:
+                f_r2   = float(f_m.get("R2", 0) or 0)
+                f_rmse = float(f_m.get("RMSE", 0) or 0)
+                lines.append(f"    {G}완료{RST}  R²={f_r2:.4f}  RMSE={f_rmse:.6f}")
+
+        if fuel_hist:
+            lines.append(f"    {'iter':^5} {'R²':^7} {'RMSE':^12} {'시그널':<22} {'개선':^5}")
+            lines.append(f"    {'─'*5} {'─'*7} {'─'*12} {'─'*22} {'─'*5}")
+            for rec in _tail(fuel_hist, 3):
+                fm   = dict(rec.get("metrics", {}) or {})
+                sigs = str(",".join(list(rec.get("signals", []))))[:20]
+                imp  = f"{G}↑{RST}" if rec.get("improved") else f"{DIM}─{RST}"
+                conv = f" {G}✓{RST}" if rec.get("converged") else ""
+                lines.append(
+                    f"    {int(rec['iteration']):^5} "
+                    f"{float(fm.get('R2', 0) or 0):^7.4f} "
+                    f"{float(fm.get('RMSE', 0) or 0):^12.6f} "
+                    f"{sigs:<22} {imp}{conv}"
+                )
+    else:
+        lines.append(f"    {DIM}학습 이력 없음{RST}")
+
+    # What-if 상태
+    lines.append(f"\n  {BOLD}▸ What-if Analysis{RST}")
+    if whatif_st:
+        w_iter  = int(whatif_st.get("iteration", len(whatif_hist)) or 0)
+        w_max   = int(whatif_st.get("max_iterations", MAX_ITER_WHATIF) or MAX_ITER_WHATIF)
+        w_stage = str(whatif_st.get("stage", "") or "")
+        w_err   = whatif_st.get("error")
+        w_count = int(whatif_st.get("scenarios_count", 0) or 0)
+        w_route = str(whatif_st.get("route", "") or "")
+        w_ic    = str(whatif_st.get("ice_class", "") or "")
+
+        if w_err:
+            lines.append(f"    {R}에러: {w_err}{RST}")
+        else:
+            w_ratio = w_iter / max(w_max, 1)
+            lines.append(f"    반복 진행: {bar(w_ratio, 20)}  ({w_iter}/{w_max} iter)")
+            if "완료" in w_stage or "수렴" in w_stage or "달성" in w_stage:
+                lines.append(f"    {G}완료{RST}  시나리오 {w_count}개  ({w_route}/{w_ic})")
+            elif w_stage and w_stage != "대기 중":
+                lines.append(f"    {Y}{w_stage}{RST}  ({w_route}/{w_ic})")
+
+        if whatif_hist:
+            lines.append(f"    {'iter':^5} {'시나리오':^6} {'RIO분산':^8} {'시그널':<22} {'개선':^5}")
+            lines.append(f"    {'─'*5} {'─'*6} {'─'*8} {'─'*22} {'─'*5}")
+            for rec in _tail(whatif_hist, 3):
+                wq   = dict(rec.get("quality", {}) or {})
+                sigs = str(",".join(list(rec.get("signals", []))))[:20]
+                imp  = f"{G}↑{RST}" if rec.get("improved") else f"{DIM}─{RST}"
+                conv = f" {G}✓{RST}" if rec.get("converged") else ""
+                lines.append(
+                    f"    {int(rec['iteration']):^5} "
+                    f"{int(wq.get('scenarios_count', 0) or 0):^6} "
+                    f"{float(wq.get('avg_rio_spread', 0) or 0):^8.4f} "
+                    f"{sigs:<22} {imp}{conv}"
+                )
+    else:
+        lines.append(f"    {DIM}실행 이력 없음{RST}")
 
     # ── 푸터 ─────────────────────────────────────────────────
     lines.append(f"\n{BOLD}{C}{'═'*72}{RST}")

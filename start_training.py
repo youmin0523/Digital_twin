@@ -2,9 +2,10 @@
 start_training.py — 전체 학습 서버 통합 시작 스크립트
 
 실행: python start_training.py
-  - rl-pipeline    (포트 8001) : 빙산회피 SAC 84 노선
-  - report-service (포트 8002) : 출항 스케줄링 SAC 28 조합
-  - sar_server     (포트 8003) : YOLOv8 SAR 딥러닝
+  - rl-pipeline         (포트 8001) : 빙산회피 SAC 84 노선
+  - report-service      (포트 8002) : 출항 스케줄링 SAC 28 조합
+  - sar_server          (포트 8003) : YOLOv8 SAR 딥러닝
+  - ml-training-service (포트 8004) : Fuel XGBoost + What-if Analysis
 
 각 서버를 독립 프로세스로 기동 후 학습 자동 트리거.
 """
@@ -37,9 +38,16 @@ SERVERS = [
         "cmd":  [sys.executable, "sar_server.py"],
         "health": "http://127.0.0.1:8003/",
     },
+    {
+        "name": "ml-training-service",
+        "port": 8004,
+        "cwd":  BASE / "ml-pipeline",
+        "cmd":  ["venv/Scripts/uvicorn", "train_server:app", "--host", "0.0.0.0", "--port", "8004"],
+        "health": "http://127.0.0.1:8004/api/ml/health",
+    },
 ]
 
-TRAIN_TRIGGERS = [
+TRAIN_TRIGGERS: list[dict[str, object]] = [
     {
         "name": "빙산회피 RL (84 노선 × 15 iter)",
         "url":  "http://127.0.0.1:8001/api/rl/multi/train",
@@ -57,6 +65,16 @@ TRAIN_TRIGGERS = [
         "name": "SAR YOLOv8 딥러닝 (30 epoch)",
         "url":  "http://127.0.0.1:8003/api/sar/train",
         "body": {"epochs": 30, "batch_size": 4, "synthetic_count": 200, "device": "cpu"},
+    },
+    {
+        "name": "Fuel XGBoost 학습",
+        "url":  "http://127.0.0.1:8004/api/ml/fuel/train",
+        "body": {"samples_per_vessel": 400, "n_estimators": 200, "retrain": True},
+    },
+    {
+        "name": "What-if Analysis (NSR / PC5)",
+        "url":  "http://127.0.0.1:8004/api/ml/whatif/run",
+        "body": {"route": "NSR", "ice_class": "PC5", "forecast_days": 30},
     },
 ]
 
@@ -127,7 +145,7 @@ def start_servers():
 def trigger_training():
     print("\n학습 트리거 중...")
     for t in TRAIN_TRIGGERS:
-        result = post_json(t["url"], t["body"])
+        result = post_json(str(t["url"]), dict(t["body"]))  # type: ignore[arg-type]
         msg = result.get("message") or result.get("error") or str(result)
         status = "✓" if "error" not in result else "✗"
         print(f"  [{status}] {t['name']}: {msg}")

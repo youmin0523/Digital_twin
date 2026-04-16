@@ -15,15 +15,15 @@ from .config import MAX_SAFE_CONCENTRATION, ICE_CLASS_FACTORS
 @dataclass
 class RewardWeights:
     """보상 함수 가중치 (튜닝 가능)"""
-    collision: float = -300.0       # -200 → -300: 충돌 패널티 추가 강화
-    proximity: float = -5.0         # -3 → -5: 근접 위험 패널티 대폭 강화 (충돌 사전 억제)
-    danger_zone: float = -10.0      # 신규: 충돌 반경 2배 이내 진입 시 강력 경보
-    route_deviation: float = -0.2   # 완화 (회피 기동 여유 허용)
-    progress: float = 2.0           # 1.0 → 2.0: 전진 보상 강화
-    smoothness: float = -0.05       # 추가 완화 (빠른 회피 기동 장려)
-    fuel: float = -0.02             # 최소화
+    collision: float = -100.0       # -300 → -100: 과도한 충돌 패널티 완화 (전진 억제 방지)
+    proximity: float = -2.0         # -5 → -2: 근접 패널티 완화 (전진 우선)
+    danger_zone: float = -3.0       # -10 → -3: 위험구역 패널티 완화
+    route_deviation: float = -0.1   # 완화 유지
+    progress: float = 15.0          # 2.0 → 15.0: 전진 보상 대폭 강화 (핵심 수정)
+    smoothness: float = -0.05
+    fuel: float = -0.02
     ice_concentration: float = -0.3
-    episode_success: float = 300.0  # 150 → 300: 성공 보너스 2배 (목표 달성 강력 유인)
+    episode_success: float = 300.0  # 목적지 도달 보너스 유지
 
 
 @dataclass
