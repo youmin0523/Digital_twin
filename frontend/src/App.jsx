@@ -880,6 +880,9 @@ function AppInner() {
               ((pos.lon - depPort.lon) * mPerDegLon) / 1.5;
             three.shipPivot.position.z =
               (-(pos.lat - depPort.lat) * METERS_PER_DEGREE_LAT) / 1.5;
+            // 선박 회전: route heading 에 맞춤 — 카메라(heading 기준 후방 배치)와 정렬
+            // (rotation.y = -heading; 수동 조종 블록과 동일 규약)
+            three.shipPivot.rotation.y = -hdg;
             // 선박 흔들림 (roll/pitch/heave)
             if (three.updateShipMotion) three.updateShipMotion(dt, pos.lat);
           }
@@ -1500,6 +1503,8 @@ function AppInner() {
             ((pos.lon - depPort.lon) * mPerDegLon) / 1.5;
           threeRef.current.shipPivot.position.z =
             (-(pos.lat - depPort.lat) * METERS_PER_DEGREE_LAT) / 1.5;
+          // 선박 회전: route heading 에 맞춤 (카메라 정렬을 위해)
+          threeRef.current.shipPivot.rotation.y = -hdg;
           if (threeRef.current.updateShipMotion)
             threeRef.current.updateShipMotion(0, pos.lat);
           // 타임라인 변경 시 빙산 위치도 즉시 갱신
@@ -1527,8 +1532,23 @@ function AppInner() {
     (routeKey) => {
       dispatch({ type: 'SET_ROUTE', payload: routeKey });
       dispatch({ type: 'SET_GENERATED_WAYPOINTS', payload: null }); // 경로 변경 시 리셋
+      // 활성 항로는 무조건 화면에 보이도록 visibility 자동 ON (체크박스 OFF 상태였더라도)
+      setRouteVisibility((prev) => {
+        if (prev[routeKey]) return prev;
+        return { ...prev, [routeKey]: true };
+      });
+      // 시뮬 진행도 리셋 — 이전 항로 위치(예: 절반쯤)에서 새 항로로 점프하지 않고 출발항부터 시작
+      dispatch({ type: 'SET_PROGRESS', payload: 0 });
+      dispatch({ type: 'SET_ELAPSED', payload: 0 });
+      simElapsedRef.current = 0;
+      // 본선 위치도 새 항로의 출발항으로 동기화 (Cesium / Three 양쪽 즉시 반영)
+      const depPort = PORTS[state.departurePort] || PORTS.BUSAN;
+      dispatch({
+        type: 'SET_SHIP_STATE',
+        payload: { lat: depPort.lat, lon: depPort.lon, heading: 0 },
+      });
     },
-    [dispatch],
+    [dispatch, state.departurePort],
   );
 
   const handleSpecChange = useCallback(
@@ -2367,16 +2387,29 @@ function AppInner() {
         lon: a.position.lon,
         status: a.status,
         label: araonStatusLabelKo[a.status] || a.status,
+        heading: state.shipState?.heading || 0,
       };
     }
   } else if (state.shipState && typeof state.shipState.lat === 'number') {
     const sic = sampleIceFn(state.shipState.lon, state.shipState.lat);
     if (sic > 0.3) {
+      // 호위 연출: 아라온이 항로 위 본선 약 100km 전방에서 선도
+      // 직선 오프셋이 아닌 항로(waypoint)를 따라 샘플링 → 곡선 항로에서도 정확히 선 위에 위치
+      const ESCORT_LEAD_KM = 100;
+      const totalKm = calculateRouteDistanceKM(activeWaypoints);
+      const aheadProgress = Math.min(
+        1,
+        state.simProgress + ESCORT_LEAD_KM / Math.max(1, totalKm),
+      );
+      const aheadPos = routePos(aheadProgress, timedWaypoints, activeWaypoints);
+      const aheadHdgRad = routeHeading(aheadProgress, timedWaypoints, activeWaypoints);
+      const aheadHdgDeg = ((aheadHdgRad * 180) / Math.PI + 360) % 360;
       araonDisplayPos = {
-        lat: state.shipState.lat + 0.005,
-        lon: state.shipState.lon,
+        lat: aheadPos.lat,
+        lon: aheadPos.lon,
         status: 'escorting',
         label: '호위 중',
+        heading: aheadHdgDeg,
       };
     } else {
       araonDisplayPos = {
@@ -2384,6 +2417,7 @@ function AppInner() {
         lon: 179.5,
         status: 'idle',
         label: 'Wrangel 정박',
+        heading: 0,
       };
     }
   }
@@ -2417,6 +2451,8 @@ function AppInner() {
             dispatch({ type: 'SET_ARRIVAL_PORT', payload: v })
           }
           routeDistances={routeDistances}
+          currentRouteKey={state.currentRouteKey}
+          onRouteChange={handleRouteChange}
         />
 
         <div className="dt-viewport">
@@ -2485,8 +2521,12 @@ function AppInner() {
             copVisible={layerStates.copThick}
           />
 
-          {/* Live Simulation 모드에서도 아라온을 Wrangel Is. 정박 마커로 표시 */}
-          <AraonLiveMarker cesiumRef={cesiumRef} visible={appMode === 'live'} />
+          {/* Live Simulation 모드: 아라온이 본선과 함께 움직임 (호위 시 본선 옆, 평시 Wrangel) */}
+          <AraonLiveMarker
+            cesiumRef={cesiumRef}
+            visible={appMode === 'live'}
+            displayPos={araonDisplayPos}
+          />
           {voyageActive && (
             <>
               <VoyagePlaybackLayer

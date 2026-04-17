@@ -1,8 +1,9 @@
 /**
  * AraonLiveMarker.jsx
  * ===================
- * Live Simulation 모드에서 아라온을 Wrangel Island 사전배치 거점에
- * 정적 마커로 표시. 본선 시뮬과 무관하게 항상 그 자리에 대기.
+ * Live Simulation 모드에서 아라온을 표시.
+ * - 본선이 결빙 수역(SIC>0.3)에 있을 때: 본선 바로 앞에 호위 위치로 따라붙음
+ * - 그렇지 않을 때: Wrangel Island 사전배치 거점에 대기
  *
  * Voyage Playback 모드의 entity (id='voyage-ib-araon') 와 충돌 방지를 위해
  * 별도 id 'live-ib-araon' 사용.
@@ -13,6 +14,12 @@ import * as Cesium from 'cesium';
 
 // Wrangel Island 사전배치 좌표 (backend models.py 와 동일)
 const ARAON_HOME = { lat: 71.0, lon: 179.5 };
+
+// 상태별 색상 (escorting 때 본선과 함께 강조)
+const STATUS_COLOR = {
+  idle: '#9ca3af',
+  escorting: '#ef4444',
+};
 
 // 미니 쇄빙선 canvas (VoyagePlaybackLayer 와 동일 디자인)
 function makeAraonCanvas() {
@@ -74,13 +81,12 @@ function makeAraonCanvas() {
   return c;
 }
 
-export default function AraonLiveMarker({ cesiumRef, visible }) {
+export default function AraonLiveMarker({ cesiumRef, visible, displayPos }) {
   const entityRef = useRef(null);
   const canvasRef = useRef(null);
 
   useEffect(() => {
     if (!visible) {
-      // 모드 전환으로 숨기는 경우 entity 제거
       if (entityRef.current) {
         try {
           const v =
@@ -96,7 +102,6 @@ export default function AraonLiveMarker({ cesiumRef, visible }) {
       return undefined;
     }
 
-    // 마운트 또는 visible=true 전환 시 entity 생성
     const tryCreate = () => {
       const viewer =
         cesiumRef && cesiumRef.current && cesiumRef.current.getViewer
@@ -107,34 +112,50 @@ export default function AraonLiveMarker({ cesiumRef, visible }) {
 
       if (!canvasRef.current) canvasRef.current = makeAraonCanvas();
 
+      const initLat = displayPos?.lat ?? ARAON_HOME.lat;
+      const initLon = displayPos?.lon ?? ARAON_HOME.lon;
+      const initStatus = displayPos?.status || 'idle';
+      const initRot = -Cesium.Math.toRadians(displayPos?.heading || 0);
+
       entityRef.current = viewer.entities.add({
         id: 'live-ib-araon',
-        position: Cesium.Cartesian3.fromDegrees(
-          ARAON_HOME.lon,
-          ARAON_HOME.lat,
-          0,
-        ),
+        position: Cesium.Cartesian3.fromDegrees(initLon, initLat, 0),
         billboard: {
           image: canvasRef.current,
-          scale: 1.1,   // 본선(54x108)보다 약간 크게
-          color: Cesium.Color.fromCssColorString('#9ca3af'),  // idle gray
+          // 쇄빙선이 본선(54x108)보다 확실히 더 크게 — 약 50% 증대
+          width: 80,
+          height: 160,
+          // 본선과 동일 규약: alignedAxis=UNIT_Z, rotation=-toRadians(heading)
+          alignedAxis: Cesium.Cartesian3.UNIT_Z,
+          rotation: initRot,
+          color: Cesium.Color.fromCssColorString(
+            STATUS_COLOR[initStatus] || '#9ca3af',
+          ),
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
           verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          // 본선 스케일 곡선과 동일하게 맞춰 줌 변화 시에도 비율 유지
           scaleByDistance: new Cesium.NearFarScalar(
-            1.0e5, 1.5,
-            2.0e7, 0.6,
+            5000, 1.8,
+            500000, 0.6,
           ),
         },
+        label: {
+          text: '아라온',
+          font: 'bold 12px sans-serif',
+          fillColor: Cesium.Color.fromCssColorString('#22d3ee'),
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.TOP,
+          pixelOffset: new Cesium.Cartesian2(0, 28),
+          scaleByDistance: new Cesium.NearFarScalar(1.0e5, 1.0, 8.0e6, 0.4),
+        },
       });
-      // eslint-disable-next-line no-console
-      console.log(
-        '[AraonLiveMarker] entity created at Wrangel Island (71N, 179.5E)',
-      );
       return true;
     };
 
     if (!tryCreate()) {
-      // viewer 아직 준비 안 됨 — 다음 frame 에 재시도
       const t = setTimeout(tryCreate, 200);
       return () => clearTimeout(t);
     }
@@ -154,6 +175,30 @@ export default function AraonLiveMarker({ cesiumRef, visible }) {
       }
     };
   }, [cesiumRef, visible]);
+
+  // 본선 위치/상태/방향 변경 시 entity 갱신 (호위 모드 시 본선에 따라붙음)
+  useEffect(() => {
+    if (!visible || !entityRef.current) return;
+    const lat = displayPos?.lat ?? ARAON_HOME.lat;
+    const lon = displayPos?.lon ?? ARAON_HOME.lon;
+    const status = displayPos?.status || 'idle';
+    const heading = displayPos?.heading || 0;
+    try {
+      entityRef.current.position = Cesium.Cartesian3.fromDegrees(lon, lat, 0);
+      entityRef.current.billboard.color = Cesium.Color.fromCssColorString(
+        STATUS_COLOR[status] || '#9ca3af',
+      );
+      entityRef.current.billboard.rotation = -Cesium.Math.toRadians(heading);
+    } catch (e) {
+      // ignore
+    }
+  }, [
+    visible,
+    displayPos?.lat,
+    displayPos?.lon,
+    displayPos?.status,
+    displayPos?.heading,
+  ]);
 
   return null;
 }

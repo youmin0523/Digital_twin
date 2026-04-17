@@ -179,13 +179,21 @@ export default function VoyageInfoPanel({
     const liveSic = snapshot.sic || 0;
     const liveEscorting = liveSic > 0.3;
     if (liveEscorting) {
-      // 호위 중 — 본선 바로 앞 가상 좌표 (약 0.005° 전방, < 1km)
+      // 호위 중 — 본선 진행방향 100km 전방에서 선도 (Cesium marker 와 동일 규약)
+      const ESCORT_LEAD_KM = 100;
+      const liveHdgDeg = parseNum(liveShipState?.heading) || 0;
+      const hdgRad = (liveHdgDeg * Math.PI) / 180;
+      const latRad = (snapshot.position.lat * Math.PI) / 180;
+      const dLat = (ESCORT_LEAD_KM * Math.cos(hdgRad)) / 111.132;
+      const dLon =
+        (ESCORT_LEAD_KM * Math.sin(hdgRad)) /
+        (111.32 * Math.max(0.05, Math.cos(latRad)));
       araon = {
         id: 'ib-araon',
         status: 'escorting',
         position: {
-          lat: snapshot.position.lat + 0.005,
-          lon: snapshot.position.lon,
+          lat: snapshot.position.lat + dLat,
+          lon: snapshot.position.lon + dLon,
         },
         escorting_ship_id: '본선',
       };
