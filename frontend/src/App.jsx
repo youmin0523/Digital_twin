@@ -1527,26 +1527,63 @@ function AppInner() {
     ],
   );
 
-  // 항로/선박 제원
+  // 항로 변경 (BottomPanel 드롭다운, AI 재라우팅 등) — 진행도/본선위치 유지
   const handleRouteChange = useCallback(
     (routeKey) => {
       dispatch({ type: 'SET_ROUTE', payload: routeKey });
-      dispatch({ type: 'SET_GENERATED_WAYPOINTS', payload: null }); // 경로 변경 시 리셋
-      // 활성 항로는 무조건 화면에 보이도록 visibility 자동 ON (체크박스 OFF 상태였더라도)
+      dispatch({ type: 'SET_GENERATED_WAYPOINTS', payload: null });
+    },
+    [dispatch],
+  );
+
+  // 항로 선택 (사이드바 Routes 클릭) — 처음부터 다시 항해 시작
+  // visibility ON, 진행도 0 리셋, 본선을 출발항으로 즉시 점프
+  const handleRouteSelect = useCallback(
+    (routeKey) => {
+      dispatch({ type: 'SET_ROUTE', payload: routeKey });
+      dispatch({ type: 'SET_GENERATED_WAYPOINTS', payload: null });
       setRouteVisibility((prev) => {
         if (prev[routeKey]) return prev;
         return { ...prev, [routeKey]: true };
       });
-      // 시뮬 진행도 리셋 — 이전 항로 위치(예: 절반쯤)에서 새 항로로 점프하지 않고 출발항부터 시작
       dispatch({ type: 'SET_PROGRESS', payload: 0 });
       dispatch({ type: 'SET_ELAPSED', payload: 0 });
       simElapsedRef.current = 0;
-      // 본선 위치도 새 항로의 출발항으로 동기화 (Cesium / Three 양쪽 즉시 반영)
+
+      // 새 항로의 첫 waypoint와 두 번째 waypoint 사이의 bearing 으로 초기 heading 설정
+      // (출발항에서 즉시 정확한 방향 표시 — 다음 sim tick 까지 깜빡임 방지)
+      const newWps = ROUTES[routeKey] || ROUTES.NSR;
       const depPort = PORTS[state.departurePort] || PORTS.BUSAN;
+      let initHdgDeg = 0;
+      if (newWps.length >= 2) {
+        const a = newWps[0];
+        const b = newWps[1];
+        const φ1 = (a.lat * Math.PI) / 180;
+        const φ2 = (b.lat * Math.PI) / 180;
+        const Δλ = ((b.lon - a.lon) * Math.PI) / 180;
+        const y = Math.sin(Δλ) * Math.cos(φ2);
+        const x =
+          Math.cos(φ1) * Math.sin(φ2) -
+          Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+        initHdgDeg = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+      }
+
       dispatch({
         type: 'SET_SHIP_STATE',
-        payload: { lat: depPort.lat, lon: depPort.lon, heading: 0 },
+        payload: { lat: depPort.lat, lon: depPort.lon, heading: initHdgDeg },
       });
+      if (cesiumRef.current && cesiumRef.current.updateShipEntity) {
+        cesiumRef.current.updateShipEntity(
+          { lat: depPort.lat, lon: depPort.lon },
+          initHdgDeg,
+          shipSpecsRef.current,
+        );
+      }
+      if (threeRef.current?.shipPivot) {
+        threeRef.current.shipPivot.position.x = 0;
+        threeRef.current.shipPivot.position.z = 0;
+        threeRef.current.shipPivot.rotation.y = -(initHdgDeg * Math.PI) / 180;
+      }
     },
     [dispatch, state.departurePort],
   );
@@ -2377,29 +2414,60 @@ function AppInner() {
     escorting: '호위 중',
     released: '호위 해제',
   };
+  // 북극 항로만 아라온 호위 대상 — SUEZ/CAPE/ETC 같은 비-북극 항로에선 아라온 마커 숨김
+  const ARCTIC_ROUTE_KEYS = ['NSR', 'NWP', 'TSR'];
+  const isArcticRoute = ARCTIC_ROUTE_KEYS.includes(state.currentRouteKey);
+
   let araonDisplayPos = null;
   if (voyageActive && voyage.trace) {
     const ibs = sampleIcebreakersAt(voyage.trace, voyage.tHours);
     const a = ibs.find((x) => x.id === 'ib-araon');
     if (a) {
+      // 직전 0.1h 위치를 샘플링해 trace 기반 heading 계산 (본선 heading과 무관)
+      const dtH = 0.1;
+      const prev = sampleIcebreakersAt(
+        voyage.trace,
+        Math.max(0, voyage.tHours - dtH),
+      ).find((x) => x.id === 'ib-araon');
+      let aHdg = 0;
+      if (
+        prev &&
+        (prev.position.lat !== a.position.lat ||
+          prev.position.lon !== a.position.lon)
+      ) {
+        const φ1 = (prev.position.lat * Math.PI) / 180;
+        const φ2 = (a.position.lat * Math.PI) / 180;
+        const Δλ = ((a.position.lon - prev.position.lon) * Math.PI) / 180;
+        const y = Math.sin(Δλ) * Math.cos(φ2);
+        const x =
+          Math.cos(φ1) * Math.sin(φ2) -
+          Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+        aHdg = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+      }
       araonDisplayPos = {
         lat: a.position.lat,
         lon: a.position.lon,
         status: a.status,
         label: araonStatusLabelKo[a.status] || a.status,
-        heading: state.shipState?.heading || 0,
+        heading: aHdg,
       };
     }
-  } else if (state.shipState && typeof state.shipState.lat === 'number') {
+  } else if (
+    isArcticRoute &&
+    state.shipState &&
+    typeof state.shipState.lat === 'number'
+  ) {
     const sic = sampleIceFn(state.shipState.lon, state.shipState.lat);
     if (sic > 0.3) {
-      // 호위 연출: 아라온이 항로 위 본선 약 100km 전방에서 선도
-      // 직선 오프셋이 아닌 항로(waypoint)를 따라 샘플링 → 곡선 항로에서도 정확히 선 위에 위치
-      const ESCORT_LEAD_KM = 100;
-      const totalKm = calculateRouteDistanceKM(activeWaypoints);
+      // 호위 연출: 아라온이 항로 위 본선 앞쪽에서 선도
+      // 항로 길이에 따라 lead 거리 자동 조정 (짧은 구간이면 비례 축소)
+      const totalKm = Math.max(1, calculateRouteDistanceKM(activeWaypoints));
+      const remainKm = totalKm * (1 - state.simProgress);
+      // 기본 100km, 남은 거리의 30% 와 100km 중 작은 값 (마지막 구간에서 도착항 박힘 방지)
+      const leadKm = Math.min(100, Math.max(5, remainKm * 0.3));
       const aheadProgress = Math.min(
-        1,
-        state.simProgress + ESCORT_LEAD_KM / Math.max(1, totalKm),
+        0.999,
+        state.simProgress + leadKm / totalKm,
       );
       const aheadPos = routePos(aheadProgress, timedWaypoints, activeWaypoints);
       const aheadHdgRad = routeHeading(aheadProgress, timedWaypoints, activeWaypoints);
@@ -2412,6 +2480,7 @@ function AppInner() {
         heading: aheadHdgDeg,
       };
     } else {
+      // 결빙 수역 아닐 때만 Wrangel 정박
       araonDisplayPos = {
         lat: 71.0,
         lon: 179.5,
@@ -2421,6 +2490,7 @@ function AppInner() {
       };
     }
   }
+  // isArcticRoute=false 면 araonDisplayPos=null → AraonLiveMarker 가 entity 미생성/제거
 
   return (
     <div className="dt-app">
@@ -2452,7 +2522,7 @@ function AppInner() {
           }
           routeDistances={routeDistances}
           currentRouteKey={state.currentRouteKey}
-          onRouteChange={handleRouteChange}
+          onRouteChange={handleRouteSelect}
         />
 
         <div className="dt-viewport">
@@ -2582,6 +2652,7 @@ function AppInner() {
                 manualHeading: state.manualHeading,
               }}
               sampleIceFn={sampleIceFn}
+              araonDisplayPos={araonDisplayPos}
             />
           )}
 
