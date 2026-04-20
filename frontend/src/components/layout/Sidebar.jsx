@@ -48,6 +48,8 @@ export default function Sidebar({
   onDepartureChange,
   onArrivalChange,
   routeDistances = {}, // 동적 거리 프롭스 추가
+  currentRouteKey,     // 활성 항로 키
+  onRouteChange,       // 활성 항로 변경 콜백
 }) {
   const [iceMode, setIceMode] = useState('live');
   const [archiveEntries, setArchiveEntries] = useState([]);
@@ -136,21 +138,39 @@ export default function Sidebar({
           <span className="dt-sidebar__section-title">Routes</span>
           <button className="dt-sidebar__link" onClick={handleSelectAll}>Select All</button>
         </div>
-        {ROUTE_META.map(r => (
-          <label key={r.key} className="dt-sidebar__route-item">
-            <input
-              type="checkbox"
-              className="dt-sidebar__checkbox"
-              checked={routeVisibility[r.key] || false}
-              onChange={e => onRouteVisibilityChange(r.key, e.target.checked)}
-            />
-            <span className="dt-sidebar__route-bar" style={{ background: r.color }} />
-            <span className="dt-sidebar__route-label">{r.label}</span>
-            <span className="dt-sidebar__route-dist">
-              {routeDistances[r.key] === '-' ? '-' : (routeDistances[r.key] ? Math.round(routeDistances[r.key]).toLocaleString() + 'km' : r.dist)}
-            </span>
-          </label>
-        ))}
+        {ROUTE_META.map(r => {
+          const isActive = currentRouteKey === r.key;
+          return (
+            <div
+              key={r.key}
+              className={`dt-sidebar__route-item${isActive ? ' dt-sidebar__route-item--active' : ''}`}
+            >
+              <input
+                type="checkbox"
+                className="dt-sidebar__checkbox"
+                checked={routeVisibility[r.key] || false}
+                onChange={e => onRouteVisibilityChange(r.key, e.target.checked)}
+                title="항로 표시 토글"
+              />
+              <span className="dt-sidebar__route-bar" style={{ background: r.color }} />
+              <span
+                className="dt-sidebar__route-label"
+                onClick={() => onRouteChange && onRouteChange(r.key)}
+                title="이 항로를 활성 항로로 설정"
+                style={{
+                  cursor: onRouteChange ? 'pointer' : 'default',
+                  color: isActive ? '#22d3ee' : undefined,
+                  fontWeight: isActive ? 700 : undefined,
+                }}
+              >
+                {isActive ? '▶ ' : ''}{r.label}
+              </span>
+              <span className="dt-sidebar__route-dist">
+                {routeDistances[r.key] === '-' ? '-' : (routeDistances[r.key] ? Math.round(routeDistances[r.key]).toLocaleString() + 'km' : r.dist)}
+              </span>
+            </div>
+          );
+        })}
       </section>
 
       {/* ── View Mode ── */}

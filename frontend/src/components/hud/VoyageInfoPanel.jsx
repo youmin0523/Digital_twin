@@ -97,9 +97,6 @@ function MiniLineChart({ data, getY, color, unit, yMax }) {
   );
 }
 
-// Wrangel Island — 아라온 라이브 모드 정박 좌표 (AraonLiveMarker 와 동일)
-const ARAON_LIVE_HOME = { lat: 71.0, lon: 179.5 };
-
 // hud 문자열 → number 안전 파싱
 function parseNum(s) {
   if (s === null || s === undefined) return null;
@@ -117,6 +114,7 @@ export default function VoyageInfoPanel({
   liveHud,
   liveManual, // { manualMode, manualSpeed, manualHeading }
   sampleIceFn,
+  araonDisplayPos, // App.jsx 에서 계산된 통합 아라온 위치 (Cesium marker 와 동일)
   onClose,
 }) {
   // ── Voyage / Live 통합 snapshot — useMemo 우회, 매 렌더마다 직접 계산 ──
@@ -174,29 +172,19 @@ export default function VoyageInfoPanel({
   let araon;
   if (isVoyage) {
     araon = voyAraon;
+  } else if (araonDisplayPos) {
+    // Live 모드: App.jsx 에서 계산된 araonDisplayPos 그대로 사용
+    // → Cesium marker 위치와 정확히 일치 (항로-따라 샘플링, 비-북극 항로 숨김 등)
+    araon = {
+      id: 'ib-araon',
+      status: araonDisplayPos.status,
+      position: { lat: araonDisplayPos.lat, lon: araonDisplayPos.lon },
+      escorting_ship_id:
+        araonDisplayPos.status === 'escorting' ? '본선' : null,
+    };
   } else {
-    // Live 모드: 얼음 농도 기반 호위 판정
-    const liveSic = snapshot.sic || 0;
-    const liveEscorting = liveSic > 0.3;
-    if (liveEscorting) {
-      // 호위 중 — 본선 바로 앞 가상 좌표 (약 0.005° 전방, < 1km)
-      araon = {
-        id: 'ib-araon',
-        status: 'escorting',
-        position: {
-          lat: snapshot.position.lat + 0.005,
-          lon: snapshot.position.lon,
-        },
-        escorting_ship_id: '본선',
-      };
-    } else {
-      araon = {
-        id: 'ib-araon',
-        status: 'idle',
-        position: ARAON_LIVE_HOME,
-        escorting_ship_id: null,
-      };
-    }
+    // 비-북극 항로: 아라온 표시 안 함
+    araon = null;
   }
   const distToShip = araon
     ? haversineKm(
