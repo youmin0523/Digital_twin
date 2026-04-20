@@ -16,8 +16,9 @@ import * as Cesium from 'cesium';
 const ARAON_HOME = { lat: 71.0, lon: 179.5 };
 
 // 상태별 색상 (escorting 때 본선과 함께 강조)
+// idle 도 위성영상 위에서 식별되도록 밝은 노랑 사용 (회색은 구름·해빙과 혼동)
 const STATUS_COLOR = {
-  idle: '#9ca3af',
+  idle: '#facc15',
   escorting: '#ef4444',
 };
 
@@ -85,8 +86,11 @@ export default function AraonLiveMarker({ cesiumRef, visible, displayPos }) {
   const entityRef = useRef(null);
   const canvasRef = useRef(null);
 
+  // 마커 표시 조건: visible prop + displayPos 존재 (북극 항로 + live 모드)
+  const shouldShow = visible && !!displayPos;
+
   useEffect(() => {
-    if (!visible) {
+    if (!shouldShow) {
       if (entityRef.current) {
         try {
           const v =
@@ -174,11 +178,11 @@ export default function AraonLiveMarker({ cesiumRef, visible, displayPos }) {
         entityRef.current = null;
       }
     };
-  }, [cesiumRef, visible]);
+  }, [cesiumRef, shouldShow]);
 
   // 본선 위치/상태/방향 변경 시 entity 갱신 (호위 모드 시 본선에 따라붙음)
   useEffect(() => {
-    if (!visible || !entityRef.current) return;
+    if (!shouldShow || !entityRef.current) return;
     const lat = displayPos?.lat ?? ARAON_HOME.lat;
     const lon = displayPos?.lon ?? ARAON_HOME.lon;
     const status = displayPos?.status || 'idle';
@@ -193,7 +197,7 @@ export default function AraonLiveMarker({ cesiumRef, visible, displayPos }) {
       // ignore
     }
   }, [
-    visible,
+    shouldShow,
     displayPos?.lat,
     displayPos?.lon,
     displayPos?.status,

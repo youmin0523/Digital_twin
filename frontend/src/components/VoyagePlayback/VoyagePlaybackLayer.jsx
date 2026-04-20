@@ -38,6 +38,19 @@ function ibStatusColor(status) {
   );
 }
 
+// 두 좌표 사이의 bearing(0=북, 90=동) 계산 — billboard 회전용
+function bearingDeg(lat1, lon1, lat2, lon2) {
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x =
+    Math.cos(φ1) * Math.sin(φ2) -
+    Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  const θ = Math.atan2(y, x);
+  return ((θ * 180) / Math.PI + 360) % 360;
+}
+
 // billboard 용 canvas — 빨간 선체 + 흰색 브리지 + 주황 악센트 icebreaker
 // (CCGS Louis S. St-Laurent / Vaygach 스타일). 64x96.
 // 위에서 내려다본 top-down view, 뱃머리가 위쪽(canvas y=0).
@@ -125,6 +138,8 @@ export default function VoyagePlaybackLayer({ cesiumRef, trace, tHours, active }
   const ibEntitiesRef = useRef({}); // id → entity
   const lastTickLogRef = useRef(0);
   const ibCanvasRef = useRef(null);
+  const lastIbPosRef = useRef({});  // id → {lat, lon} (직전 tick 위치 — heading 계산용)
+  const lastShipPosRef = useRef(null); // 본선 직전 위치 (heading 계산용)
 
   // entity 생성 (trace 로드 시점)
   useEffect(() => {
@@ -164,13 +179,18 @@ export default function VoyagePlaybackLayer({ cesiumRef, trace, tHours, active }
         ),
         billboard: {
           image: ibCanvasRef.current,
-          scale: 1.1,   // 본선(54x108)보다 약간 크게
+          // 본선(54x108)보다 확실히 크게
+          width: 80,
+          height: 160,
+          alignedAxis: Cesium.Cartesian3.UNIT_Z,
+          rotation: 0,   // 첫 프레임은 heading 미정 — 다음 tick 부터 갱신
           color: ibStatusColor(ib.status),
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
           verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
           scaleByDistance: new Cesium.NearFarScalar(
-            1.0e5, 1.5,
-            2.0e7, 0.6,
+            5000, 1.8,
+            500000, 0.6,
           ),
         },
         label: {
@@ -246,10 +266,24 @@ export default function VoyagePlaybackLayer({ cesiumRef, trace, tHours, active }
 
     const ship = sampleShipAt(trace, tHours);
     if (ship && cesiumRef.current && cesiumRef.current.updateShipEntity) {
-      // 기존 본선 entity (ship-vessel) 위치만 옮김
+      // 본선 heading 계산 (직전 위치 → 현재 위치)
+      let shipHdg = 0;
+      const lastShip = lastShipPosRef.current;
+      if (
+        lastShip &&
+        (lastShip.lat !== ship.position.lat || lastShip.lon !== ship.position.lon)
+      ) {
+        shipHdg = bearingDeg(
+          lastShip.lat,
+          lastShip.lon,
+          ship.position.lat,
+          ship.position.lon,
+        );
+      }
+      lastShipPosRef.current = { lat: ship.position.lat, lon: ship.position.lon };
       cesiumRef.current.updateShipEntity(
         ship.position,
-        0,
+        shipHdg,
         { type: 'icebreaker' },
       );
     }
@@ -264,6 +298,21 @@ export default function VoyagePlaybackLayer({ cesiumRef, trace, tHours, active }
         0,
       );
       e.billboard.color = ibStatusColor(ib.status);
+      // heading: 직전 위치와의 bearing — 정지 시(같은 위치) 이전 rotation 유지
+      const lastPos = lastIbPosRef.current[ib.id];
+      if (
+        lastPos &&
+        (lastPos.lat !== ib.position.lat || lastPos.lon !== ib.position.lon)
+      ) {
+        const hdg = bearingDeg(
+          lastPos.lat,
+          lastPos.lon,
+          ib.position.lat,
+          ib.position.lon,
+        );
+        e.billboard.rotation = -Cesium.Math.toRadians(hdg);
+      }
+      lastIbPosRef.current[ib.id] = { lat: ib.position.lat, lon: ib.position.lon };
     }
 
     // 5 시뮬 시간당 샘플 로그
