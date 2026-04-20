@@ -1,0 +1,23 @@
+{
+  "pythonPath": "report-service/venv/Scripts/python.exe",
+  "venvPath": "report-service",
+  "venv": "venv",
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "include": [
+    "."
+  ],
+  "extraPaths": [
+    ".",
+    "backend/pipeline/trainers",
+    "backend/pipeline/processors",
+    "backend/pipeline",
+    "report-service",
+    "report-service/modules"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "."
+    }
+  ]
+}

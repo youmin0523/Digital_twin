@@ -51,17 +51,17 @@ def _model_dir_for(model_key: str) -> Path:
     return d
 
 DEFAULT_HYPERPARAMS = {
-    "learning_rate": 1e-4,        # 3e-4 → 1e-4: 학습률 낮춰 안정적 수렴
-    "buffer_size": 1_000_000,     # 500K → 1M: 더 다양한 경험 저장
-    "batch_size": 512,            # 256 → 512: 안정적 gradient 추정
-    "gamma": 0.995,               # 0.99 → 0.995: 장기 보상(성공 보너스) 가중치 증가
+    "learning_rate": 3e-4,        # [수정] 1e-4 → 3e-4: 학습률 복원 (수렴 속도 개선)
+    "buffer_size": 500_000,       # [수정] 1M → 500K: 메모리 절약 + 최근 경험 비중 증가
+    "batch_size": 256,            # [수정] 512 → 256: 더 잦은 업데이트
+    "gamma": 0.99,                # [수정] 0.995 → 0.99: 단기 보상(progress) 중시
     "tau": 0.005,
     "ent_coef": "auto",
     "train_freq": 1,
-    "gradient_steps": 2,          # 1 → 2: 스텝당 2회 업데이트로 샘플 효율 향상
-    "learning_starts": 20_000,    # 10K → 20K: 충분한 랜덤 탐색 후 학습 시작
+    "gradient_steps": 1,
+    "learning_starts": 5_000,     # [수정] 20K → 5K: 빠른 학습 시작 (easy stage에서 성공 경험 축적)
     "policy_kwargs": {
-        "net_arch": [400, 300],   # [256,256] → [400,300]: 더 큰 네트워크
+        "net_arch": [256, 256],   # [수정] [400,300] → [256,256]: 표준 크기 (overfitting 방지)
     },
 }
 
