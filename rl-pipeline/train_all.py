@@ -122,13 +122,13 @@ def _analyze_and_adjust_weights(pass_num: int) -> dict | None:
 
     if mean_success < 0.30:
         # 성공률 30% 미만: 성공 인센티브 대폭 강화
-        d["episode_success"] = min(1000.0, d["episode_success"] * 2.0)
-        d["progress"]        = min(5.0,    d["progress"]        * 1.5)
+        d["episode_success"] = min(2000.0, d["episode_success"] * 2.0)
+        d["progress"]        = min(20.0,   d["progress"]        * 1.5)
         logger.info("[조정] 성공률 매우 낮음(%.2f) → 성공 보너스 2배, 전진 보상 1.5배", mean_success)
 
     elif mean_success < 0.50:
-        d["episode_success"] = min(1000.0, d["episode_success"] * 1.5)
-        d["progress"]        = min(5.0,    d["progress"]        * 1.3)
+        d["episode_success"] = min(2000.0, d["episode_success"] * 1.5)
+        d["progress"]        = min(20.0,   d["progress"]        * 1.3)
         logger.info("[조정] 성공률 낮음(%.2f) → 성공 보너스 1.5배", mean_success)
 
     # 정체 감지 (critical_collision & low_success 동시 다발): 전략 리셋

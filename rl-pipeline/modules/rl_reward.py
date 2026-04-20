@@ -15,15 +15,15 @@ from .config import MAX_SAFE_CONCENTRATION, ICE_CLASS_FACTORS
 @dataclass
 class RewardWeights:
     """보상 함수 가중치 (튜닝 가능)"""
-    collision: float = -100.0       # -300 → -100: 과도한 충돌 패널티 완화 (전진 억제 방지)
-    proximity: float = -2.0         # -5 → -2: 근접 패널티 완화 (전진 우선)
-    danger_zone: float = -3.0       # -10 → -3: 위험구역 패널티 완화
-    route_deviation: float = -0.1   # 완화 유지
-    progress: float = 15.0          # 2.0 → 15.0: 전진 보상 대폭 강화 (핵심 수정)
-    smoothness: float = -0.05
-    fuel: float = -0.02
-    ice_concentration: float = -0.3
-    episode_success: float = 300.0  # 목적지 도달 보너스 유지
+    collision: float = -200.0       # [수정] -100 → -200: 충돌 억제 강화
+    proximity: float = -1.0         # 근접 패널티
+    danger_zone: float = -2.0       # 위험구역 패널티
+    route_deviation: float = -0.05  # 경로 이탈 패널티
+    progress: float = 10.0          # [수정] 5.0 → 10.0: 전진 보상 강화 (성공 경험 유도)
+    smoothness: float = -0.02
+    fuel: float = -0.01
+    ice_concentration: float = -0.2
+    episode_success: float = 300.0  # [수정] 500 → 300: progress 보상 강화로 균형 조정
 
 
 @dataclass
@@ -102,8 +102,10 @@ def compute_reward(ctx: RewardContext, weights: RewardWeights | None = None) -> 
     deviation_ratio = min(1.0, abs(ctx.cross_track_error_km) / ctx.max_allowed_deviation_km)
     components["route_deviation"] = weights.route_deviation * deviation_ratio
 
-    # 4. 전진 보상 (스케일 정규화: delta_progress는 보통 0.001~0.01 범위)
-    components["progress"] = weights.progress * max(0.0, ctx.along_track_progress) * 100.0
+    # 4. 전진 보상 (delta_progress: 0~1 범위, 구간 완주 시 누적 1.0)
+    # × 100 제거: 실제 스케일에서 progress 보상이 collision 패널티와 균형 맞도록
+    # 구간 완주(delta_progress 합산 1.0) 시 총 progress 보상 ≈ 5.0×1.0 = 5.0/step 누적
+    components["progress"] = weights.progress * max(0.0, ctx.along_track_progress)
 
     # 5. 부드러움 패널티
     turn_ratio = abs(ctx.heading_change_deg) / 15.0

@@ -869,6 +869,7 @@
 2026-04-12 01:00:00,697 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
 2026-04-12 09:58:43,337 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
 2026-04-13 01:00:00,478 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+<<<<<<< Updated upstream
 2026-04-13 15:50:42,666 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
 2026-04-13 15:50:50,605 [INFO] 검색 기간: 2026-04-01 ~ 2026-04-12
 2026-04-13 15:50:50,791 [INFO] 
@@ -1131,3 +1132,38 @@
 2026-04-16 11:46:29,279 [INFO]   [DOWN] S1C_IW_GRDH_1SDH_20260410T061506_20260410T061539_007150_00E7C2_57E7.SAFE (2136MB) → S1C_IW_GRDH_1SDH_20260410T061506_20260410T061539_007150_00E7C2_57E7.SAFE.zip
 2026-04-16 11:50:00,766 [ERROR] 다운로드 실패: S1C_IW_GRDH_1SDH_20260410T061506_20260410T061539_007150_00E7C2_57E7.SAFE - ("Connection broken: ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None)", ConnectionResetError(10054, '현재 연결은 원격 호스트에 의해 강제로 끊겼습니다', None, 10054, None))
 2026-04-16 11:50:00,773 [INFO]   [DOWN] S1C_IW_GRDH_1SDH_20260410T061441_20260410T061506_007150_00E7C2_04A8.SAFE (1605MB) → S1C_IW_GRDH_1SDH_20260410T061441_20260410T061506_007150_00E7C2_04A8.SAFE.zip
+=======
+2026-04-13 13:12:56,141 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-13 13:20:41,204 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-13 17:31:07,329 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-13 18:22:47,759 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-13 18:22:48,877 [ERROR] CDSE 자격증명이 설정되지 않았습니다.
+2026-04-13 18:22:48,877 [ERROR] 수집 실패. 자격증명 및 네트워크를 확인하세요.
+2026-04-16 19:01:21,624 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-17 03:41:40,723 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-17 04:02:13,873 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-17 07:53:21,222 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-17 07:58:47,651 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-17 13:53:47,352 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-17 20:20:10,536 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-18 02:20:35,747 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-18 02:20:35,780 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-18 02:31:16,762 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-18 03:18:59,324 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-18 03:44:06,665 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-18 13:01:31,962 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-18 13:49:22,672 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-18 14:11:19,404 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-18 14:14:57,610 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-18 19:01:14,914 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-19 03:22:51,334 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-19 03:22:51,407 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-19 03:38:43,373 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-19 03:42:19,461 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-19 19:49:01,713 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-19 20:19:37,184 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-19 20:23:14,547 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-20 01:00:00,127 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-20 13:31:29,218 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+2026-04-20 13:36:55,940 [INFO] Sentinel-1 IW GRD 빙하 아카이브 수집 시작
+>>>>>>> Stashed changes

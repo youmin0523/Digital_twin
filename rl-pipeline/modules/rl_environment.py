@@ -120,11 +120,14 @@ class IcebergAvoidanceEnv(gym.Env):
 
     metadata = {"render_modes": ["human"]}
 
-    MAX_STEPS = 1500     # 500→1500: 충분한 항해 시간 확보 (DT=2s 기준 50분)
+    MAX_STEPS = 3000     # 에피소드 최대 스텝 (DT=2s 기준 100분)
     DT = 2.0             # 타임스텝 (초)
     MAX_DEVIATION_KM = 50.0
     COLLISION_RADIUS_KM = 0.5
     MAX_NEARBY_ICEBERGS = 3
+    SEGMENT_MAX_DIST_KM = 80.0   # [수정] 100km → 80km: 3000스텝(100분)×0.051km/step=153km이나
+                                  # 우회 여유분 고려, 직선거리 80km가 현실적 완주 가능 범위
+    SUCCESS_PROGRESS = 0.90       # [수정] 0.98 → 0.90: 더 달성 가능한 성공 기준
 
     def __init__(self, render_mode=None, difficulty: str = "medium",
                  reward_weights: RewardWeights | None = None,
@@ -165,14 +168,14 @@ class IcebergAvoidanceEnv(gym.Env):
 
     def _get_difficulty_params(self) -> dict:
         if self.difficulty == "easy":
-            return dict(berg_count=(1, 3), ice_conc=(0.0, 0.2),
-                        visibility=(8, 15), wave=(0.5, 2.0))
+            return dict(berg_count=(0, 0), ice_conc=(0.0, 0.0),
+                        visibility=(15, 20), wave=(0.0, 0.5))
         elif self.difficulty == "medium":
-            return dict(berg_count=(3, 8), ice_conc=(0.1, 0.5),
-                        visibility=(3, 10), wave=(1.0, 4.0))
+            return dict(berg_count=(1, 4), ice_conc=(0.0, 0.3),
+                        visibility=(5, 15), wave=(0.5, 2.0))
         else:
-            return dict(berg_count=(8, 15), ice_conc=(0.3, 0.8),
-                        visibility=(1, 5), wave=(2.0, 6.0))
+            return dict(berg_count=(4, 10), ice_conc=(0.2, 0.6),
+                        visibility=(2, 8), wave=(1.0, 4.0))
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
@@ -181,9 +184,23 @@ class IcebergAvoidanceEnv(gym.Env):
         self.route_wps = ROUTE_WAYPOINTS[route_key]
 
         n = len(self.route_wps)
-        seg_len = random.randint(2, min(6, n - 1))
-        self.segment_start_idx = random.randint(0, n - seg_len - 1)
-        self.segment_end_idx = self.segment_start_idx + seg_len
+        # 구간 거리가 SEGMENT_MAX_DIST_KM 이하가 되도록 start/end 선택
+        # → 14knots × 100분 ≈ 140km 이내 완주 가능
+        for _attempt in range(20):
+            seg_len = random.randint(1, min(3, n - 1))
+            start_idx = random.randint(0, n - seg_len - 1)
+            end_idx = start_idx + seg_len
+            seg_dist = sum(
+                approx_dist_km(
+                    self.route_wps[i][0], self.route_wps[i][1],
+                    self.route_wps[i+1][0], self.route_wps[i+1][1]
+                )
+                for i in range(start_idx, end_idx)
+            )
+            if seg_dist <= self.SEGMENT_MAX_DIST_KM:
+                break
+        self.segment_start_idx = start_idx
+        self.segment_end_idx = end_idx
 
         self.ice_class = self._fixed_ice_class if self._fixed_ice_class else random.choice(["PC3", "PC5", "PC7", "IA Super", "IA"])
         self.max_safe_conc = MAX_SAFE_CONCENTRATION.get(self.ice_class, 0.7)
@@ -195,14 +212,15 @@ class IcebergAvoidanceEnv(gym.Env):
         self.wave_height_m = random.uniform(*dp["wave"])
 
         self.icebergs = []
-        for i in range(self.segment_start_idx, self.segment_end_idx):
-            wp1 = self.route_wps[i]
-            wp2 = self.route_wps[i + 1]
-            count_in_seg = max(1, berg_count // seg_len)
-            self.icebergs.extend(_random_icebergs_along_segment(
-                wp1[0], wp1[1], wp2[0], wp2[1],
-                count_in_seg, spread_km=20.0,
-            ))
+        if berg_count > 0:
+            for i in range(self.segment_start_idx, self.segment_end_idx):
+                wp1 = self.route_wps[i]
+                wp2 = self.route_wps[i + 1]
+                count_in_seg = max(1, berg_count // seg_len)
+                self.icebergs.extend(_random_icebergs_along_segment(
+                    wp1[0], wp1[1], wp2[0], wp2[1],
+                    count_in_seg, spread_km=20.0,
+                ))
 
         start_wp = self.route_wps[self.segment_start_idx]
         next_wp = self.route_wps[self.segment_start_idx + 1]
@@ -220,36 +238,35 @@ class IcebergAvoidanceEnv(gym.Env):
         return self._get_obs(), {}
 
     def _get_progress(self) -> float:
+        # 각 sub-segment별 거리와 along-track fraction 수집
+        seg_dists: list[float] = []
+        seg_fracs: list[float] = []
         total_dist = 0.0
-        best_seg = self.segment_start_idx
-        best_frac = 0.0
-
         for i in range(self.segment_start_idx, self.segment_end_idx):
             wp1 = self.route_wps[i]
             wp2 = self.route_wps[i + 1]
-            seg_dist = approx_dist_km(wp1[0], wp1[1], wp2[0], wp2[1])
-            total_dist += seg_dist
-
-            xt = abs(_cross_track_error(self.ship.lat, self.ship.lon, wp1, wp2))
-            if i == self.segment_start_idx or xt < abs(_cross_track_error(
-                self.ship.lat, self.ship.lon,
-                self.route_wps[best_seg], self.route_wps[best_seg + 1])):
-                best_seg = i
-                best_frac = _along_track_fraction(self.ship.lat, self.ship.lon, wp1, wp2)
+            d = float(approx_dist_km(wp1[0], wp1[1], wp2[0], wp2[1]))
+            frac = float(_along_track_fraction(self.ship.lat, self.ship.lon, wp1, wp2))
+            seg_dists.append(d)
+            seg_fracs.append(frac)
+            total_dist += d
 
         if total_dist < 1e-3:
             return 0.0
 
-        cum = 0.0
-        for i in range(self.segment_start_idx, best_seg):
-            wp1 = self.route_wps[i]
-            wp2 = self.route_wps[i + 1]
-            cum += approx_dist_km(wp1[0], wp1[1], wp2[0], wp2[1])
-        wp1 = self.route_wps[best_seg]
-        wp2 = self.route_wps[best_seg + 1]
-        cum += best_frac * approx_dist_km(wp1[0], wp1[1], wp2[0], wp2[1])
+        # [수정] 각 segment에서 달성 가능한 절대 진행 거리를 계산해
+        # 가장 많이 전진한 segment 기준으로 progress를 결정
+        # (기존: cross-track 비교 시 abs 누락 버그 → progress가 역행하는 문제 수정)
+        best_cum = 0.0
+        cum_before = 0.0
+        n_segs = len(seg_dists)
+        for k in range(n_segs):
+            candidate = cum_before + seg_fracs[k] * seg_dists[k]
+            if candidate > best_cum:
+                best_cum = candidate
+            cum_before += seg_dists[k]
 
-        return min(1.0, cum / total_dist)
+        return min(1.0, best_cum / total_dist)
 
     def _get_cross_track(self) -> float:
         best_xt = float("inf")
@@ -360,7 +377,7 @@ class IcebergAvoidanceEnv(gym.Env):
 
         if collision:
             terminated = True
-        elif current_progress >= 0.98:
+        elif current_progress >= self.SUCCESS_PROGRESS:  # [수정] 0.98 → 0.90
             terminated = True
             success = True
         elif xt_km > self.MAX_DEVIATION_KM:

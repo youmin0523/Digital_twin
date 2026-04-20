@@ -54,9 +54,11 @@ class CurriculumStage:
 
 
 CURRICULUM = [
-    CurriculumStage("stage_1_basic",    "easy",    50_000, "단일 빙산, 개방 해수, 좋은 시정 — 기초 회피 학습"),
-    CurriculumStage("stage_2_moderate", "medium",  70_000, "다중 빙산, 가벼운 해빙, 보통 시정"),
-    CurriculumStage("stage_3_hard",     "hard",    30_000, "밀집 빙산군, 높은 해빙 농도, 낮은 시정"),
+    # [수정] timesteps 대폭 증가: 에이전트가 충분히 경로 완주 경험을 쌓도록
+    # easy: 빙산 0개, 짧은 구간 → 성공 경험 축적이 최우선
+    CurriculumStage("stage_1_basic",    "easy",   150_000, "단일 빙산, 개방 해수, 좋은 시정 — 경로 완주 경험 축적"),
+    CurriculumStage("stage_2_moderate", "medium", 200_000, "다중 빙산, 가벼운 해빙, 보통 시정"),
+    CurriculumStage("stage_3_hard",     "hard",   150_000, "밀집 빙산군, 높은 해빙 농도, 낮은 시정"),
 ]
 
 
