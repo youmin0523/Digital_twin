@@ -90,3 +90,4 @@ Thumbs.db
 backend/logs/sentinel1_iw_fetcher.log
 backend/data/sentinel1_catalog_latest.json
 backend/data/realBergData_latest.json
+backend/pipeline/fetchers/realBergData_latest.json
