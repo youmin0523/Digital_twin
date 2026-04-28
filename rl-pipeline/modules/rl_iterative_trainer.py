@@ -31,15 +31,15 @@ def _history_path_for(route: str, ice_class: str, ship_type: str) -> Path:
 
 # ── 보상 가중치 Clamping 범위 ─────────────────────────────
 WEIGHT_BOUNDS: dict[str, tuple[float, float]] = {
-    "collision":         (-1500.0, -100.0),  # 하한 확장: 충돌 패널티 최대 강화 허용
-    "proximity":         (-30.0,   -1.0),    # 하한 확장: 근접 패널티 강화 허용
-    "danger_zone":       (-50.0,   -5.0),    # 신규: 위험 구역 경보 범위
-    "route_deviation":   (-2.0,    -0.05),
-    "progress":          (0.5,     5.0),     # 상한 확장: 전진 보상 강화 허용
+    "collision":         (-1500.0, -50.0),   # 상한 완화: -100→-50
+    "proximity":         (-30.0,   -0.5),
+    "danger_zone":       (-50.0,   -1.0),
+    "route_deviation":   (-2.0,    -0.01),
+    "progress":          (0.5,     100.0),   # [재학습] 5.0→100.0: clamp 버그 수정
     "smoothness":        (-0.5,    -0.01),
-    "fuel":              (-0.2,    -0.01),
+    "fuel":              (-0.2,    -0.005),
     "ice_concentration": (-5.0,    -0.1),
-    "episode_success":   (100.0,   1000.0),  # 상한 대폭 확장: 성공 보너스 최대 강화
+    "episode_success":   (100.0,   2000.0),  # [재학습] 상한 확장 1000→2000
 }
 
 
@@ -71,7 +71,7 @@ class RewardAdjuster:
         elif cr > 0.10:
             signals.append("high_collision")
 
-        if sr < 0.40:
+        if sr < 0.60:
             signals.append("low_success")
         elif sr < 0.70:
             signals.append("moderate_success")
@@ -304,7 +304,10 @@ class IterativeTrainer:
                 # 2. 커리큘럼 학습
                 logger.info("[IterativeTrainer] 커리큘럼 학습 시작...")
                 try:
-                    self.base_trainer.train_curriculum(reward_weights=current_weights)
+                    self.base_trainer.train_curriculum(
+                        reward_weights=current_weights,
+                        base_timesteps=base_timesteps,
+                    )
                 except Exception as e:
                     logger.error("[IterativeTrainer] 커리큘럼 학습 예외 발생: %s", e, exc_info=True)
                     # 학습 실패 시 이번 반복을 스킵하고 다음으로 진행
