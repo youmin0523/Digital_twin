@@ -1,92 +1,94 @@
-node_modules/
-.env
-.vite
-.vscode/
-.idea/
-.taskmaster/
-.taskmaster.md
-
 # Python
 __pycache__/
 *.pyc
 *.pyo
-.venv/
-
-# Data (large / auto-generated)
-backend/data/sentinel1_archive/
-backend/data/realIceData_latest.json
-backend/data/archive/
-backend/data/copernicus_icebergs.json
-backend/data/sentinel1_catalog_latest.json
-backend/data/weather_api_usage.json
-
-# NetCDF cache (downloaded satellite data)
-backend/pipeline/fetchers/cache/
-backend/pipeline/cache/
-
-# Build output
-frontend/dist/
-
-# Logs
-backend/logs/
-*.log
-
-# RL Pipeline
-rl-pipeline/venv/
-rl-pipeline/models/
-
-# Report Service
-report-service/venv/
-report-service/output/*.pdf
-report-service/data/departure_rl_model/*.zip
-report-service/data/calibration_state.json
-
-# Archive (old monolithic files)
-_archive/
-
-# Test / temp files
-tmp_test_api.py
-*.tmp
-backend/logs/sentinel1_iw_fetcher.log
-
-
-
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-
-# Virtual environment
 venv/
 .venv/
 env/
+
+# Node
+node_modules/
+package-lock.json
 
 # Environment variables
 .env
 .env.local
 .env.*.local
 
-# IDE / Editor settings
+# IDE / Editor
 .vscode/
 .idea/
 *.swp
 *.swo
+.vite
+
+# Build output
+dist/
+build/
+frontend/dist/
 
 # Logs
 logs/
 *.log
 
-# Distribution / build
-dist/
-build/
+# OS generated
+.DS_Store
+Thumbs.db
+
+# ML model weights & artifacts
+*.pt
+*.pth
+*.onnx
+*.pkl
+*.pickle
+*.h5
+*.weights
+*.zip
+
+# ML datasets (large binary image/label files)
+backend/data/datasets/
+backend/pipeline/models/runs/
+backend/pipeline/fetchers/cache/
+backend/pipeline/cache/
+
+# Auto-generated / fetched data
+backend/data/sentinel1_archive/
+backend/data/archive/
+backend/data/realIceData_month*.json
+backend/data/realIceData_latest.json
+backend/data/realBergData_latest.json
+backend/data/copernicus_icebergs.json
+backend/data/sentinel1_catalog_latest.json
+backend/data/weather_api_usage.json
+backend/data/weather_latest.json
+backend/data/arctic_weather_latest.json
+backend/data/arctic_ice_timeseries.czml
+backend/pipeline/fetchers/realBergData_latest.json
+backend/pipeline/fetchers/realIceData_latest.json
+backend/public/scripts/realIceData_2023/
+
+# RL Pipeline
+rl-pipeline/models/
+rl-pipeline/logs/
+rl-pipeline/*.zip
+
+# Report Service
+report-service/output/*.pdf
+report-service/data/departure_rl_model/checkpoints/
+report-service/data/calibration_state.json
+report-service/logs/
+
+# ML Pipeline
+ml-pipeline/models/
+
+# Task manager
+.taskmaster/
+.taskmaster.md
+
+# Archive
+_archive/
 
 # Temporary files
 *.tmp
 tmp/
-
-# OS generated files
-.DS_Store
-Thumbs.db
-backend/logs/sentinel1_iw_fetcher.log
-backend/data/sentinel1_catalog_latest.json
-backend/data/realBergData_latest.json
+tmp_test_api.py

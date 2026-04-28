@@ -255,16 +255,45 @@ class MultiModelIterativeTrainer:
 
     # ── 상태 조회 ─────────────────────────────────────────────
     def get_status(self) -> dict:
+        import json as _json
+        from pathlib import Path as _Path
+
+        _data_dir = _Path(__file__).resolve().parents[2] / "data"
+
         with self._lock:
             models = {k: v.to_dict() for k, v in self._statuses.items()}
             running_count = sum(1 for v in self._statuses.values() if v.is_running)
             converged_count = sum(1 for v in self._statuses.values() if v.converged)
 
+        # 인메모리에 없으면 디스크 파일에서 수렴 여부 보완
+        for ic, st in ALL_COMBINATIONS:
+            key = _combo_key(ic, st)
+            if key not in models:
+                hist_path = _data_dir / f"departure_iterative_history_{key}.json"
+                if hist_path.exists():
+                    try:
+                        existing = _json.loads(hist_path.read_text(encoding="utf-8"))
+                        already_converged = bool(existing and existing[-1].get("converged", False))
+                        models[key] = {
+                            "ice_class": ic,
+                            "ship_type": st,
+                            "label": _model_label(ic, st),
+                            "is_running": False,
+                            "current_iteration": len(existing),
+                            "latest_metrics": existing[-1].get("post_metrics", {}) if existing else {},
+                            "converged": already_converged,
+                            "error": None,
+                        }
+                    except Exception:
+                        pass
+
+        total_converged = sum(1 for m in models.values() if m.get("converged", False))
+
         return {
             "is_running": self.is_running,
             "total_models": len(ALL_COMBINATIONS),
             "running_models": running_count,
-            "converged_models": converged_count,
+            "converged_models": total_converged,
             "models": models,
         }
 

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import deque
+from itertools import islice
 from pathlib import Path
 from typing import Optional
 
@@ -51,17 +53,17 @@ def _model_dir_for(model_key: str) -> Path:
     return d
 
 DEFAULT_HYPERPARAMS = {
-    "learning_rate": 3e-4,        # [수정] 1e-4 → 3e-4: 학습률 복원 (수렴 속도 개선)
-    "buffer_size": 500_000,       # [수정] 1M → 500K: 메모리 절약 + 최근 경험 비중 증가
-    "batch_size": 256,            # [수정] 512 → 256: 더 잦은 업데이트
-    "gamma": 0.99,                # [수정] 0.995 → 0.99: 단기 보상(progress) 중시
+    "learning_rate": 3e-4,        # 유지
+    "buffer_size": 300_000,       # [재학습] 500K→300K: 최근 경험 집중
+    "batch_size": 128,            # [재학습] 256→128: 더 잦은 업데이트
+    "gamma": 0.95,                # [재학습] 0.99→0.95: 단기 보상(완주) 집중
     "tau": 0.005,
     "ent_coef": "auto",
     "train_freq": 1,
     "gradient_steps": 1,
-    "learning_starts": 5_000,     # [수정] 20K → 5K: 빠른 학습 시작 (easy stage에서 성공 경험 축적)
+    "learning_starts": 1_000,     # [재학습] 5K→1K: 빠른 학습 시작
     "policy_kwargs": {
-        "net_arch": [256, 256],   # [수정] [400,300] → [256,256]: 표준 크기 (overfitting 방지)
+        "net_arch": [256, 256],
     },
 }
 
@@ -69,40 +71,37 @@ DEFAULT_HYPERPARAMS = {
 class TrainingMetricsCallback(BaseCallback):
     """학습 중 메트릭 수집 콜백"""
 
+    _MAX_EPISODE_HISTORY = 2000  # 메모리 누수 방지
+    _MAX_METRICS_HISTORY = 500
+
     def __init__(self, log_interval: int = 1000, verbose: int = 0):
         super().__init__(verbose)
         self.log_interval = log_interval
-        self.episode_rewards = []
-        self.episode_lengths = []
-        self.collision_count = 0
-        self.success_count = 0
-        self.total_episodes = 0
-        self.metrics_history = []
-
-    _MAX_EPISODE_HISTORY = 2000  # 메모리 누수 방지
+        self.episode_rewards: deque[float] = deque(maxlen=self._MAX_EPISODE_HISTORY)
+        self.episode_lengths: deque[int] = deque(maxlen=self._MAX_EPISODE_HISTORY)
+        self.collision_count: int = 0
+        self.success_count: int = 0
+        self.total_episodes: int = 0
+        self.metrics_history: deque[dict] = deque(maxlen=self._MAX_METRICS_HISTORY)
 
     def _on_step(self) -> bool:
         infos = self.locals.get("infos", [])
         for info in infos:
             if "episode" in info:
                 self.total_episodes += 1
-                self.episode_rewards.append(info["episode"]["r"])
-                self.episode_lengths.append(info["episode"]["l"])
-                # 리스트 무한 증가 방지 (72시간 학습 대비)
-                if len(self.episode_rewards) > self._MAX_EPISODE_HISTORY:
-                    self.episode_rewards = self.episode_rewards[-self._MAX_EPISODE_HISTORY:]
-                    self.episode_lengths = self.episode_lengths[-self._MAX_EPISODE_HISTORY:]
+                self.episode_rewards.append(float(info["episode"]["r"]))
+                self.episode_lengths.append(int(info["episode"]["l"]))
             if info.get("collision", False):
                 self.collision_count += 1
             if info.get("success", False):
                 self.success_count += 1
 
         if self.num_timesteps % self.log_interval == 0 and self.total_episodes > 0:
-            recent_rewards = self.episode_rewards[-100:]
+            recent: list[float] = list(islice(reversed(self.episode_rewards), 100))
             metrics = {
                 "timestep": self.num_timesteps,
                 "episodes": self.total_episodes,
-                "mean_reward_100": float(np.mean(recent_rewards)) if recent_rewards else 0,
+                "mean_reward_100": float(np.mean(recent)) if recent else 0.0,
                 "collision_rate": self.collision_count / max(1, self.total_episodes),
                 "success_rate": self.success_count / max(1, self.total_episodes),
             }
@@ -343,5 +342,5 @@ class IcebergAvoidanceAgent:
             "model_loaded": self.model is not None,
             "version": self._model_version,
             "metrics": self.callback.get_latest_metrics(),
-            "metrics_history": self.callback.metrics_history[-50:],
+            "metrics_history": list(reversed(list(islice(reversed(self.callback.metrics_history), 50)))),
         }

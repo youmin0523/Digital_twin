@@ -1,15 +1,16 @@
 {
-  "pythonPath": "venv/Scripts/python.exe",
-  "venvPath": ".",
+  "pythonPath": "c:/cccc/Digital_twin/rl-pipeline/venv/Scripts/python.exe",
+  "venvPath": "c:/cccc/Digital_twin/rl-pipeline",
   "venv": "venv",
   "pythonVersion": "3.11",
-  "typeCheckingMode": "basic",
+  "typeCheckingMode": "off",
   "include": [
     "."
   ],
   "extraPaths": [
     ".",
-    "modules"
+    "modules",
+    "c:/cccc/Digital_twin/rl-pipeline/venv/Lib/site-packages"
   ],
   "executionEnvironments": [
     {
