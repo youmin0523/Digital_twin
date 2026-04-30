@@ -49,7 +49,8 @@ from modules.rl.departure_iterative_trainer import DepartureIterativeTrainer
 from modules.rl.multi_model_trainer import MultiModelIterativeTrainer, ALL_COMBINATIONS, SHIP_TYPES
 from modules.rl.prediction_calibrator import PredictionCalibrator
 from modules.rl import existing_rl_client
-from modules.whatif_generator import WhatIfGenerator
+from modules.whatif_generator_max import WhatIfGeneratorMax
+from modules import whatif_logger
 
 # ── 싱글톤 초기화 ────────────────────────────────────────────
 data_loader = DataLoader()
@@ -61,7 +62,7 @@ departure_trainer = DepartureTrainer()
 departure_iterative_trainer = DepartureIterativeTrainer(departure_trainer=departure_trainer)
 multi_model_trainer = MultiModelIterativeTrainer()
 calibrator = PredictionCalibrator()
-whatif_generator = WhatIfGenerator(route_scorer, data_loader)
+whatif_generator = WhatIfGeneratorMax(route_scorer, data_loader)  # v3.2: Max OAuth + RIO + 6~8개 보장
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 
@@ -562,8 +563,12 @@ async def multi_model_stop():
 
 def _run_whatif(job_id: str, req: WhatIfRequest):
     """비동기 What-If 시나리오 생성 (동기 — BackgroundTasks에서 실행)."""
+    import time as _time
+    t0 = _time.perf_counter()
+    print(f"[WHATIF-DEBUG] _run_whatif 진입 job={job_id}", flush=True)
     try:
         _update_job(job_id, 10)
+        print(f"[WHATIF-DEBUG] _update_job(10) → generate_scenarios 호출 시작", flush=True)
         result = whatif_generator.generate_scenarios(
             route=req.route,
             ice_class=req.ice_class,
@@ -583,6 +588,37 @@ def _run_whatif(job_id: str, req: WhatIfRequest):
         jobs[job_id]["result"] = result_dict
         _update_job(job_id, 100, status="completed")
         logger.info("What-If 완료: %d 시나리오", len(result.scenarios))
+
+        # 운영 로그 기록 (실패해도 결과 처리는 그대로)
+        try:
+            recs = [s.recommendation for s in result.scenarios]
+            rec_dist = {
+                "추천":   recs.count("추천"),
+                "조건부": recs.count("조건부"),
+                "비추천": recs.count("비추천"),
+            }
+            total = max(sum(rec_dist.values()), 1)
+            neg_ratio = rec_dist["비추천"] / total
+            convergence_status = (
+                "collapse" if neg_ratio >= 0.8
+                else "good"  if len(result.scenarios) >= 4 and rec_dist["추천"] > 0 and rec_dist["비추천"] > 0
+                else "stalled" if len(result.scenarios) < 4
+                else "improving"
+            )
+            whatif_logger.log_run(
+                request=req.dict(),
+                summary={
+                    "total_iterations": 1,
+                    "convergence_status": convergence_status,
+                    "best_quality": {
+                        "scenarios_count": len(result.scenarios),
+                        "recommendations_dist": rec_dist,
+                    },
+                },
+                latency_ms=(_time.perf_counter() - t0) * 1000,
+            )
+        except Exception:
+            logger.exception("whatif log write failed (non-fatal)")
     except Exception as e:
         logger.error("What-If 실패: %s", e, exc_info=True)
         _fail_job(job_id, str(e))
@@ -610,13 +646,23 @@ async def whatif_status(job_id: str):
     }
 
 
+@app.get("/api/report/whatif/stats")
+async def whatif_stats():
+    """What-if 누적 실행 통계 — 운영 모니터링용."""
+    try:
+        return whatif_logger.get_stats()
+    except Exception as e:
+        logger.exception("whatif_stats failed")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
 # ══════════════════════════════════════════════════════════════
 # SAR 빙산 탐지 모델 학습 API — 8003 전용 서버로 프록시
 # ══════════════════════════════════════════════════════════════
 # SAR 학습은 sar_server.py (포트 8003) 에서 독립 프로세스로 실행됩니다.
 # 이 서버(8002)는 RL 학습 전용으로 유지되어 이벤트루프 블로킹이 발생하지 않습니다.
 
-SAR_SERVER_URL = "http://127.0.0.1:8003"
+SAR_SERVER_URL = "http://127.0.0.1:8005"  # sar_server.py의 실제 포트 (코멘트엔 8003이지만 코드는 8005)
 
 
 async def _sar_proxy(method: str, path: str, body: bytes | None = None) -> dict:
@@ -661,3 +707,5 @@ async def sar_model_info():
         return await _sar_proxy("GET", "/api/sar/model-info")
     except Exception:
         return {"error": "SAR 서버(8003) 응답 없음"}
+
+

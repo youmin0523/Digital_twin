@@ -11,6 +11,18 @@ __pycache__/
 *.pyc
 *.pyo
 .venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# 환경 변수·시크릿
+.env.local
+.env.*.local
+.env.production
+*.local
+pyrightconfig.json
 
 # Data (large / auto-generated)
 backend/data/sentinel1_archive/
@@ -18,7 +30,11 @@ backend/data/realIceData_latest.json
 backend/data/archive/
 backend/data/copernicus_icebergs.json
 backend/data/sentinel1_catalog_latest.json
+backend/data/realBergData_latest.json
 backend/data/weather_api_usage.json
+
+# 학습 데이터셋 (대용량 PNG·라벨)
+backend/data/datasets/
 
 # NetCDF cache (downloaded satellite data)
 backend/pipeline/fetchers/cache/
@@ -26,67 +42,82 @@ backend/pipeline/cache/
 
 # Build output
 frontend/dist/
+dist/
+build/
 
 # Logs
 backend/logs/
 *.log
+logs/
+log_snapshot.txt
+backend/logs/sentinel1_iw_fetcher.log
 
 # RL Pipeline
 rl-pipeline/venv/
 rl-pipeline/models/
+rl-pipeline/runs/
 
 # Report Service
 report-service/venv/
+report-service/output/
 report-service/output/*.pdf
 report-service/data/departure_rl_model/*.zip
 report-service/data/calibration_state.json
+report-service/data/whatif_*.json
+report-service/data/whatif_*.jsonl
+report-service/data/archive_*/
 
-# Archive (old monolithic files)
+# ML 모델·체크포인트 (대용량 바이너리)
+*.pt
+*.pth
+*.h5
+*.ckpt
+*.onnx
+*.npy
+*.npz
+*.pkl
+ml-pipeline/models/
+yolov8n.pt
+
+# 이미지 (학습 데이터·임시 캡처) — frontend UI 리소스는 예외
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+!frontend/public/**
+!frontend/src/assets/**
+
+# 압축 파일
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.rar
+
+# Archive
 _archive/
+archive_*/
 
 # Test / temp files
 tmp_test_api.py
 *.tmp
-backend/logs/sentinel1_iw_fetcher.log
-
-
-
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-
-# Virtual environment
-venv/
-.venv/
-env/
-
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# IDE / Editor settings
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Logs
-logs/
-*.log
-
-# Distribution / build
-dist/
-build/
-
-# Temporary files
-*.tmp
+*.bak
+*.old
+*~
 tmp/
+test_write.txt
+fix_venv.js
+
+# 윈도우 배치/스케줄러
+*.bat
 
 # OS generated files
 .DS_Store
 Thumbs.db
-backend/logs/sentinel1_iw_fetcher.log
-backend/data/sentinel1_catalog_latest.json
-backend/data/realBergData_latest.json
+desktop.ini
+
+# IDE
+*.swp
+*.swo

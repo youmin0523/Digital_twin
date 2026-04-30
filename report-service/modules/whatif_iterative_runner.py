@@ -48,7 +48,8 @@ class WhatIfIterRecord:
     signals: list[str]
     improved: bool
     converged: bool
-    duration_seconds: float
+    convergence_status: str = "improving"  # good | collapse | stalled | improving
+    duration_seconds: float = 0.0
     result_path: str = ""      # JSON 결과 파일 경로
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
 
@@ -138,6 +139,36 @@ class WhatIfQualityAnalyzer:
             return False
         # 이전보다 나빠지지 않고 목표 달성
         return True
+
+    @staticmethod
+    def convergence_status(quality: dict, prev_quality: dict | None,
+                           signals: list[str]) -> str:
+        """수렴 유형을 4단계로 분류하여 의사결정 도움.
+
+        - "good"      : 시나리오 다양성/분포 모두 만족 → 진짜 수렴
+        - "collapse"  : 모든 시나리오가 비추천 → 의사결정 불가, 조건 완화 필요
+        - "stalled"   : 진행 안 함 (시나리오 수/spread 정체)
+        - "improving" : 아직 진행 중 (수렴 못 함, 정상)
+        """
+        rec_dist = quality.get("recommendations_dist", {}) or {}
+        total = sum(rec_dist.values())
+        if total > 0:
+            neg_ratio = rec_dist.get("비추천", 0) / total
+            pos_ratio = rec_dist.get("추천", 0) / total
+            if neg_ratio >= 0.8:
+                return "collapse"
+            if pos_ratio >= 1.0 and quality["avg_rio_spread"] < TARGET_RIO_SPREAD:
+                return "stalled"
+
+        if quality["scenarios_count"] >= TARGET_SCENARIOS \
+                and quality["avg_rio_spread"] >= TARGET_RIO_SPREAD \
+                and prev_quality is not None:
+            return "good"
+
+        if "no_improvement" in signals:
+            return "stalled"
+
+        return "improving"
 
 
 class WhatIfConfigEvolver:
@@ -319,6 +350,7 @@ class WhatIfIterativeRunner:
             prev_quality = self._last_quality()
             signals      = self._analyzer.analyze_signals(quality, prev_quality)
             converged    = self._analyzer.converged(quality, prev_quality)
+            convergence_status = self._analyzer.convergence_status(quality, prev_quality, signals)
             improved     = (prev_quality is None or
                             quality["scenarios_count"] > prev_quality.get("scenarios_count", 0) or
                             quality["avg_rio_spread"] > prev_quality.get("avg_rio_spread", 0))
@@ -330,6 +362,7 @@ class WhatIfIterativeRunner:
                 signals=signals,
                 improved=improved,
                 converged=converged,
+                convergence_status=convergence_status,
                 duration_seconds=round(elapsed, 1),
                 result_path=str(_BASE / "data" / f"whatif_iter{iteration_num}_result.json"),
             )
@@ -361,9 +394,19 @@ class WhatIfIterativeRunner:
                                    r.quality["avg_rio_spread"] * 10))
                 if self._history else None)
 
+        last_status = self._history[-1].convergence_status if self._history else "improving"
+        # 사람이 읽을 수렴 요약 메시지
+        STATUS_MESSAGES = {
+            "good":      "수렴 — 시나리오 다양성과 분포 모두 만족",
+            "collapse":  "붕괴 — 모든 시나리오가 비추천 (조건 완화 권장)",
+            "stalled":   "정체 — 시나리오 수/다양성이 더 늘지 않음",
+            "improving": "진행 중 — 아직 수렴 미달 (정상)",
+        }
         result = {
             "total_iterations": len(self._history),
             "converged": self._history[-1].converged if self._history else False,
+            "convergence_status": last_status,
+            "convergence_message": STATUS_MESSAGES.get(last_status, last_status),
             "best_quality": best.quality if best else {},
             "best_iteration": best.iteration if best else 0,
             "history": [asdict(r) for r in self._history],
