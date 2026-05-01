@@ -113,3 +113,4 @@ export async function compareFuelCost(params) {
   if (!res.ok) throw new Error(`compareFuelCost failed: ${res.status} ${res.statusText}`);
   return res.json();
 }
+

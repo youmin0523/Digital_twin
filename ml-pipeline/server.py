@@ -10,6 +10,7 @@ import logging
 
 import joblib
 import numpy as np
+import pandas as pd
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -31,20 +32,71 @@ app.add_middleware(
 )
 
 # ── 모델 로드 ───────────────────────────────────────────────
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "fuel_xgb_model.pkl")
+# V7c (선종별 3개 모델) 우선, fallback으로 옛 V4 단일 모델 지원
+V7C_PATH = os.path.join(os.path.dirname(__file__), "models", "fuel_xgb_model_v7c.pkl")
+LEGACY_PATH = os.path.join(os.path.dirname(__file__), "models", "fuel_xgb_model.pkl")
 artifact = None
+IS_V7C = False  # V7c bundle 여부
+
+# V7c 학습 분포 (외삽 경고용)
+V7C_BOUNDS = {
+    "ice_thickness":     (0.0, 2.831),
+    "ice_concentration": (0.0, 1.0),
+    "displacement":      (15000, 30000),
+    "engine_power":      (20000, 45000),
+    "draft":             (6.0, 11.0),
+}
+V7C_VESSELS = ("icebreaker", "container", "lng")
 
 
 @app.on_event("startup")
 def load_model():
-    global artifact
-    if os.path.exists(MODEL_PATH):
-        artifact = joblib.load(MODEL_PATH)
-        logger.info(f"[ML] 연료 예측 모델 로드 완료: {MODEL_PATH}")
+    global artifact, IS_V7C
+    if os.path.exists(V7C_PATH):
+        artifact = joblib.load(V7C_PATH)
+        IS_V7C = isinstance(artifact, dict) and "models" in artifact
+        if IS_V7C:
+            logger.info(f"[ML] V7c 번들 로드 완료 (선종별 3개 모델): {V7C_PATH}")
+            logger.info(f"[ML] 메트릭: {artifact.get('metrics_per_vessel', artifact.get('metrics', {}))}")
+            return
+    if os.path.exists(LEGACY_PATH):
+        artifact = joblib.load(LEGACY_PATH)
+        IS_V7C = False
+        logger.info(f"[ML] 옛 단일 모델 로드 (V7c fallback): {LEGACY_PATH}")
         logger.info(f"[ML] 모델 성능: {artifact.get('metrics', {})}")
-    else:
-        logger.warning(f"[ML] 모델 파일 없음: {MODEL_PATH}")
-        logger.warning("[ML] 먼저 python train_fuel_model.py 를 실행하세요.")
+        return
+    logger.warning("[ML] 모델 파일 없음. train_fuel_model.py 또는 V7c 번들이 필요합니다.")
+
+
+def _predict_v7c(vessel_type: str, displacement: float, draft: float,
+                 engine_power: float, ice_thickness: float, ice_concentration: float):
+    """V7c bundle을 사용한 단일 예측. (값, 학습범위 OK 여부, 범위밖 항목)"""
+    if vessel_type not in V7C_VESSELS:
+        # 기본은 가장 보수적인 결과 (icebreaker)
+        vessel_type = "icebreaker"
+    inputs = {
+        "displacement": displacement, "draft": draft, "engine_power": engine_power,
+        "ice_thickness": ice_thickness, "ice_concentration": ice_concentration,
+    }
+    oor = []
+    for k, v in inputs.items():
+        lo, hi = V7C_BOUNDS[k]
+        if v < lo or v > hi:
+            oor.append(f"{k}={v} (training range {lo}-{hi})")
+    feature_cols = artifact["feature_columns"]
+    Xq = pd.DataFrame([[inputs[c] for c in feature_cols]], columns=feature_cols)
+    pred_log = float(artifact["models"][vessel_type].predict(Xq)[0])
+    return float(np.exp(pred_log)), len(oor) == 0, oor
+
+
+def _predict_legacy(displacement, draft, engine_power, ice_thickness,
+                    ice_concentration, ice_class_code):
+    """옛 V4 단일 모델용 fallback."""
+    X = np.array([[displacement, draft, engine_power, ice_thickness,
+                   ice_concentration, ice_class_code]])
+    y_log = artifact["model"].predict(X)
+    return (float(np.exp(y_log[0])) if artifact.get("log_transformed")
+            else float(y_log[0])), True, []
 
 
 # ── Request / Response Models ───────────────────────────────
@@ -55,7 +107,8 @@ class FuelPredictRequest(BaseModel):
     engine_power: float       # 엔진 출력 (kW)
     ice_thickness: float      # 빙하 두께 (m), 0~3
     ice_concentration: float  # 빙하 농도 (0~1)
-    ice_class_code: int       # 내빙등급 코드 (0=없음, 2=PC2, 4=PC4)
+    ice_class_code: int = 0   # (V7c는 무시) 옛 V4 호환용 — 0=없음, 2=PC2, 4=PC4
+    vessel_type: str = "icebreaker"  # V7c 라우팅 — icebreaker | container | lng
 
 
 class RouteCompareRequest(BaseModel):
@@ -130,48 +183,69 @@ def health():
 
 @app.post("/api/fuel/predict")
 def predict_fuel(req: FuelPredictRequest):
-    """단일 구간 연료 소모량 예측"""
+    """단일 구간 연료 소모량 예측 — V7c 사용 시 vessel_type 라우팅."""
     if not artifact:
-        return {"error": "모델이 로드되지 않았습니다. train_fuel_model.py를 먼저 실행하세요."}
+        return {"error": "모델이 로드되지 않았습니다."}
 
-    X = np.array([[
-        req.displacement, req.draft, req.engine_power,
-        req.ice_thickness, req.ice_concentration, req.ice_class_code,
-    ]])
-
-    y_log = artifact["model"].predict(X)
-    fuel_per_nm = float(np.exp(y_log[0])) if artifact.get("log_transformed") else float(y_log[0])
-
-    return {
-        "fuel_per_nm": round(fuel_per_nm, 6),
-        "unit": "tons/nm",
-    }
+    if IS_V7C:
+        fuel, in_range, oor = _predict_v7c(
+            req.vessel_type, req.displacement, req.draft, req.engine_power,
+            req.ice_thickness, req.ice_concentration,
+        )
+        return {
+            "fuel_per_nm": round(fuel, 6),
+            "unit": "tons/nm",
+            "model_version": "V7c",
+            "vessel_type": req.vessel_type,
+            "in_training_range": in_range,
+            "out_of_range_fields": oor,
+        }
+    else:
+        fuel, _, _ = _predict_legacy(
+            req.displacement, req.draft, req.engine_power,
+            req.ice_thickness, req.ice_concentration, req.ice_class_code,
+        )
+        return {
+            "fuel_per_nm": round(fuel, 6),
+            "unit": "tons/nm",
+            "model_version": "V4_legacy",
+        }
 
 
 @app.post("/api/fuel/compare")
 def compare_routes(req: RouteCompareRequest):
-    """북극항로 vs 수에즈 운하 경제성 비교"""
+    """북극항로 vs 수에즈 운하 경제성 비교 — V7c 사용 시 선종별 정확 예측."""
     if not artifact:
         return {"error": "모델이 로드되지 않았습니다."}
 
     vtype = req.vessel_type
+    nsr_oor: list[str] = []
+    suez_oor: list[str] = []
 
-    # ── 1) NSR 연료 소모량 예측 (ML 모델) ────────────────────
-    X_nsr = np.array([[
-        req.displacement, req.draft, req.engine_power,
-        req.nsr_ice_thickness, req.nsr_ice_concentration, req.ice_class_code,
-    ]])
-    y_log = artifact["model"].predict(X_nsr)
-    nsr_fuel_per_nm = float(np.exp(y_log[0])) if artifact.get("log_transformed") else float(y_log[0])
+    # ── 1) NSR 연료 소모량 예측 ──────────────────────────────
+    if IS_V7C:
+        nsr_fuel_per_nm, _, nsr_oor = _predict_v7c(
+            vtype, req.displacement, req.draft, req.engine_power,
+            req.nsr_ice_thickness, req.nsr_ice_concentration,
+        )
+    else:
+        nsr_fuel_per_nm, _, _ = _predict_legacy(
+            req.displacement, req.draft, req.engine_power,
+            req.nsr_ice_thickness, req.nsr_ice_concentration, req.ice_class_code,
+        )
     nsr_total_fuel = nsr_fuel_per_nm * req.nsr_distance_nm
 
     # ── 2) 수에즈 연료 소모량 (개수역 → 빙하 없음) ──────────
-    X_suez = np.array([[
-        req.displacement, req.draft, req.engine_power,
-        0.0, 0.0, req.ice_class_code,
-    ]])
-    y_log_suez = artifact["model"].predict(X_suez)
-    suez_fuel_per_nm = float(np.exp(y_log_suez[0])) if artifact.get("log_transformed") else float(y_log_suez[0])
+    if IS_V7C:
+        suez_fuel_per_nm, _, suez_oor = _predict_v7c(
+            vtype, req.displacement, req.draft, req.engine_power,
+            0.0, 0.0,
+        )
+    else:
+        suez_fuel_per_nm, _, _ = _predict_legacy(
+            req.displacement, req.draft, req.engine_power,
+            0.0, 0.0, req.ice_class_code,
+        )
     suez_total_fuel = suez_fuel_per_nm * req.suez_distance_nm
 
     # ── 3) 운항 시간 계산 ────────────────────────────────────
@@ -242,4 +316,9 @@ def compare_routes(req: RouteCompareRequest):
         },
         "vessel_type": vtype,
         "fuel_price_usd_per_ton": FUEL_PRICE_USD_PER_TON,
+        "model_version": "V7c" if IS_V7C else "V4_legacy",
+        "extrapolation_warnings": {
+            "nsr": nsr_oor,
+            "suez": suez_oor,
+        },
     }
