@@ -10,9 +10,10 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-RL_LOG  = Path(r"C:\cccc\Digital_twin\rl-pipeline\logs\train_all.log")
-DEP_LOG = Path(r"C:\cccc\Digital_twin\report-service\logs\train_departure.log")
-OUT     = Path(r"C:\cccc\Digital_twin\log_snapshot.txt")
+BASE    = Path(__file__).resolve().parent
+RL_LOG  = BASE / "rl-pipeline" / "logs" / "train_all.log"
+DEP_LOG = BASE / "report-service" / "logs" / "train_departure.log"
+OUT     = BASE / "log_snapshot.txt"
 INTERVAL = 180  # 3분
 
 
