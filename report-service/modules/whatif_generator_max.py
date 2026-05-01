@@ -180,6 +180,82 @@ def augment_from_pool(
     return added
 
 
+async def augment_from_pool_async(
+    summaries: list,
+    base_route: str,
+    base_ice_class: str,
+    base_departure_date: str,
+    base_forecast_days: int,
+    tool_executor: WhatIfToolExecutor,
+    target_min: int = MIN_TOTAL_SCENARIOS,
+) -> int:
+    """augment_from_pool의 비동기 병렬 버전.
+
+    풀 후보들의 score_route 호출을 asyncio.gather + asyncio.to_thread로 동시 실행
+    하여 시간을 (직렬 N개 → max 1개)로 단축한다.
+    """
+    deduped = dedupe_summaries(summaries)
+    needed = target_min - len(deduped)
+    if needed <= 0:
+        return 0
+
+    seen_keys = {_summary_key(rs) for rs in deduped}
+
+    try:
+        base_dep_obj = date.fromisoformat(base_departure_date)
+    except ValueError:
+        base_dep_obj = date.today()
+
+    pool = list(HARDCODED_SCENARIO_POOL)
+    random.shuffle(pool)
+
+    # 후보 준비: needed * 2개를 미리 추출 (중복 발생 대비)
+    candidates = []
+    for template in pool[:max(needed * 2, 8)]:
+        params = {
+            'route': base_route,
+            'ice_class': base_ice_class,
+            'departure_date': base_departure_date,
+            'forecast_days': base_forecast_days,
+        }
+        overrides = dict(template['overrides'])
+        offset_days = overrides.pop('departure_offset_days', 0)
+        if offset_days:
+            params['departure_date'] = (
+                base_dep_obj + timedelta(days=offset_days)
+            ).isoformat()
+        params.update(overrides)
+        candidates.append((template, params))
+
+    # 모든 후보의 score_route를 동시 실행 (각자 별도 스레드)
+    tasks = [
+        asyncio.to_thread(tool_executor.execute, t['tool'], p)
+        for t, p in candidates
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    added = 0
+    for (template, _params), rs in zip(candidates, results):
+        if added >= needed:
+            break
+        if isinstance(rs, Exception):
+            logger.warning("풀 보강 병렬 실행 오류 [%s]: %s", template['name'], rs)
+            continue
+        if not isinstance(rs, dict) or 'error' in rs or 'avg_rio' not in rs:
+            continue
+        key = _summary_key(rs)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        rs.setdefault('scenario', template['name'])
+        summaries.append(rs)
+        added += 1
+
+    if added > 0:
+        logger.info("풀 보강(병렬): %d개 추가", added)
+    return added
+
+
 def parse_result_v3(ai_text: str, collected_summaries: list) -> WhatIfResult:
     """v3 파싱: 중복 제거 + RIO 기반 분류.
 
@@ -331,7 +407,7 @@ class WhatIfGeneratorMax:
         self.collected_route_summaries = deduped[:CLAUDE_SCENARIO_CAP]
 
         target = random.randint(MIN_TOTAL_SCENARIOS, MAX_TOTAL_SCENARIOS)
-        added = augment_from_pool(
+        added = await augment_from_pool_async(
             self.collected_route_summaries,
             route, ice_class, departure_date, forecast_days,
             self.tool_executor,

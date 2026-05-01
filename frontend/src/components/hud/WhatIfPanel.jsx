@@ -195,17 +195,17 @@ export default function WhatIfPanel({ route = 'NSR', iceClass = 'PC5' }) {
       boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
       padding: '12px 16px',
       fontFamily: "'Segoe UI', system-ui, sans-serif",
-      maxHeight: 'calc(100vh - 20px)', overflowY: 'auto',
+      maxHeight: 'calc(100vh - 280px)', overflowY: 'auto',
     }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0' }}>🔮 WHAT-IF SCENARIO</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0' }}>WHAT-IF SCENARIO</div>
         <span onClick={loadStats}
           style={{
             cursor: 'pointer', color: '#c4b5fd', fontSize: 10,
             padding: '2px 6px', borderRadius: 3,
             border: '1px solid #4c1d95', letterSpacing: 0.5,
-          }}>📊 STATS</span>
+          }}>STATS</span>
       </div>
 
       <div style={{ fontSize: 10, color: '#6b89b0', marginBottom: 8 }}>
@@ -314,7 +314,7 @@ export default function WhatIfPanel({ route = 'NSR', iceClass = 'PC5' }) {
                 marginTop: 8,
                 letterSpacing: 1, fontWeight: 'bold',
               }}>
-                ⚠️ 가설 시나리오 ({hypScenarios.length}개) — 의사결정 참고만
+                가설 시나리오 ({hypScenarios.length}개) — 의사결정 참고만
               </div>
               {hypScenarios.map((sc, i) => <ScenarioCard key={`h-${i}`} sc={sc} hyp />)}
             </>
@@ -327,8 +327,9 @@ export default function WhatIfPanel({ route = 'NSR', iceClass = 'PC5' }) {
               background: 'rgba(124,58,237,0.08)',
               border: '1px solid #4c1d95', borderRadius: 6,
               fontSize: 11, color: '#c4b5fd',
-              lineHeight: 1.5, maxHeight: 400, overflow: 'auto',
+              lineHeight: 1.5,
               whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
             }}>
               <div style={{ fontSize: 10, fontWeight: 'bold', color: '#a78bfa', marginBottom: 4 }}>
                 AI 종합 추천
@@ -356,7 +357,7 @@ export default function WhatIfPanel({ route = 'NSR', iceClass = 'PC5' }) {
             }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <div style={{ fontSize: 12, fontWeight: 'bold', color: '#a78bfa', letterSpacing: 1 }}>
-                📊 WHAT-IF USAGE STATS
+                WHAT-IF USAGE STATS
               </div>
               <span onClick={() => setShowStats(false)}
                 style={{ cursor: 'pointer', color: '#6b89b0', fontSize: 16 }}>×</span>

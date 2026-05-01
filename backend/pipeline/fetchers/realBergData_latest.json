@@ -1,97 +1,97 @@
 {
   "source": "US National Ice Center / BYU/NASA via GitHub / NSIDC IIP",
-  "date": "2026-04-30",
+  "date": "2026-05-01",
   "berg_count": 85,
   "bergs": [
     {
       "id": "A76C",
-      "lon": -36.19,
-      "lat": -58.65,
+      "lon": -36.37,
+      "lat": -58.59,
       "length_m": 29632,
       "width_m": 12964,
       "type": "large",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "A81",
-      "lon": -56.19,
-      "lat": -64.66,
+      "lon": -55.34,
+      "lat": -64.4,
       "length_m": 51856,
       "width_m": 46300,
       "type": "tabular",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "A83",
-      "lon": -53.25,
-      "lat": -66.88,
+      "lon": -53.18,
+      "lat": -66.53,
       "length_m": 22224,
       "width_m": 12964,
       "type": "large",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "A84",
-      "lon": -106.83,
-      "lat": -73.24,
+      "lon": -107.21,
+      "lat": -72.84,
       "length_m": 22224,
       "width_m": 11112,
       "type": "large",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "A85",
-      "lon": -57.29,
-      "lat": -68.1,
+      "lon": -57.32,
+      "lat": -67.73,
       "length_m": 18520,
       "width_m": 5556,
       "type": "large",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "B09B",
-      "lon": 143.21,
+      "lon": 143.2,
       "lat": -66.09,
       "length_m": 50004,
       "width_m": 18520,
       "type": "tabular",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "B09G",
-      "lon": 41.56,
+      "lon": 41.55,
       "lat": -68.2,
       "length_m": 22224,
       "width_m": 12964,
       "type": "large",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "B22A",
-      "lon": -178.65,
-      "lat": -70.63,
+      "lon": -178.96,
+      "lat": -70.48,
       "length_m": 53708,
       "width_m": 46300,
       "type": "tabular",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "B22F",
-      "lon": 179.83,
-      "lat": -67.1,
+      "lon": 179.19,
+      "lat": -67.0,
       "length_m": 25928,
       "width_m": 12964,
       "type": "large",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "B22H",
-      "lon": 176.25,
-      "lat": -72.13,
+      "lon": 174.5,
+      "lat": -71.85,
       "length_m": 14816,
       "width_m": 11112,
       "type": "medium",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "C15",
@@ -100,25 +100,25 @@
       "length_m": 25928,
       "width_m": 18520,
       "type": "large",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "C18B",
-      "lon": 47.38,
-      "lat": -66.94,
+      "lon": 47.37,
+      "lat": -66.9,
       "length_m": 18520,
       "width_m": 7408,
       "type": "large",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "C18C",
-      "lon": 39.08,
+      "lon": 39.07,
       "lat": -68.47,
       "length_m": 18520,
       "width_m": 3704,
       "type": "large",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "C21B",
@@ -127,7 +127,7 @@
       "length_m": 22224,
       "width_m": 14816,
       "type": "large",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "C24",
@@ -136,7 +136,7 @@
       "length_m": 20372,
       "width_m": 5556,
       "type": "large",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "C30",
@@ -145,7 +145,7 @@
       "length_m": 16668,
       "width_m": 5556,
       "type": "medium",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "C31",
@@ -154,25 +154,25 @@
       "length_m": 16668,
       "width_m": 5556,
       "type": "medium",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "C36",
-      "lon": 146.46,
-      "lat": -67.48,
+      "lon": 146.48,
+      "lat": -67.47,
       "length_m": 42596,
       "width_m": 29632,
       "type": "tabular",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "C39",
-      "lon": 74.24,
-      "lat": -68.81,
+      "lon": 72.81,
+      "lat": -68.52,
       "length_m": 14816,
       "width_m": 7408,
       "type": "medium",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "D15A",
@@ -181,7 +181,7 @@
       "length_m": 94452,
       "width_m": 40744,
       "type": "tabular",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "D15B",
@@ -190,16 +190,16 @@
       "length_m": 37040,
       "width_m": 22224,
       "type": "tabular",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "D15C",
-      "lon": 79.82,
-      "lat": -67.09,
+      "lon": 79.65,
+      "lat": -67.14,
       "length_m": 25928,
       "width_m": 12964,
       "type": "large",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "D23",
@@ -208,43 +208,43 @@
       "length_m": 12964,
       "width_m": 11112,
       "type": "medium",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "D32",
-      "lon": -47.28,
-      "lat": -66.41,
+      "lon": -46.48,
+      "lat": -66.16,
       "length_m": 16668,
       "width_m": 11112,
       "type": "medium",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "D33A",
-      "lon": -57.57,
-      "lat": -65.03,
+      "lon": -57.33,
+      "lat": -64.77,
       "length_m": 62968,
       "width_m": 18520,
       "type": "tabular",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "D33B",
-      "lon": -53.44,
-      "lat": -66.98,
+      "lon": -53.33,
+      "lat": -66.64,
       "length_m": 38892,
       "width_m": 22224,
       "type": "tabular",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "D33C",
-      "lon": -57.95,
-      "lat": -65.45,
+      "lon": -57.72,
+      "lat": -65.21,
       "length_m": 27780,
       "width_m": 12964,
       "type": "large",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "D34",
@@ -253,16 +253,16 @@
       "length_m": 20372,
       "width_m": 14816,
       "type": "large",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "D35",
-      "lon": -48.68,
-      "lat": -65.28,
+      "lon": -48.5,
+      "lat": -64.92,
       "length_m": 51856,
       "width_m": 11112,
       "type": "tabular",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "D37",
@@ -271,7 +271,7 @@
       "length_m": 55560,
       "width_m": 12964,
       "type": "tabular",
-      "last_update": "04/24/2026"
+      "last_update": "04/30/2026"
     },
     {
       "id": "A74A",
