@@ -9,6 +9,7 @@ import math
 import logging
 import time
 from dataclasses import dataclass
+from itertools import islice
 from typing import Optional
 
 import numpy as np
@@ -16,9 +17,9 @@ import numpy as np
 try:
     from stable_baselines3.common.callbacks import BaseCallback as _BaseCallback
 except ImportError:
-    class _BaseCallback:
-        def __init__(self, verbose=0): pass
-        def _on_step(self): return True
+    class _BaseCallback:  # type: ignore[no-redef]
+        def __init__(self, verbose: int = 0) -> None: self.verbose = verbose
+        def _on_step(self) -> bool: return True
 
 from .rl_agent import IcebergAvoidanceAgent, _StopTraining
 from .rl_environment import IcebergAvoidanceEnv, Iceberg
@@ -36,7 +37,7 @@ class _StopCallback(_BaseCallback):
     _StopTraining 예외를 발생시켜 model.learn()을 즉시 중단합니다.
     """
     def __init__(self, trainer: "RLTrainer"):
-        super().__init__(verbose=0)
+        super().__init__(verbose=0)  # type: ignore[call-arg]
         self.trainer = trainer
 
     def _on_step(self) -> bool:
@@ -54,12 +55,15 @@ class CurriculumStage:
 
 
 CURRICULUM = [
-    # [수정] timesteps 대폭 증가: 에이전트가 충분히 경로 완주 경험을 쌓도록
-    # easy: 빙산 0개, 짧은 구간 → 성공 경험 축적이 최우선
-    CurriculumStage("stage_1_basic",    "easy",   150_000, "단일 빙산, 개방 해수, 좋은 시정 — 경로 완주 경험 축적"),
-    CurriculumStage("stage_2_moderate", "medium", 200_000, "다중 빙산, 가벼운 해빙, 보통 시정"),
-    CurriculumStage("stage_3_hard",     "hard",   150_000, "밀집 빙산군, 높은 해빙 농도, 낮은 시정"),
+    # 비율 기반 (합=100). train_curriculum()에서 base_timesteps에 비례 분배.
+    # easy 50%: 빙산 없음, 경로 완주 경험 집중 축적
+    CurriculumStage("stage_1_basic",    "easy",   50, "빙산 없음, 맑은 날씨 — 경로 완주 경험 최우선 축적"),
+    # medium 33%: 빙산 도입, 회피 학습
+    CurriculumStage("stage_2_moderate", "medium", 33, "다중 빙산, 가벼운 해빙, 보통 시정"),
+    # hard 17%: 고난이도
+    CurriculumStage("stage_3_hard",     "hard",   17, "밀집 빙산군, 높은 해빙 농도, 낮은 시정"),
 ]
+_CURRICULUM_RATIO_TOTAL = sum(s.timesteps for s in CURRICULUM)  # 100
 
 
 class RLTrainer:
@@ -89,18 +93,29 @@ class RLTrainer:
         )
 
     def train_curriculum(self, stages: list[CurriculumStage] | None = None,
-                         reward_weights: RewardWeights | None = None) -> dict:
+                         reward_weights: RewardWeights | None = None,
+                         base_timesteps: int | None = None) -> dict:
         stages = stages or CURRICULUM
         self.is_training = True
         self.stop_requested = False
         results = []
+
+        # base_timesteps가 주어지면 각 stage의 비율(stage.timesteps)에 따라 분배
+        # 예: base_timesteps=150_000, 비율=[50,33,17] → [75000, 49500, 25500]
+        total_ratio = sum(s.timesteps for s in stages)
+        def _stage_ts(stage: CurriculumStage) -> int:
+            if base_timesteps is None:
+                return stage.timesteps  # 비율 값 그대로 사용 (하위 호환)
+            return max(10_000, int(base_timesteps * stage.timesteps / total_ratio))
+
         try:
             for i, stage in enumerate(stages):
                 if self.stop_requested:
                     logger.info("[Trainer] 학습 중단 요청으로 커리큘럼 중단")
                     break
                 self.current_stage = stage.name
-                logger.info(f"[Trainer] === 커리큘럼 {i+1}/{len(stages)}: {stage.name} ===")
+                ts = _stage_ts(stage)
+                logger.info(f"[Trainer] === 커리큘럼 {i+1}/{len(stages)}: {stage.name} ({ts:,} steps) ===")
 
                 try:
                     self._create_env(stage.difficulty, reward_weights)
@@ -111,7 +126,7 @@ class RLTrainer:
                         self.agent.model.set_env(self.agent.env)
 
                     start_time = time.time()
-                    metrics = self.agent.train(total_timesteps=stage.timesteps, extra_callback=_StopCallback(self))
+                    metrics = self.agent.train(total_timesteps=ts, extra_callback=_StopCallback(self))
                     elapsed = time.time() - start_time
 
                     result = {
@@ -135,7 +150,7 @@ class RLTrainer:
         return {"stages": results, "total_stages": len(stages)}
 
     def train_single(self, difficulty: str = "medium", timesteps: int = 100_000,
-                     reward_weights: RewardWeights | None = None) -> dict:
+                     reward_weights: RewardWeights | None = None) -> dict:  # type: ignore[return]
         self.is_training = True
         self.stop_requested = False
         self.current_stage = f"single_{difficulty}"
@@ -173,8 +188,11 @@ class RLTrainer:
             fixed_ice_class=self._fixed_ice_class,
             ship_params=self._ship_params,
         )
-        rewards, deviations, episode_lengths = [], [], []
-        collisions, successes = 0, 0
+        rewards: list[float] = []
+        deviations: list[float] = []
+        episode_lengths: list[int] = []
+        collisions: int = 0
+        successes: int = 0
 
         for _ in range(n_episodes):
             if self.stop_requested:
@@ -189,8 +207,8 @@ class RLTrainer:
                 max_deviation = max(max_deviation, info.get("cross_track_km", 0))
                 steps += 1
                 if terminated or truncated:
-                    if info.get("collision"): collisions += 1
-                    if info.get("success"): successes += 1
+                    if info.get("collision"): collisions += 1  # type: ignore[operator]
+                    if info.get("success"): successes += 1      # type: ignore[operator]
                     break
 
             rewards.append(total_reward)
@@ -201,14 +219,14 @@ class RLTrainer:
             "episodes": len(rewards),
             "difficulty": difficulty,
             "mean_reward": float(np.mean(rewards)) if rewards else 0.0,
-            "collision_rate": collisions / n_episodes if n_episodes > 0 else 0.0,
-            "success_rate": successes / n_episodes if n_episodes > 0 else 0.0,
+            "collision_rate": collisions / n_episodes if n_episodes > 0 else 0.0,  # type: ignore[operator]
+            "success_rate": successes / n_episodes if n_episodes > 0 else 0.0,      # type: ignore[operator]
             "mean_max_deviation_km": float(np.mean(deviations)) if deviations else 0.0,
             "mean_episode_length": float(np.mean(episode_lengths)) if episode_lengths else 0.0,
         }
 
     def infer(self, ship_state: dict, icebergs: list[dict],
-              ice_data: dict, weather: dict) -> dict:
+              ice_data: dict, weather: dict) -> dict:  # type: ignore[return]
         """실시간 추론 -- 프론트엔드 API 호출용"""
         if self.agent.model is None:
             if not self.agent.load():
@@ -306,5 +324,5 @@ class RLTrainer:
             "is_training": self.is_training,
             "current_stage": self.current_stage,
             "agent_status": self.agent.get_training_status(),
-            "training_log": self.training_log[-10:],
+            "training_log": list(reversed(list(islice(reversed(self.training_log), 10)))),
         }

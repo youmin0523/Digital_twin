@@ -1,11 +1,3 @@
-node_modules/
-.env
-.vite
-.vscode/
-.idea/
-.taskmaster/
-.taskmaster.md
-
 # Python
 __pycache__/
 *.pyc
@@ -17,24 +9,48 @@ env/
 .pytest_cache/
 .mypy_cache/
 
+# Node
+node_modules/
+package-lock.json
+
 # 환경 변수·시크릿
+.env
 .env.local
 .env.*.local
 .env.production
 *.local
 pyrightconfig.json
 
+# IDE / Editor
+.vscode/
+.idea/
+.vite
+*.swp
+*.swo
+
+# Task manager
+.taskmaster/
+.taskmaster.md
+
 # Data (large / auto-generated)
 backend/data/sentinel1_archive/
-backend/data/realIceData_latest.json
 backend/data/archive/
+backend/data/realIceData_latest.json
+backend/data/realIceData_month*.json
+backend/data/realBergData_latest.json
 backend/data/copernicus_icebergs.json
 backend/data/sentinel1_catalog_latest.json
-backend/data/realBergData_latest.json
 backend/data/weather_api_usage.json
+backend/data/weather_latest.json
+backend/data/arctic_weather_latest.json
+backend/data/arctic_ice_timeseries.czml
+backend/pipeline/fetchers/realBergData_latest.json
+backend/pipeline/fetchers/realIceData_latest.json
+backend/public/scripts/realIceData_2023/
 
 # 학습 데이터셋 (대용량 PNG·라벨)
 backend/data/datasets/
+backend/pipeline/models/runs/
 
 # NetCDF cache (downloaded satellite data)
 backend/pipeline/fetchers/cache/
@@ -56,16 +72,23 @@ backend/logs/sentinel1_iw_fetcher.log
 rl-pipeline/venv/
 rl-pipeline/models/
 rl-pipeline/runs/
+rl-pipeline/logs/
+rl-pipeline/*.zip
 
 # Report Service
 report-service/venv/
 report-service/output/
 report-service/output/*.pdf
 report-service/data/departure_rl_model/*.zip
+report-service/data/departure_rl_model/checkpoints/
 report-service/data/calibration_state.json
 report-service/data/whatif_*.json
 report-service/data/whatif_*.jsonl
 report-service/data/archive_*/
+report-service/logs/
+
+# ML Pipeline
+ml-pipeline/models/
 
 # ML 모델·체크포인트 (대용량 바이너리)
 *.pt
@@ -76,7 +99,8 @@ report-service/data/archive_*/
 *.npy
 *.npz
 *.pkl
-ml-pipeline/models/
+*.pickle
+*.weights
 yolov8n.pt
 
 # 이미지 (학습 데이터·임시 캡처) — frontend UI 리소스는 예외
@@ -117,7 +141,3 @@ fix_venv.js
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# IDE
-*.swp
-*.swo

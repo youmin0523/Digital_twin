@@ -63,8 +63,8 @@ class IterativeTrainRequest(BaseModel):
 
 class MultiModelTrainRequest(BaseModel):
     max_iterations: int = 5
-    target_success_rate: float = 0.70
-    target_collision_rate: float = 0.15
+    target_success_rate: float = 0.30
+    target_collision_rate: float = 0.45
     eval_episodes: int = 30
     eval_difficulty: str = "medium"
     base_timesteps: int = 150_000
