@@ -13,7 +13,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-BASE = Path("C:/cccc/Digital_twin")
+BASE = Path(__file__).resolve().parent
 
 PIPELINES = [
     {

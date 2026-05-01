@@ -2,7 +2,7 @@
 train_all.py — 빙산 회피 RL 전체 조합 학습 스크립트
 
 실행:
-    cd c:/cccc/Digital_twin/rl-pipeline
+    cd <project>/Digital_twin/rl-pipeline
     python train_all.py
 
 설명:
