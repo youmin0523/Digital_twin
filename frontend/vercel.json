@@ -1,0 +1,28 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/rl/:path*",
+      "destination": "https://heejin-oh-arctic-digital-twin-backend.hf.space/api/rl/:path*"
+    },
+    {
+      "source": "/api/report/:path*",
+      "destination": "https://heejin-oh-arctic-digital-twin-backend.hf.space/api/report/:path*"
+    },
+    {
+      "source": "/api/fuel/:path*",
+      "destination": "https://heejin-oh-arctic-digital-twin-backend.hf.space/api/fuel/:path*"
+    },
+    {
+      "source": "/api/sar/:path*",
+      "destination": "https://heejin-oh-arctic-digital-twin-backend.hf.space/api/sar/:path*"
+    },
+    {
+      "source": "/api/ml/:path*",
+      "destination": "https://heejin-oh-arctic-digital-twin-backend.hf.space/api/fuel/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://heejin-oh-arctic-digital-twin-backend.hf.space/health"
+    }
+  ]
+}

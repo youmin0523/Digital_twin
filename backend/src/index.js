@@ -387,6 +387,25 @@ schedule.scheduleJob('0 4 * * *', runBergFetcher);
 // 6시간마다 기상 파이프라인 (Open-Meteo 전 항로)
 schedule.scheduleJob('30 */6 * * *', runWeatherPipeline);
 
+// ── 시스템 리소스 모니터 (10분마다) ──────────────────────────────
+function logSystemResources() {
+  const { exec } = require('child_process');
+
+  // CPU 사용량 (wmic)
+  exec('wmic cpu get loadpercentage /value', (err, stdout) => {
+    const cpuMatch = stdout && stdout.match(/LoadPercentage=(\d+)/);
+    const cpu = cpuMatch ? cpuMatch[1] + '%' : 'N/A';
+
+    // GPU 사용량 (nvidia-smi)
+    exec('nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits', (gpuErr, gpuStdout) => {
+      const gpu = (!gpuErr && gpuStdout.trim()) ? gpuStdout.trim() + '%' : 'N/A';
+      console.log(`[SystemMonitor] CPU: ${cpu} | GPU: ${gpu}`);
+    });
+  });
+}
+
+schedule.scheduleJob('*/10 * * * *', logSystemResources);
+
 // 서버 시작 30초 후 Copernicus SAR 빙산 파이프라인 1회 실행
 setTimeout(runIcebergPipeline, 30000);
 // 서버 시작 60초 후 기상 파이프라인 1회 실행

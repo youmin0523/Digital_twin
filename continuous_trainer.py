@@ -54,8 +54,8 @@ signal.signal(signal.SIGINT, _handle_signal)
 signal.signal(signal.SIGTERM, _handle_signal)
 
 # ── 리소스 임계값 ──────────────────────────────────────────
-CPU_SAFE_THRESHOLD  = 55.0   # CPU % 이하일 때만 무거운 작업 시작
-CPU_STOP_THRESHOLD  = 75.0   # 작업 중 이 이상이면 다음 작업 연기
+CPU_SAFE_THRESHOLD  = 95.0   # CPU % 이하일 때만 무거운 작업 시작
+CPU_STOP_THRESHOLD  = 98.0   # 작업 중 이 이상이면 다음 작업 연기
 RAM_MIN_FREE_GB     = 2.0    # 최소 여유 RAM (GB)
 RL_WAIT_POLL_SEC    = 60     # RL 대기 중 확인 주기 (초)
 RESOURCE_POLL_SEC   = 30     # 리소스 대기 중 확인 주기 (초)
