@@ -445,7 +445,7 @@ function makeIceGeo(typeName, w, h, d) {
 // ThreeOverlay Component
 // =============================================================================
 const ThreeOverlay = forwardRef(function ThreeOverlay(
-  { visible, shipState, specs, mode, baseRef },
+  { visible, shipState, specs, mode, baseRef, manualMode },
   ref,
 ) {
   const canvasRef = useRef(null);
@@ -489,6 +489,26 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
     impactRoll: 0,
     impactPitch: 0,
     impactActive: false,
+    // Voyage Playback 거동 bias — 외부에서 매 tick 주입 (두께·파고 유도)
+    voyagePitchBias: 0,
+    voyageRollBias: 0,
+    voyageHeaveBias: 0,
+    voyagePitchBiasTarget: 0,
+    voyageRollBiasTarget: 0,
+    voyageHeaveBiasTarget: 0,
+    // Voyage 얼음 컨텍스트 — 매 voyage tick 업데이트, 렌더 루프가 시간 기반 거동 계산
+    voyageIceContext: null, // { thicknessM, speedKn, isEscorted }
+    iceMotionPhase: Math.random() * Math.PI * 2, // 램 사이클 위상
+    // 아라온 배치 상태 — 렌더 루프가 매 프레임 참조·lerp
+    araonMode: null,        // 'escort' | 'dock' | null
+    araonEscortConfig: null, // { forwardM, sideM }
+    araonDockDelta: null,    // { deltaLatDeg, deltaLonDeg, refLat, headingDeg }
+    // 전환 애니메이션 상태 (모드 바뀔 때 시작)
+    araonTransitionStart: null, // { x, z, rotY } — 전환 시작 시점의 아라온 위치
+    araonTransitionStartTime: 0,
+    araonTransitionDuration: 2500, // ms
+    // Real wave 오버라이드 — { Hs, Tp, dirDeg, headingDeg } | null
+    realWaveInput: null,
     screenShakeT: 0,
     fovImpactBoost: 0,
     nightFactor: 0,
@@ -658,7 +678,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
     [trackDisposable, placeOnWater],
   );
 
-  const buildIcebergs = useCallback(() => {
+  const buildIcebergs = useCallback((centerX = 0, centerZ = 0) => {
     const { scene, tIcebergs } = ctx.current;
 
     // Clear existing icebergs
@@ -667,18 +687,22 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
     }
     tIcebergs.length = 0;
 
+    // 빙하 생성 중심점 저장 (재생성 판단용)
+    ctx.current.icebergCenterX = centerX;
+    ctx.current.icebergCenterZ = centerZ;
+
     // Close range: small/medium only
     const closeRanges = [60, 100, 155, 220, 310, 420];
     for (const dist of closeRanges) {
       const angle = Math.PI / 3 + Math.random() * ((Math.PI * 4) / 3);
       const closeType = dist < 180 ? ICE_TYPES[3] : ICE_TYPES[2];
-      spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, closeType);
+      spawnIceberg(centerX + Math.cos(angle) * dist, centerZ + Math.sin(angle) * dist, closeType);
     }
     // Mid range: all types mixed
     for (let i = 0; i < 55; i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist = rng(500, 5000);
-      spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, pickType());
+      spawnIceberg(centerX + Math.cos(angle) * dist, centerZ + Math.sin(angle) * dist, pickType());
     }
     // Far range: tabular/large 45% priority
     for (let i = 0; i < 90; i++) {
@@ -690,7 +714,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
             ? ICE_TYPES[0]
             : ICE_TYPES[1]
           : pickType();
-      spawnIceberg(Math.cos(angle) * dist, Math.sin(angle) * dist, farType);
+      spawnIceberg(centerX + Math.cos(angle) * dist, centerZ + Math.sin(angle) * dist, farType);
     }
   }, [spawnIceberg]);
 
@@ -756,7 +780,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
 
   // -- Ship --
   const buildShip = useCallback(
-    (shipType = 'icebreaker') => {
+    (shipType = 'bulk') => {
       const { scene } = ctx.current;
       if (ctx.current.shipGroup3) {
         scene.remove(ctx.current.shipGroup3);
@@ -821,71 +845,69 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
         gold: matScale(0xb45309, 0.9, 0.1), // 안테나/센서용
       };
 
-      if (shipType === 'icebreaker') {
-        // 🧊 [ICEBREAKER] 육중하고 강인한 쇄빙선
-        // 선체 보정: 더 날카로운 선수와 육중한 볼륨
-        mkH(new THREE.BoxGeometry(32, 12, 170), C.iceRed, 0, 0, 10);
-        mkH(new THREE.BoxGeometry(33, 5, 175), C.iceDark, 0, -6, 5);
+      if (shipType === 'bulk') {
+        // 🚢 [BULK CARRIER] 대형 벌크선 — 빨간 선체 + 화물창 커버 + 선미 거주구역
+        // 사진 레퍼런스: Capesize/Supramax 벌크 캐리어
 
-        // 쇄빙용 특수 선수 (Spoon Bow 스타일)
-        for (let i = 0; i < 5; i++) {
-          const s = 1 - i * 0.15;
-          mkH(
-            new THREE.BoxGeometry(32 * s, 3, 15),
-            C.iceRed,
-            0,
-            -1 - i * 1.5,
-            -80 - i * 4,
-          );
+        // ── 선체 (짙은 빨강/검정, 넓고 낮음) ──
+        const bulkHull = matScale(0x8b1a1a, 0.5, 0.4);    // 짙은 빨강
+        const bulkBottom = matScale(0x3a0e0e, 0.6, 0.3);  // 흘수선 아래 어두운 빨강
+        const bulkDeck = matScale(0x2d3748, 0.3, 0.6);    // 갑판 회색
+        const holdCover = matScale(0xb91c1c, 0.3, 0.5);   // 화물창 커버 빨강
+        const holdFrame = matScale(0x1e293b, 0.4, 0.4);   // 화물창 프레임
+
+        // 메인 선체
+        mkH(new THREE.BoxGeometry(36, 14, 230), bulkHull, 0, 0, 0);
+        mkH(new THREE.BoxGeometry(37, 6, 235), bulkBottom, 0, -8, 0);
+
+        // 선수 (일반 상선 뱃머리 — V형)
+        mkH(new THREE.CylinderGeometry(0, 20, 40, 4), bulkHull, 0, -2, -120, 0, Math.PI / 4);
+        mkH(new THREE.BoxGeometry(30, 8, 20), bulkHull, 0, 3, -115);
+        // 선수루 (forecastle)
+        mkH(new THREE.BoxGeometry(34, 5, 25), bulkDeck, 0, 9, -105);
+
+        // 갑판
+        mkH(new THREE.BoxGeometry(36, 1, 230), bulkDeck, 0, 7.5, 0);
+
+        // ── 화물창 커버 (6개, 빨간 직사각형 해치) ──
+        for (let i = 0; i < 6; i++) {
+          const pz = -80 + i * 30;
+          // 화물창 커버 본체
+          mkH(new THREE.BoxGeometry(28, 3, 24), holdCover, 0, 9.5, pz);
+          // 커버 프레임 (테두리)
+          mkH(new THREE.BoxGeometry(30, 0.5, 26), holdFrame, 0, 11.2, pz);
+          // 커버 중앙선
+          mkH(new THREE.BoxGeometry(0.8, 3.5, 24), holdFrame, 0, 9.5, pz);
         }
-        mkH(
-          new THREE.CylinderGeometry(0, 18, 30, 4),
-          C.iceRed,
-          0,
-          0,
-          -95,
-          0,
-          Math.PI / 4,
-        );
 
-        // 상부 구조물: 레이어드 디자인
-        mkU(new THREE.BoxGeometry(26, 12, 60), C.white, 0, 12, -30);
-        mkU(new THREE.BoxGeometry(24, 8, 40), C.white, 0, 22, -35); // 2단
-        mkU(new THREE.BoxGeometry(30, 6, 20), C.white, 0, 28, -45); // 브릿지 윙 확장
-        mkU(new THREE.BoxGeometry(28, 4, 18), C.window, 0, 28.5, -46); // 파노라마 창
-
-        // 정밀 마스트 및 레이더
-        mkU(new THREE.CylinderGeometry(0.8, 1.2, 25, 8), C.dark, 0, 40, -40);
-        for (let i = 0; i < 3; i++) {
-          mkU(
-            new THREE.BoxGeometry(10 - i * 2, 0.5, 3),
-            C.dark,
-            0,
-            35 + i * 5,
-            -40,
-          ); // 마스트 횡단보도
-        }
-        // 회전 레이더 가이드
-        mkU(new THREE.BoxGeometry(8, 1, 2), C.gold, 0, 52, -40);
-
-        // 선미 헬기 데크 및 안전 난간
-        mkH(new THREE.BoxGeometry(30, 1, 50), C.deck, 0, 6.5, 60);
-        mkH(
-          new THREE.BoxGeometry(20, 0.1, 20),
-          C.white,
-          0,
-          7.1,
-          60,
-          0,
-          Math.PI / 4,
-        ); // 정교한 H
+        // ── 갑판 통로 (좌우 난간) ──
         for (let i = -1; i <= 1; i += 2) {
-          mkH(new THREE.BoxGeometry(0.5, 2, 50), C.dark, 14.5 * i, 8, 60); // 난간
+          mkH(new THREE.BoxGeometry(0.5, 2.5, 200), C.dark, 17 * i, 9, -10);
         }
 
-        // 대형 크레인 (Hydraulic 스타일)
-        mkU(new THREE.CylinderGeometry(2, 2.5, 6, 12), C.dark, 8, 8, 20);
-        mkU(new THREE.BoxGeometry(1.5, 1.5, 45), C.dark, 8, 18, 40, 0.5);
+        // ── 선미 거주구역 (흰색, 다층) ──
+        mkU(new THREE.BoxGeometry(34, 20, 40), C.white, 0, 18, 85);
+        mkU(new THREE.BoxGeometry(36, 3, 38), C.white, 0, 30, 84);  // 브릿지 데크
+        mkU(new THREE.BoxGeometry(38, 5, 22), C.white, 0, 33, 78);  // 브릿지 윙
+        mkU(new THREE.BoxGeometry(36, 3, 20), C.window, 0, 33.5, 77); // 브릿지 창
+
+        // 층간 라인 (각 층 구분)
+        for (let i = 0; i < 4; i++) {
+          mkU(new THREE.BoxGeometry(34.5, 0.5, 40), bulkDeck, 0, 10 + i * 5, 85);
+        }
+
+        // ── 펀넬 (연돌) ──
+        mkU(new THREE.BoxGeometry(8, 14, 8), C.white, 0, 38, 95);
+        mkU(new THREE.BoxGeometry(8.5, 2, 8.5), C.dark, 0, 44.5, 95);  // 상단 검정 띠
+        mkU(new THREE.BoxGeometry(6, 1, 6), matScale(0xef4444, 0.3, 0.5), 0, 42, 95);  // 빨간 라인
+
+        // ── 마스트 ──
+        mkU(new THREE.CylinderGeometry(0.6, 0.8, 20, 8), C.dark, 0, 43, 78);
+        mkU(new THREE.BoxGeometry(8, 0.5, 2), C.dark, 0, 50, 78);   // 레이더 가이드
+        mkU(new THREE.BoxGeometry(6, 0.5, 1.5), C.gold, 0, 53, 78); // 안테나
+
+        // 선수 마스트
+        mkH(new THREE.CylinderGeometry(0.5, 0.7, 15, 8), C.dark, 0, 16, -100);
       } else if (shipType === 'lng') {
         // 🛢 [LNG CARRIER] 압도적인 크기의 에너지 운반선
         // 거대 선체 (Freeboard가 높음)
@@ -996,6 +1018,144 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
       ctx.current.shipMesh3 = shipMesh3;
       ctx.current.shipUpper3 = shipUpper3;
       ctx.current.cameraPivot3 = cameraPivot3;
+
+      // ── Wake ribbon (선미뷰 궤적 리본) — FOLLOW 뷰 전용 ─────────────
+      // 선박 뒤에 남는 쇄빙 궤적. 최신 포인트일수록 밝고, 꼬리로 갈수록 페이드.
+      const WAKE_MAX = 240;
+      const wakePositions = new Float32Array(WAKE_MAX * 3);
+      const wakeColors = new Float32Array(WAKE_MAX * 3);
+      const wakeGeo = new THREE.BufferGeometry();
+      wakeGeo.setAttribute('position', new THREE.BufferAttribute(wakePositions, 3));
+      wakeGeo.setAttribute('color', new THREE.BufferAttribute(wakeColors, 3));
+      wakeGeo.setDrawRange(0, 0);
+      trackDisposable(wakeGeo);
+      const wakeMat = new THREE.LineBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.85,
+        linewidth: 2,
+        depthWrite: false,
+      });
+      trackDisposable(wakeMat);
+      const wakeLine = new THREE.Line(wakeGeo, wakeMat);
+      wakeLine.frustumCulled = false;
+      wakeLine.renderOrder = 5;
+      wakeLine.visible = false; // 기본 숨김 (FOLLOW 진입 시 활성화)
+      scene.add(wakeLine);
+
+      ctx.current.wakeLine = wakeLine;
+      ctx.current.wakeGeo = wakeGeo;
+      ctx.current.wakePositions = wakePositions;
+      ctx.current.wakeColors = wakeColors;
+      ctx.current.wakeMaxPoints = WAKE_MAX;
+      ctx.current.wakeCount = 0;        // 현재 저장된 포인트 수
+      ctx.current.wakeLastT = 0;        // 마지막 push 시각 (ms)
+      ctx.current.wakeLastPos = null;   // 마지막 push 위치 (중복 방지)
+
+      // ── 아라온호 3D 모델 (실제 Araon 기반 — 빨간 선체 + 흰 상부 + 주황 크레인) ──
+      const araonGroup = new THREE.Group();
+      const araonMesh = new THREE.Group();
+      const araonHelper = (group) => (geo, mat, px, py, pz, rx = 0, ry = 0) => {
+        trackDisposable(geo);
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(px, py, pz);
+        m.rotation.x = rx;
+        m.rotation.y = ry;
+        m.castShadow = true;
+        m.receiveShadow = true;
+        group.add(m);
+      };
+      const mkA = araonHelper(araonMesh);
+
+      // Araon 머티리얼 (실제 아라온 색상)
+      const araonRed = matScale(0xc0392b, 0.6, 0.3);     // 선체 빨강
+      const araonDark = matScale(0x6b1e17, 0.7, 0.25);   // 하단 어두운 부분
+      const araonWhite = matScale(0xecf0f1, 0.2, 0.15);  // 상부구조 흰색
+      const araonWindow = matScale(0x1a365d, 0.9, 0.1);  // 브릿지 창 (진한 파랑)
+      const araonOrange = matScale(0xe67e22, 0.3, 0.5);  // 크레인 주황
+      const araonGray = matScale(0x4a5568, 0.7, 0.3);    // 마스트/디테일
+
+      // Araon 실제 크기: 길이 111m, 폭 19m, 흘수 6.8m
+      // shipMesh3 scale(2.8x) 매칭을 위해 raw 크기는 본선과 비슷한 스케일로
+
+      // ── 선체 (flared icebreaker bow, 빨강) ──
+      mkA(new THREE.BoxGeometry(20, 10, 115), araonRed, 0, 0, 0);
+      mkA(new THREE.BoxGeometry(21, 4, 118), araonDark, 0, -6, 0);
+      // 쇄빙 뱃머리 — tapered forward
+      for (let i = 0; i < 4; i++) {
+        const s = 1 - i * 0.18;
+        mkA(
+          new THREE.BoxGeometry(20 * s, 2.5, 10),
+          araonRed,
+          0,
+          -1 - i * 1.2,
+          -55 - i * 4,
+        );
+      }
+      mkA(
+        new THREE.CylinderGeometry(0, 11, 22, 4),
+        araonRed,
+        0,
+        0,
+        -66,
+        0,
+        Math.PI / 4,
+      );
+
+      // ── 흰색 상부구조 (중앙 선교 블록) ──
+      mkA(new THREE.BoxGeometry(16, 8, 28), araonWhite, 0, 9, -8);
+      mkA(new THREE.BoxGeometry(15, 6, 18), araonWhite, 0, 16, -12); // 2단
+      mkA(new THREE.BoxGeometry(18, 4, 14), araonWhite, 0, 21, -16); // 브릿지 윙
+
+      // 브릿지 파노라마 창 (선수 방향)
+      mkA(new THREE.BoxGeometry(17, 2.5, 12), araonWindow, 0, 21.2, -17);
+
+      // ── 마스트 & 안테나 ──
+      mkA(new THREE.CylinderGeometry(0.5, 0.7, 18, 8), araonGray, 0, 30, -14);
+      mkA(new THREE.BoxGeometry(7, 0.4, 2), araonGray, 0, 27, -14);
+      mkA(new THREE.BoxGeometry(5, 0.4, 2), araonGray, 0, 31, -14);
+
+      // ── 선수 흰 크로스 마크 (reinforced bow line) ──
+      mkA(new THREE.BoxGeometry(10, 0.3, 1), araonWhite, 0, 2, -45);
+
+      // ── 전방 헬리데크 (상부구조 앞쪽) ──
+      mkA(new THREE.CylinderGeometry(7, 7, 0.5, 16), araonWhite, 0, 6, -32);
+      // H 마크
+      mkA(new THREE.BoxGeometry(5, 0.1, 1), araonDark, 0, 6.3, -32);
+      mkA(new THREE.BoxGeometry(1, 0.1, 5), araonDark, 0, 6.3, -32);
+
+      // ── 후방 갑판 (오픈 데크) ──
+      mkA(new THREE.BoxGeometry(18, 0.5, 30), araonGray, 0, 5.5, 25);
+
+      // ── 후방 A-frame / 크레인 (아라온 트레이드마크) ──
+      // 주 크레인 기둥 두 개
+      mkA(new THREE.BoxGeometry(1.5, 15, 1.5), araonOrange, -7, 13, 25);
+      mkA(new THREE.BoxGeometry(1.5, 15, 1.5), araonOrange, 7, 13, 25);
+      // 크레인 상단 가로대
+      mkA(new THREE.BoxGeometry(16, 1.5, 1.5), araonOrange, 0, 20, 25);
+      // 중앙 크레인 붐
+      mkA(new THREE.BoxGeometry(1.2, 1.2, 20), araonOrange, 0, 18, 30, 0.3);
+      // 크레인 베이스 박스
+      mkA(new THREE.BoxGeometry(10, 3, 6), araonOrange, 0, 7.5, 20);
+
+      // ── 펀넬(연돌) ──
+      mkA(new THREE.BoxGeometry(4, 8, 5), araonWhite, 0, 14, -2);
+      mkA(new THREE.BoxGeometry(4.2, 1.2, 5.2), araonRed, 0, 17.5, -2); // 상단 빨간 띠
+
+      // ── 구명정 데이빗 (양쪽) ──
+      mkA(new THREE.BoxGeometry(4, 1.5, 1.5), araonOrange, -8, 12, -5);
+      mkA(new THREE.BoxGeometry(4, 1.5, 1.5), araonOrange, 8, 12, -5);
+
+      // 실제 아라온(~111m)은 상선(~290m)보다 작지만 시각적 가독성을 위해
+      // 본선(2.8x) 보다 더 큰 스케일로 부스트
+      araonMesh.scale.set(4.5, 4.5, 4.5);
+      araonMesh.position.y = SHIP_BASE_Y;
+      araonGroup.add(araonMesh);
+      araonGroup.visible = false;
+      scene.add(araonGroup);
+
+      ctx.current.araonGroup = araonGroup;
+      ctx.current.araonMesh = araonMesh;
     },
     [trackDisposable],
   );
@@ -1043,6 +1203,9 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
         };
       }
 
+      // 육지: 반투명 평면으로 "저기 육지다" 감각만 제공.
+      // 높이 2 유닛, 수면 아래(y=-1) 배치 → 선박과 절대 충돌 안 함.
+      // opacity 0.18 → 물 위에 은은한 녹색 윤곽. 조악한 벽 느낌 제거.
       function addLand(lat1, lon1, lat2, lon2, h, color) {
         const p1 = ll(lat1, lon1);
         const p2 = ll(lat2, lon2);
@@ -1051,43 +1214,74 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
         if (w < 100 || d < 100) return;
         const geo = trackDisposable(new THREE.BoxGeometry(w, h, d));
         const mat = trackDisposable(
-          new THREE.MeshPhongMaterial({ color, shininess: 5 }),
+          new THREE.MeshStandardMaterial({
+            color,
+            roughness: 0.9,
+            metalness: 0.0,
+            transparent: true,
+            opacity: 0.18,
+            depthWrite: false,
+          }),
         );
         const m = new THREE.Mesh(geo, mat);
-        m.position.set((p1.x + p2.x) / 2, h / 2, (p1.z + p2.z) / 2);
-        m.receiveShadow = true;
+        // 윗면 y=-1 (수면 아래) → 파도 메쉬 아래에서 은은하게 비침
+        m.position.set((p1.x + p2.x) / 2, -h / 2 - 1, (p1.z + p2.z) / 2);
+        m.renderOrder = -1; // 바다보다 먼저 렌더 → 블렌딩 자연스럽게
         landGroup.add(m);
       }
 
+      // ── 해안 1단 (얇고 넓음, 어두운 녹색) ──
       // Korean Peninsula
-      addLand(34.0, 126.0, 38.5, 130.0, 800, 0x3a5a2a);
+      addLand(34.0, 126.0, 38.5, 130.0, 6, 0x2a3f22);
+      addLand(37.5, 125.5, 39.5, 127.0, 10, 0x354a2c); // 내륙 고지
       // Japan Honshu
-      addLand(33.0, 130.0, 40.0, 142.0, 1200, 0x3a5a2a);
+      addLand(33.0, 130.0, 40.0, 142.0, 6, 0x2a3f22);
+      addLand(35.0, 136.0, 38.0, 141.0, 12, 0x354a2c); // 중앙 산지
       // Hokkaido
-      addLand(41.5, 140.0, 45.5, 145.5, 900, 0x3a5a2a);
+      addLand(41.5, 140.0, 45.5, 145.5, 6, 0x2a3f22);
+      addLand(42.5, 142.0, 44.5, 144.5, 10, 0x3a5030);
       // Russian Primorsky
-      addLand(42.0, 130.0, 55.0, 145.0, 600, 0x4a6a3a);
+      addLand(42.0, 130.0, 55.0, 145.0, 5, 0x2a3822);
+      addLand(45.0, 132.0, 53.0, 142.0, 9, 0x334528);
       // Russian Chukchi / East Siberia
-      addLand(60.0, 160.0, 72.0, 180.0, 500, 0x5a6a4a);
-      addLand(60.0, -180.0, 70.0, -160.0, 500, 0x5a6a4a);
+      addLand(60.0, 160.0, 72.0, 180.0, 5, 0x3a4535);
+      addLand(63.0, 165.0, 70.0, 178.0, 8, 0x454f40);
+      addLand(60.0, -180.0, 70.0, -160.0, 5, 0x3a4535);
       // Kamchatka
-      addLand(51.0, 156.0, 60.0, 163.0, 1500, 0x4a6a3a);
+      addLand(51.0, 156.0, 60.0, 163.0, 8, 0x3a4530);
+      addLand(53.0, 157.5, 58.0, 161.0, 14, 0x4a5540); // 화산 산맥
       // Alaska
-      addLand(60.0, -168.0, 71.0, -141.0, 800, 0x5a6a4a);
+      addLand(60.0, -168.0, 71.0, -141.0, 6, 0x3f4a38);
+      addLand(62.0, -155.0, 68.0, -148.0, 12, 0x4a5540); // 내륙
       // Greenland
-      addLand(60.0, -50.0, 83.0, -18.0, 2000, 0x8a9a9a);
+      addLand(60.0, -50.0, 83.0, -18.0, 8, 0x6a7a78);
+      addLand(64.0, -46.0, 80.0, -25.0, 15, 0x8a9a95); // 빙상 고원
       // Norway / Scandinavia
-      addLand(57.0, 5.0, 71.0, 30.0, 800, 0x3a5a2a);
+      addLand(57.0, 5.0, 71.0, 30.0, 6, 0x2a3f22);
+      addLand(60.0, 7.0, 69.0, 18.0, 12, 0x3a4a30); // 피오르드 산맥
       // Svalbard
-      addLand(76.5, 14.0, 80.5, 28.0, 500, 0x8a9a8a);
+      addLand(76.5, 14.0, 80.5, 28.0, 6, 0x6a7a72);
+      addLand(77.5, 16.0, 79.5, 24.0, 10, 0x8a9a8a);
       // United Kingdom
-      addLand(50.0, -6.0, 59.0, 2.0, 400, 0x3a5a2a);
+      addLand(50.0, -6.0, 59.0, 2.0, 5, 0x2a3f22);
       // Netherlands / German coast
-      addLand(51.0, 3.0, 54.0, 10.0, 100, 0x4a6a3a);
+      addLand(51.0, 3.0, 54.0, 10.0, 3, 0x354a2c);
       // Iceland
-      addLand(63.5, -24.0, 66.5, -13.0, 600, 0x6a7a6a);
+      addLand(63.5, -24.0, 66.5, -13.0, 6, 0x4a5a4a);
+      addLand(64.0, -21.0, 66.0, -16.0, 11, 0x5a6a5a); // 중앙 고지
       // Northern Canada
-      addLand(70.0, -100.0, 78.0, -60.0, 400, 0x5a6a4a);
+      addLand(70.0, -100.0, 78.0, -60.0, 5, 0x3f4a3a);
+      addLand(72.0, -90.0, 76.0, -70.0, 10, 0x4a5545);
+      // Novaya Zemlya
+      addLand(70.5, 50.0, 77.0, 60.0, 6, 0x5a6a60);
+      // Franz Josef Land
+      addLand(79.5, 44.0, 81.5, 62.0, 5, 0x7a8a80);
+      // Severnaya Zemlya
+      addLand(78.0, 90.0, 81.5, 107.0, 5, 0x6a7a70);
+      // New Siberian Islands
+      addLand(73.0, 135.0, 76.0, 150.0, 4, 0x5a6a55);
+      // Wrangel Island (아라온 정박지)
+      addLand(70.5, 178.5, 71.5, -178.0, 4, 0x5a6a55);
 
       scene.add(landGroup);
       ctx.current.landGroup = landGroup;
@@ -1272,25 +1466,57 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
   }, []);
 
   // updateShipMotion: roll, pitch, heave based on sea state
+  // realWaveInput 가 설정돼 있으면 실제 파고·파향·주기로 대체 (파향 있으면 축 분리).
   const updateShipMotion = useCallback((dt, lat) => {
     const c = ctx.current;
-    const st = getSeaState(lat);
-    c.motionWavePhase += dt * ((2 * Math.PI) / st.Tp);
+    let Hs;
+    let Tp;
+    let rollAxis = 1;   // roll 축 가중 (0..1)
+    let pitchAxis = 1;  // pitch 축 가중 (0..1)
+    let waveSource = 'synthetic';
+
+    if (c.realWaveInput && typeof c.realWaveInput.Hs === 'number') {
+      Hs = c.realWaveInput.Hs;
+      Tp = c.realWaveInput.Tp > 0 ? c.realWaveInput.Tp : 8;
+      const dirDeg = c.realWaveInput.dirDeg;
+      const headingDeg = c.realWaveInput.headingDeg;
+      if (
+        typeof dirDeg === 'number' &&
+        typeof headingDeg === 'number'
+      ) {
+        // 상대각: 파가 오는 방향 vs 뱃머리
+        const rel = (((dirDeg - headingDeg + 540) % 360) - 180) * (Math.PI / 180);
+        rollAxis = Math.abs(Math.sin(rel));   // 횡파=1, 종파=0
+        pitchAxis = Math.abs(Math.cos(rel));  // 종파=1, 횡파=0
+        waveSource = 'real+directed';
+      } else {
+        // 방향 없음 — 기본 비율 유지
+        waveSource = 'real+scalar';
+      }
+    } else {
+      const st = getSeaState(lat);
+      Hs = st.Hs;
+      Tp = st.Tp;
+    }
+    c.lastWaveSource = waveSource;
+    c.motionWavePhase = (c.motionWavePhase + dt * ((2 * Math.PI) / Tp)) % (Math.PI * 200);
 
     const zetaR = 0.05;
     const zetaP = 0.04;
     const rollAmpScale = Math.sqrt(BASE_GM / Math.max(0.5, c.shipGM));
 
     const aR =
-      st.Hs *
+      Hs *
       rollAmpScale *
+      rollAxis *
       (0.018 * Math.sin(c.motionWavePhase + 0.3) +
         0.008 * Math.sin(c.motionWavePhase * 1.7 + 1.1));
     const aP =
-      st.Hs *
+      Hs *
+      pitchAxis *
       (0.008 * Math.sin(c.motionWavePhase * 1.3 + 2.0) +
         0.004 * Math.sin(c.motionWavePhase * 0.8 + 0.5));
-    const aH = st.Hs * 0.3 * Math.sin(c.motionWavePhase * 0.9 + 0.7);
+    const aH = Hs * 0.3 * Math.sin(c.motionWavePhase * 0.9 + 0.7);
 
     c.shipRollVel +=
       (-2 * zetaR * c.omegaR * c.shipRollVel -
@@ -1323,18 +1549,174 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
       if (c.fovImpactBoost < 0.05) c.fovImpactBoost = 0;
     }
 
+    // ── 얼음 두께 기반 거동 (voyage 전용, 현실 쇄빙선 모델) ──
+    // 비선형 커브 + 시간 기반 램 사이클.
+    // < 0.8m: 미미 / 0.8~1.5m: bow-up 약 / 1.5~2.5m: 램 진동 / > 2.5m: 드라마틱 ride-up
+    let icePitch = 0;
+    let iceHeave = 0;
+    let iceRoll = 0;
+    if (c.voyageIceContext && typeof c.voyageIceContext.thicknessM === 'number') {
+      const h = Math.max(0, c.voyageIceContext.thicknessM);
+      const isEscorted = !!c.voyageIceContext.isEscorted;
+      // 호위 받으면 effective thickness 가 낮아졌을 것 — 추가 감쇠
+      const effH = isEscorted ? h * 0.55 : h;
+
+      c.iceMotionPhase = (c.iceMotionPhase + dt * 1.2) % (Math.PI * 200);
+
+      if (effH < 0.8) {
+        // 얇은 얼음: 거의 자연 항해
+        icePitch = effH * 0.015;
+      } else if (effH < 1.5) {
+        // 중간 두께: 점진적 bow-up, 약한 출렁임
+        icePitch = 0.012 + (effH - 0.8) * 0.085;
+        iceHeave = Math.sin(c.iceMotionPhase * 0.8) * (effH - 0.8) * 0.15;
+      } else if (effH < 2.5) {
+        // 두꺼움: 램 주기 진동
+        const base = 0.072 + (effH - 1.5) * 0.11;
+        const ramCycle = Math.sin(c.iceMotionPhase * 1.4);
+        // 램 진동: 기준 pitch 주변 ±0.05 rad 오실레이션, 강도가 t 에 따라 증가
+        icePitch = base + ramCycle * 0.045 * (effH - 1.5);
+        iceHeave = Math.sin(c.iceMotionPhase * 1.4 + 1.2) * 0.25;
+        // 간헐적 좌우 롤 (얼음에 한쪽이 걸릴 때)
+        iceRoll = Math.sin(c.iceMotionPhase * 0.6 + 0.5) * 0.02 * (effH - 1.5);
+      } else {
+        // 매우 두꺼움: 드라마틱 ride-up + 강한 램 사이클
+        const base = 0.182 + (effH - 2.5) * 0.14;
+        const ramCycle = Math.sin(c.iceMotionPhase * 1.0);
+        icePitch = base + ramCycle * 0.08;
+        iceHeave = Math.sin(c.iceMotionPhase + 0.8) * 0.5;
+        iceRoll = Math.sin(c.iceMotionPhase * 0.5) * 0.035;
+      }
+    }
+
+    // Voyage bias 부드러운 추종 (target → current). 얼음 거동을 target 에 실시간 주입.
+    const iceTargetPitch = (c.voyagePitchBiasTarget || 0) + icePitch;
+    const iceTargetRoll = (c.voyageRollBiasTarget || 0) + iceRoll;
+    const iceTargetHeave = (c.voyageHeaveBiasTarget || 0) + iceHeave;
+    c.voyageRollBias += (iceTargetRoll - c.voyageRollBias) * Math.min(1, dt * 2.5);
+    c.voyagePitchBias += (iceTargetPitch - c.voyagePitchBias) * Math.min(1, dt * 2.5);
+    c.voyageHeaveBias += (iceTargetHeave - c.voyageHeaveBias) * Math.min(1, dt * 2.5);
+
     // Apply roll/pitch to shipMesh3
     if (c.shipMesh3) {
-      c.shipMesh3.rotation.z = c.shipRoll + c.impactRoll;
-      c.shipMesh3.rotation.x = c.shipPitch + c.impactPitch;
-      c.shipMesh3.position.y = SHIP_BASE_Y + c.shipHeave;
+      c.shipMesh3.rotation.z = c.shipRoll + c.impactRoll + c.voyageRollBias;
+      c.shipMesh3.rotation.x = c.shipPitch + c.impactPitch + c.voyagePitchBias;
+      c.shipMesh3.position.y = SHIP_BASE_Y + c.shipHeave + c.voyageHeaveBias;
     }
   }, []);
 
-  // BRIDGE 모드에서 상부구조 숨기기 (선체/선수는 그대로 표시)
+  // 아라온 Three.js 3D 모델 위치/가시성 업데이트.
+  // 두 가지 모드:
+  //   1) trace 기반: { deltaLatDeg, deltaLonDeg, refLat, headingDeg, visible }
+  //   2) escort override: { escortOverride: {forwardM, sideM}, headingDeg, visible }
+  //      → trace 무시, 본선 heading 기준 앞/옆 offset으로 강제 배치
+  // setAraonState: 모드·config 만 갱신. 실제 위치 이동은 렌더 루프가 매 프레임 lerp.
+  // 모드가 바뀌면 전환 애니메이션 시작 (현재 아라온 위치 → 새 타겟으로 easeInOut)
+  const setAraonState = useCallback((input) => {
+    const c = ctx.current;
+    const group = c.araonGroup;
+    if (!group) return;
+
+    if (!input || !input.visible) {
+      group.visible = false;
+      c.araonMode = null;
+      c.araonEscortConfig = null;
+      c.araonDockDelta = null;
+      c.araonTransitionStart = null;
+      return;
+    }
+
+    const prevMode = c.araonMode;
+    let nextMode = null;
+    if (input.escortOverride) {
+      nextMode = 'escort';
+      c.araonEscortConfig = {
+        forwardM: input.escortOverride.forwardM || 0,
+        sideM: input.escortOverride.sideM || 0,
+      };
+    } else if (
+      typeof input.deltaLatDeg === 'number' &&
+      typeof input.deltaLonDeg === 'number'
+    ) {
+      nextMode = 'dock';
+      c.araonDockDelta = {
+        deltaLatDeg: input.deltaLatDeg,
+        deltaLonDeg: input.deltaLonDeg,
+        refLat: input.refLat || 70,
+        headingDeg: input.headingDeg || 0,
+      };
+    }
+
+    if (!nextMode) return;
+
+    // 모드 변경 감지 → 전환 애니메이션 시작
+    if (prevMode !== nextMode) {
+      // 처음 등장(이전이 null) 또는 모드 전환
+      if (group.visible && prevMode) {
+        // 이전 상태에서 전환: 현재 위치를 시작점으로
+        c.araonTransitionStart = {
+          x: group.position.x,
+          z: group.position.z,
+          rotY: group.rotation.y,
+        };
+      } else {
+        // 첫 등장 — 시작점 없음(즉시 타겟에 찍힘)
+        c.araonTransitionStart = null;
+      }
+      c.araonTransitionStartTime = performance.now();
+    }
+    c.araonMode = nextMode;
+    group.visible = true;
+  }, []);
+
+  // 실제 파고·파향·주기 주입 (weather_latest.json 에서 최근접 waypoint 기반).
+  // null 전달 시 latitude 기반 합성으로 복귀.
+  const setRealWaveInput = useCallback((input) => {
+    const c = ctx.current;
+    if (!input) {
+      c.realWaveInput = null;
+      return;
+    }
+    c.realWaveInput = {
+      Hs: typeof input.Hs === 'number' ? input.Hs : 0,
+      Tp: typeof input.Tp === 'number' ? input.Tp : 8,
+      dirDeg: typeof input.dirDeg === 'number' ? input.dirDeg : null,
+      headingDeg: typeof input.headingDeg === 'number' ? input.headingDeg : null,
+    };
+  }, []);
+
+  // 매 voyage tick 마다 현재 얼음 컨텍스트 주입 (렌더 루프의 시간 기반 거동 로직이 사용)
+  const setVoyageIceContext = useCallback((ctxInput) => {
+    const c = ctx.current;
+    if (!ctxInput) {
+      c.voyageIceContext = null;
+      return;
+    }
+    c.voyageIceContext = {
+      thicknessM: ctxInput.thicknessM || 0,
+      speedKn: ctxInput.speedKn || 0,
+      isEscorted: !!ctxInput.isEscorted,
+    };
+  }, []);
+
+  // Voyage Playback 이 외부에서 거동 bias 주입
+  const setVoyageMotionBias = useCallback((bias) => {
+    const c = ctx.current;
+    if (!bias) {
+      c.voyageRollBiasTarget = 0;
+      c.voyagePitchBiasTarget = 0;
+      c.voyageHeaveBiasTarget = 0;
+      return;
+    }
+    c.voyageRollBiasTarget = bias.rollRad || 0;
+    c.voyagePitchBiasTarget = bias.pitchRad || 0;
+    c.voyageHeaveBiasTarget = bias.heaveM || 0;
+  }, []);
+
+  // 상부구조는 FOLLOW/위성 뷰 모두 항시 표시 (BRIDGE 모드 제거됨)
   useEffect(() => {
     if (ctx.current.shipUpper3) {
-      ctx.current.shipUpper3.visible = mode !== 'BRIDGE';
+      ctx.current.shipUpper3.visible = true;
     }
   }, [mode]);
 
@@ -1446,16 +1828,9 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
       fovSliderOverride,
       fovBaseVal,
     ) => {
-      const c = ctx.current;
-      if (!isManual || currentModeStr !== 'BRIDGE') return 90;
-      if (binocularsActive) return 15;
-      const kn = Math.abs(shipSpeedVal) * 1.944;
-      let fov = fovSliderOverride ? fovBaseVal : fovFromSpeed(kn);
-      if (shipThrottleVal < -0.05) fov = Math.min(fov, 80);
-      if (c.nearestIceDist < 500) fov += 5;
-      fov += c.fovImpactBoost;
-      fov -= c.nightFactor * 5;
-      return Math.max(15, Math.min(120, fov));
+      // BRIDGE 모드 제거됨. FOLLOW + 수동 + 쌍안경일 때만 줌 FOV 허용.
+      if (isManual && binocularsActive) return 15;
+      return 90;
     },
     [],
   );
@@ -1513,6 +1888,10 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
       updateOceanOverlay,
       updateFoam,
       updateShipMotion,
+      setVoyageMotionBias,
+      setVoyageIceContext,
+      setRealWaveInput,
+      setAraonState,
       updateNightMode,
       syncThreeIcebergs,
       checkAutoCollisions,
@@ -1528,6 +1907,10 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
       updateOceanOverlay,
       updateFoam,
       updateShipMotion,
+      setVoyageMotionBias,
+      setVoyageIceContext,
+      setRealWaveInput,
+      setAraonState,
       updateNightMode,
       syncThreeIcebergs,
       checkAutoCollisions,
@@ -1561,7 +1944,8 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
 
     // Scene
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x7a9fb5, 0.000085);
+    // 수평선 안개 — 먼 거리 자연스럽게 흐려지고 북극 분위기 연출
+    scene.fog = new THREE.FogExp2(0x7a9fb5, 0.00012);
     ctx.current.scene = scene;
 
     // Camera
@@ -1653,6 +2037,33 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
     buildFoam();
     buildLandMasses(baseRef?.lat ?? 35.1, baseRef?.lon ?? 129.0);
 
+    // ── 수동 조종 시각 참조용 해상 부표 그리드 ──
+    // 고정 위치 마커를 배치하여 선박 이동을 눈으로 확인 가능하게 함
+    const buoyGroup = new THREE.Group();
+    buoyGroup.name = 'buoyGrid';
+    const buoyGeo = new THREE.CylinderGeometry(3, 3, 12, 8);
+    const buoyTopGeo = new THREE.SphereGeometry(4, 8, 8);
+    const buoyMat = new THREE.MeshStandardMaterial({ color: 0xff4444, roughness: 0.6 });
+    const buoyTopMat = new THREE.MeshStandardMaterial({ color: 0xffcc00, roughness: 0.5 });
+    const BUOY_SPACING = 2000;
+    const BUOY_GRID = 40; // -40 ~ +40 → 80x80 그리드
+    for (let gx = -BUOY_GRID; gx <= BUOY_GRID; gx++) {
+      for (let gz = -BUOY_GRID; gz <= BUOY_GRID; gz++) {
+        // 밀도 조절: 5칸마다 하나만 배치
+        if (gx % 5 !== 0 || gz % 5 !== 0) continue;
+        const bx = gx * BUOY_SPACING;
+        const bz = gz * BUOY_SPACING;
+        const pole = new THREE.Mesh(buoyGeo, buoyMat);
+        pole.position.set(bx, 6, bz);
+        buoyGroup.add(pole);
+        const top = new THREE.Mesh(buoyTopGeo, buoyTopMat);
+        top.position.set(bx, 14, bz);
+        buoyGroup.add(top);
+      }
+    }
+    scene.add(buoyGroup);
+    ctx.current.buoyGroup = buoyGroup;
+
     // Resize handler
     const handleResize = () => {
       renderer.setSize(window.innerWidth, window.innerHeight);
@@ -1705,8 +2116,8 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
     if (!shipState || !ctx.current.shipGroup3) return;
     const { lat, lon, heading } = shipState;
     if (lat != null && lon != null && heading != null) {
-      // 위도 기반 빙산 표시 — 60°N 이상에서만 빙산 보임
-      const showIce = lat >= 60;
+      // 위도 기반 빙산 표시 — 수동 모드에서는 항상 표시, 자동 모드에서는 60°N 이상
+      const showIce = manualMode || lat >= 60;
       for (const ice of ctx.current.tIcebergs) {
         ice.grp.visible = showIce;
       }
@@ -1789,13 +2200,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
   useEffect(() => {
     const { camera } = ctx.current;
     if (!camera) return;
-    if (mode === 'BRIDGE') {
-      camera.fov = 90;
-      camera.near = 0.01;
-      camera.position.set(0, 35, 10);
-      camera.lookAt(0, 15, -500);
-      camera.updateProjectionMatrix();
-    } else if (mode === 'FOLLOW') {
+    if (mode === 'FOLLOW') {
       // //! [Original Code]
       //       followZoomTargetRef.current = 220;
       //       followZoomCurrentRef.current = 220;
@@ -1817,7 +2222,10 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
   // ── 자체 렌더 루프: visible일 때만 실행 ────────────────────────────────
   useEffect(() => {
     if (!visible) return;
+    // 육지 다시 표시 (높이 6~15 로 낮춰 해안선 실루엣으로 정리됨)
+    if (ctx.current.landGroup) ctx.current.landGroup.visible = true;
     let rafId;
+    let lastMotionTs = 0;
     function loop(now) {
       rafId = requestAnimationFrame(loop);
       const { renderer, scene, camera, shipGroup3 } = ctx.current;
@@ -1827,8 +2235,63 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
         // //* [Modified Code] 바다(파도) 평면이 선박의 물리 이동을 따라다니도록 shipGroup3.position 위치 전달
         animateOcean(t, shipGroup3 ? shipGroup3.position : null);
 
-        // 배 heading 부드러운 보간 (FOLLOW/자동 모드)
-        if (shipGroup3 && shipState) {
+        // Ship motion (roll/pitch/heave) — 모드와 무관하게 항상 업데이트.
+        // realWaveInput 이 있으면 실제 파고/파향 사용, 없으면 위도 합성.
+        const motionDt = lastMotionTs === 0 ? 0.016 : Math.min(0.1, (now - lastMotionTs) / 1000);
+        lastMotionTs = now;
+        const shipLat = (shipState && typeof shipState.lat === 'number')
+          ? shipState.lat
+          : 70;
+        updateShipMotion(motionDt, shipLat);
+
+        // Foam (뱃머리 물보라) — 선박 이동 시 스프레이 파티클
+        if (shipGroup3) {
+          const hdg = shipGroup3.rotation.y;
+          // 속도 추정: 수동이면 manualSpeed, 아니면 hud 기반 (~15kn ≈ 7.7 m/s)
+          const speedMS = manualMode
+            ? Math.abs(parseFloat(shipState?.manualSpeed) || 0) * 0.5
+            : 7.7;
+          updateFoam(motionDt, -hdg, speedMS, shipGroup3.position);
+        }
+
+        // Night mode (극야) — 고위도(82°N+)에서 조명 어둡게
+        updateNightMode(shipLat);
+
+        // 부표 그리드를 선박 주변으로 재중심화 (이동해도 항상 부표가 보이도록)
+        if (ctx.current.buoyGroup && shipGroup3) {
+          const sp = shipGroup3.position;
+          const BUOY_SPACING = 2000;
+          const snapX = Math.round(sp.x / BUOY_SPACING) * BUOY_SPACING;
+          const snapZ = Math.round(sp.z / BUOY_SPACING) * BUOY_SPACING;
+          const bg = ctx.current.buoyGroup;
+          if (Math.abs(bg.position.x - snapX) > BUOY_SPACING ||
+              Math.abs(bg.position.z - snapZ) > BUOY_SPACING) {
+            bg.position.x = snapX;
+            bg.position.z = snapZ;
+          }
+        }
+
+        // 빙하 재생성: 선박이 빙하 중심에서 60km 이상 떨어지면 선박 주변에 다시 생성
+        if (shipGroup3 && ctx.current.tIcebergs) {
+          const sp = shipGroup3.position;
+          const cx = ctx.current.icebergCenterX || 0;
+          const cz = ctx.current.icebergCenterZ || 0;
+          const d2 = (sp.x - cx) * (sp.x - cx) + (sp.z - cz) * (sp.z - cz);
+          if (d2 > 60000 * 60000) {
+            buildIcebergs(sp.x, sp.z);
+            // 위도 60°N 이상일 때만 빙하 표시 (저위도 깜빡임 방지)
+            const curLat = (shipState && typeof shipState.lat === 'number')
+              ? shipState.lat
+              : 70;
+            const showIce = manualMode || curLat >= 60;
+            for (const ice of ctx.current.tIcebergs) {
+              ice.grp.visible = showIce;
+            }
+          }
+        }
+
+        // 배 heading 부드러운 보간 (FOLLOW/자동 모드에서만 — 수동 모드는 App.jsx에서 직접 설정)
+        if (shipGroup3 && shipState && !manualMode) {
           const headingRad = (-(shipState.heading || 0) * Math.PI) / 180;
           let diff = headingRad - shipGroup3.rotation.y;
           while (diff < -Math.PI) diff += Math.PI * 2;
@@ -1836,52 +2299,138 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
           shipGroup3.rotation.y += diff * 0.03;
         }
 
-        // BRIDGE 카메라 — 선박 위치/방향에 맞춰 매 프레임 갱신
-        if (mode === 'BRIDGE' && camera && shipGroup3) {
-          const pos = shipGroup3.position;
-          const ry = shipGroup3.rotation.y;
+        // ── 아라온 위치/rotation 매 프레임 갱신 (모드별 타겟 계산 + 전환 lerp) ──
+        {
+          const c = ctx.current;
+          const aGrp = c.araonGroup;
+          if (aGrp && aGrp.visible && c.shipGroup3 && c.araonMode) {
+            const sp = c.shipGroup3.position;
+            const shipRy = c.shipGroup3.rotation.y;
 
-          // //! [Original Code]
-          //           let localY = 32;
-          //           let localZ = -46;
-          //           if (specs?.type === 'lng') {
-          //             localY = 55; localZ = 110;
-          //           } else if (specs?.type === 'container') {
-          //             localY = 58; localZ = 50;
-          //           } else {
-          //             localY = 36; localZ = -20; // 쇄빙선도 마스트에 가리지 않도록 약간 뒤로 후퇴
-          //           }
-          //           localY *= 1.4;
-          //           localZ *= 1.4;
-          // //! [Original Code]
-          //           let localY = 45;
-          //           let localZ = -30;
-          //           if (specs?.type === 'lng') {
-          //             localY = 75; localZ = 150;
-          //           } else if (specs?.type === 'container') {
-          //             localY = 80; localZ = 70;
-          //           }
-          // //* [Modified Code] 사용자의 요청에 따라 선교 시점을 뱃머리(Bow) 쪽으로 더 전진 배치 (localZ 상향 조정)
-          let localY = 45;
-          let localZ = -60;
-          if (specs?.type === 'lng') {
-            localY = 75;
-            localZ = 110;
-          } else if (specs?.type === 'container') {
-            localY = 80;
-            localZ = 20;
+            // 1) 현재 타겟 위치/회전 계산 (모드별)
+            let targetX = 0;
+            let targetZ = 0;
+            let targetRy = 0;
+            if (c.araonMode === 'escort' && c.araonEscortConfig) {
+              const cfg = c.araonEscortConfig;
+              const fx = -Math.sin(shipRy);
+              const fz = -Math.cos(shipRy);
+              const rx = Math.cos(shipRy);
+              const rz = -Math.sin(shipRy);
+              targetX = sp.x + fx * cfg.forwardM + rx * cfg.sideM;
+              targetZ = sp.z + fz * cfg.forwardM + rz * cfg.sideM;
+              targetRy = shipRy;
+            } else if (c.araonMode === 'dock' && c.araonDockDelta) {
+              const dd = c.araonDockDelta;
+              const M_PER_LAT = 111132.954;
+              const M_PER_LON = 111319.491 * Math.cos((dd.refLat * Math.PI) / 180);
+              const SCALE = 1.5;
+              targetX = sp.x + (dd.deltaLonDeg * M_PER_LON) / SCALE;
+              targetZ = sp.z + (-dd.deltaLatDeg * M_PER_LAT) / SCALE;
+              targetRy = -(dd.headingDeg * Math.PI) / 180;
+            }
+
+            // 2) 전환 진행도 계산
+            const dur = c.araonTransitionDuration || 2500;
+            const startSnap = c.araonTransitionStart;
+            if (startSnap) {
+              const elapsed = now - c.araonTransitionStartTime;
+              let t = Math.min(1, elapsed / dur);
+              // easeInOutCubic
+              const eased =
+                t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+              aGrp.position.x = startSnap.x + (targetX - startSnap.x) * eased;
+              aGrp.position.z = startSnap.z + (targetZ - startSnap.z) * eased;
+              // rotation은 각도 wrap 고려
+              let rotDiff = targetRy - startSnap.rotY;
+              while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+              while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+              aGrp.rotation.y = startSnap.rotY + rotDiff * eased;
+              if (t >= 1) {
+                c.araonTransitionStart = null; // 전환 완료
+              }
+            } else {
+              // 전환 없음 — 직접 타겟으로
+              aGrp.position.x = targetX;
+              aGrp.position.z = targetZ;
+              aGrp.rotation.y = targetRy;
+            }
           }
-          localY *= 2.0;
-          localZ *= 2.0;
+        }
 
-          const bx = pos.x + localZ * Math.sin(ry);
-          const bz = pos.z + localZ * Math.cos(ry);
-          camera.position.set(bx, pos.y + SHIP_BASE_Y + localY, bz);
-          camera.lookAt(
-            pos.x - Math.sin(ry) * 600,
-            pos.y + SHIP_BASE_Y + localY - 35, // 뱃머리가 시야 하단에 웅장하게 걸리도록 시선을 4~5도 아래로 내림
-            pos.z - Math.cos(ry) * 600,
-          );
+        // ── Wake ribbon (선미뷰 전용 궤적 리본) 업데이트 ────────────
+        // FOLLOW 모드에서만 visible + 포인트 push.
+        // 다른 모드로 나가면 정리하고 숨김.
+        {
+          const c = ctx.current;
+          const wake = c.wakeLine;
+          if (wake) {
+            if (mode === 'FOLLOW' && shipGroup3) {
+              wake.visible = true;
+              // 0.12s 마다 포인트 추가 (너무 조밀하지 않게)
+              const nowMs = now;
+              if (nowMs - c.wakeLastT > 120) {
+                const sp = shipGroup3.position;
+                // 선미 방향으로 선체 뒤에 살짝 오프셋
+                const ry = shipGroup3.rotation.y;
+                const backOff = 30; // 선박 길이의 반 정도
+                const px = sp.x + Math.sin(ry) * backOff;
+                const pz = sp.z + Math.cos(ry) * backOff;
+                const py = SHIP_BASE_Y + 0.3;
+                const last = c.wakeLastPos;
+                const moved = !last ||
+                  Math.abs(last.x - px) + Math.abs(last.z - pz) > 1.0;
+                if (moved) {
+                  const positions = c.wakePositions;
+                  const colors = c.wakeColors;
+                  const max = c.wakeMaxPoints;
+                  // Shift 하지 않고 ring-buffer 스타일로 처리하되,
+                  // Line 렌더는 index 0..count 순서를 기대하므로 shift 방식 유지.
+                  // count < max: append
+                  // count == max: 앞 한 포인트 제거 후 append
+                  if (c.wakeCount < max) {
+                    const idx = c.wakeCount * 3;
+                    positions[idx] = px;
+                    positions[idx + 1] = py;
+                    positions[idx + 2] = pz;
+                    c.wakeCount += 1;
+                  } else {
+                    for (let i = 0; i < max - 1; i += 1) {
+                      const dst = i * 3;
+                      const src = (i + 1) * 3;
+                      positions[dst] = positions[src];
+                      positions[dst + 1] = positions[src + 1];
+                      positions[dst + 2] = positions[src + 2];
+                    }
+                    const idx = (max - 1) * 3;
+                    positions[idx] = px;
+                    positions[idx + 1] = py;
+                    positions[idx + 2] = pz;
+                  }
+                  // Color: 꼬리로 갈수록 페이드 (cyan → dark)
+                  for (let i = 0; i < c.wakeCount; i += 1) {
+                    const t = i / Math.max(1, c.wakeCount - 1); // 0(tail)..1(head)
+                    const idx = i * 3;
+                    colors[idx] = 0.1 + t * 0.15;         // R
+                    colors[idx + 1] = 0.55 + t * 0.35;    // G
+                    colors[idx + 2] = 0.70 + t * 0.25;    // B
+                  }
+                  c.wakeGeo.attributes.position.needsUpdate = true;
+                  c.wakeGeo.attributes.color.needsUpdate = true;
+                  c.wakeGeo.setDrawRange(0, c.wakeCount);
+                  c.wakeGeo.computeBoundingSphere();
+                  c.wakeLastT = nowMs;
+                  c.wakeLastPos = { x: px, z: pz };
+                }
+              }
+            } else if (wake.visible) {
+              // FOLLOW 벗어남 → 숨김 + 버퍼 리셋 (다음 진입 시 새 궤적)
+              wake.visible = false;
+              c.wakeCount = 0;
+              c.wakeLastPos = null;
+              c.wakeGeo.setDrawRange(0, 0);
+            }
+          }
         }
 
         // FOLLOW 카메라 — 오빗 드래그 + 부드러운 줌
@@ -1950,7 +2499,7 @@ const ThreeOverlay = forwardRef(function ThreeOverlay(
     }
     rafId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId);
-  }, [visible, animateOcean, mode, shipState]);
+  }, [visible, animateOcean, mode, shipState, manualMode, buildIcebergs]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   const isVisible = visible === true;

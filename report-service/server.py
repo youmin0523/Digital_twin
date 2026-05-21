@@ -45,8 +45,12 @@ from modules.trend_analyzer import TrendAnalyzer
 from modules.pdf_generator import PdfGenerator
 from modules.rl.departure_agent import DepartureAgent
 from modules.rl.departure_trainer import DepartureTrainer
+from modules.rl.departure_iterative_trainer import DepartureIterativeTrainer
+from modules.rl.multi_model_trainer import MultiModelIterativeTrainer, ALL_COMBINATIONS, SHIP_TYPES
 from modules.rl.prediction_calibrator import PredictionCalibrator
 from modules.rl import existing_rl_client
+from modules.whatif_generator_max import WhatIfGeneratorMax
+from modules import whatif_logger
 
 # ── 싱글톤 초기화 ────────────────────────────────────────────
 data_loader = DataLoader()
@@ -55,7 +59,10 @@ trend_analyzer = TrendAnalyzer()
 pdf_generator = PdfGenerator()
 departure_agent = DepartureAgent()
 departure_trainer = DepartureTrainer()
+departure_iterative_trainer = DepartureIterativeTrainer(departure_trainer=departure_trainer)
+multi_model_trainer = MultiModelIterativeTrainer()
 calibrator = PredictionCalibrator()
+whatif_generator = WhatIfGeneratorMax(route_scorer, data_loader)  # v3.2: Max OAuth + RIO + 6~8개 보장
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 
@@ -101,6 +108,41 @@ class RLTrainRequest(BaseModel):
     curriculum: bool = True
     difficulty: str = "medium"
     timesteps: int = 100_000
+
+
+class DepartureIterativeTrainRequest(BaseModel):
+    ice_class: str = "PC5"
+    forecast_days: int = 30
+    transit_days: int = 14
+    base_timesteps: int = 100_000
+    max_iterations: int = 10
+    target_success_rate: float = 0.80
+    target_prohibitive_rate: float = 0.10
+    eval_episodes: int = 50
+    initial_weights: dict | None = None
+
+
+class MultiModelTrainRequest(BaseModel):
+    base_timesteps: int = 100_000
+    max_iterations: int = 10
+    target_success_rate: float = 0.80
+    target_prohibitive_rate: float = 0.10
+    eval_episodes: int = 50
+    forecast_days: int = 30
+
+
+class SarTrainRequest(BaseModel):
+    epochs: int = 30
+    batch_size: int = 4
+    synthetic_count: int = 200
+    device: str = "cpu"
+
+
+class WhatIfRequest(BaseModel):
+    route: str = "NSR"
+    ice_class: str = "PC5"
+    departure_date_start: str = ""
+    forecast_days: int = 30
 
 
 # ── 보고서 생성 파이프라인 ────────────────────────────────────
@@ -355,10 +397,12 @@ async def rl_status_general():
 
 @app.post("/api/report/rl/stop")
 async def rl_stop():
-    """진행 중인 RL(A) 학습 중단 요청."""
-    if not departure_trainer.is_training:
+    """진행 중인 RL(A) 학습 중단 요청 (반복 학습 포함)."""
+    if not departure_trainer.is_training and not departure_iterative_trainer.is_running:
         return JSONResponse(status_code=400, content={"error": "학습 중이 아닙니다."})
     departure_trainer.stop_requested = True
+    if departure_iterative_trainer.is_running:
+        departure_iterative_trainer.stop_requested = True
     return {"message": "학습 중단 요청됨"}
 
 
@@ -374,6 +418,10 @@ async def rl_calibrate():
         return JSONResponse(status_code=400, content={"error": "현재 월 해빙 데이터 없음"})
 
     from modules.route_scorer import ARCTIC_SEGMENTS, concentration_to_ice_conditions
+    import sys as _sys
+    _router_path = str(Path(__file__).parent.parent / "backend" / "pipeline")
+    if _router_path not in _sys.path:
+        _sys.path.insert(0, _router_path)
     from arctic_master_router import calculate_rio
 
     predicted_rios = []
@@ -405,3 +453,259 @@ async def rl_model_info():
         "calibrator": calibrator.get_info(),
         "trainer": departure_trainer.get_status(),
     }
+
+
+# ── 출항 RL 반복 학습 Endpoints ───────────────────────────────
+@app.post("/api/report/rl/departure/train/iterative")
+async def departure_iterative_train(req: DepartureIterativeTrainRequest, bg: BackgroundTasks):
+    """출항 RL 자동화 반복 학습 시작 — 학습→평가→보상 조정→재학습 루프."""
+    if departure_trainer.is_training or departure_iterative_trainer.is_running:
+        return JSONResponse(status_code=409, content={"error": "이미 학습이 진행 중입니다."})
+
+    initial_weights = None
+    if req.initial_weights:
+        try:
+            from modules.rl.departure_env import DepartureRewardWeights
+            initial_weights = DepartureRewardWeights(**req.initial_weights)
+        except Exception as e:
+            return JSONResponse(status_code=400,
+                                content={"error": f"initial_weights 형식 오류: {e}"})
+
+    monthly_ice = data_loader.load_monthly_ice()
+    weather = data_loader.load_weather()
+
+    bg.add_task(
+        departure_iterative_trainer.run,
+        monthly_ice=monthly_ice,
+        weather_data=weather,
+        route_scorer=route_scorer,
+        ice_class=req.ice_class,
+        forecast_days=req.forecast_days,
+        transit_days=req.transit_days,
+        base_timesteps=req.base_timesteps,
+        max_iterations=req.max_iterations,
+        target_success_rate=req.target_success_rate,
+        target_prohibitive_rate=req.target_prohibitive_rate,
+        eval_episodes=req.eval_episodes,
+        initial_weights=initial_weights,
+    )
+    return {"message": "출항 RL 반복 학습 시작",
+            "max_iterations": req.max_iterations,
+            "target_success_rate": req.target_success_rate,
+            "target_prohibitive_rate": req.target_prohibitive_rate}
+
+
+@app.get("/api/report/rl/departure/train/iterative/status")
+async def departure_iterative_status():
+    """출항 RL 반복 학습 진행 상태 조회."""
+    return departure_iterative_trainer.get_status()
+
+
+@app.post("/api/report/rl/departure/train/iterative/stop")
+async def departure_iterative_stop():
+    """출항 RL 반복 학습 중단 요청."""
+    if not departure_iterative_trainer.is_running:
+        return JSONResponse(status_code=400, content={"error": "반복 학습이 실행 중이 아닙니다."})
+    departure_iterative_trainer.stop()
+    return {"message": "출항 RL 반복 학습 중단 요청됨"}
+
+
+# ── 다중 모델 (빙급 × 선종) 병렬 학습 Endpoints ───────────────
+@app.post("/api/report/rl/multi/train")
+async def multi_model_train(req: MultiModelTrainRequest, bg: BackgroundTasks):
+    """빙급 × 선종 전체 조합을 동시에 반복 학습 시작."""
+    if multi_model_trainer.is_running:
+        return JSONResponse(status_code=409, content={"error": "이미 다중 모델 학습이 진행 중입니다."})
+
+    monthly_ice = data_loader.load_monthly_ice()
+    weather = data_loader.load_weather()
+
+    bg.add_task(
+        multi_model_trainer.start,
+        monthly_ice=monthly_ice,
+        weather_data=weather,
+        route_scorer=route_scorer,
+        base_timesteps=req.base_timesteps,
+        max_iterations=req.max_iterations,
+        target_success_rate=req.target_success_rate,
+        target_prohibitive_rate=req.target_prohibitive_rate,
+        eval_episodes=req.eval_episodes,
+        forecast_days=req.forecast_days,
+    )
+
+    combos = [{"ice_class": ic, "ship_type": st,
+                "ship_label": SHIP_TYPES[st]["label"]}
+               for ic, st in ALL_COMBINATIONS]
+    return {
+        "message": f"다중 모델 학습 시작 ({len(ALL_COMBINATIONS)}개 조합)",
+        "combinations": combos,
+    }
+
+
+@app.get("/api/report/rl/multi/status")
+async def multi_model_status():
+    """다중 모델 학습 진행 상태 조회."""
+    return multi_model_trainer.get_status()
+
+
+@app.post("/api/report/rl/multi/stop")
+async def multi_model_stop():
+    """다중 모델 학습 전체 중단."""
+    if not multi_model_trainer.is_running:
+        return JSONResponse(status_code=400, content={"error": "다중 모델 학습이 실행 중이 아닙니다."})
+    multi_model_trainer.stop()
+    return {"message": "다중 모델 학습 중단 요청됨"}
+
+
+# ══════════════════════════════════════════════════════════════
+# What-If 시나리오 분석 API
+# ══════════════════════════════════════════════════════════════
+
+def _run_whatif(job_id: str, req: WhatIfRequest):
+    """비동기 What-If 시나리오 생성 (동기 — BackgroundTasks에서 실행)."""
+    import time as _time
+    t0 = _time.perf_counter()
+    print(f"[WHATIF-DEBUG] _run_whatif 진입 job={job_id}", flush=True)
+    try:
+        _update_job(job_id, 10)
+        print(f"[WHATIF-DEBUG] _update_job(10) → generate_scenarios 호출 시작", flush=True)
+        result = whatif_generator.generate_scenarios(
+            route=req.route,
+            ice_class=req.ice_class,
+            departure_date=req.departure_date_start or date.today().isoformat(),
+            forecast_days=req.forecast_days,
+        )
+        _update_job(job_id, 90)
+
+        # 결과 저장
+        from dataclasses import asdict
+        result_dict = {
+            "scenarios": [asdict(s) for s in result.scenarios],
+            "comparison_text": result.comparison_text,
+            "ai_recommendation": result.ai_recommendation,
+            "tool_calls_count": result.tool_calls_count,
+        }
+        jobs[job_id]["result"] = result_dict
+        _update_job(job_id, 100, status="completed")
+        logger.info("What-If 완료: %d 시나리오", len(result.scenarios))
+
+        # 운영 로그 기록 (실패해도 결과 처리는 그대로)
+        try:
+            recs = [s.recommendation for s in result.scenarios]
+            rec_dist = {
+                "추천":   recs.count("추천"),
+                "조건부": recs.count("조건부"),
+                "비추천": recs.count("비추천"),
+            }
+            total = max(sum(rec_dist.values()), 1)
+            neg_ratio = rec_dist["비추천"] / total
+            convergence_status = (
+                "collapse" if neg_ratio >= 0.8
+                else "good"  if len(result.scenarios) >= 4 and rec_dist["추천"] > 0 and rec_dist["비추천"] > 0
+                else "stalled" if len(result.scenarios) < 4
+                else "improving"
+            )
+            whatif_logger.log_run(
+                request=req.dict(),
+                summary={
+                    "total_iterations": 1,
+                    "convergence_status": convergence_status,
+                    "best_quality": {
+                        "scenarios_count": len(result.scenarios),
+                        "recommendations_dist": rec_dist,
+                    },
+                },
+                latency_ms=(_time.perf_counter() - t0) * 1000,
+            )
+        except Exception:
+            logger.exception("whatif log write failed (non-fatal)")
+    except Exception as e:
+        logger.error("What-If 실패: %s", e, exc_info=True)
+        _fail_job(job_id, str(e))
+
+
+@app.post("/api/report/whatif")
+async def start_whatif(req: WhatIfRequest, bg: BackgroundTasks):
+    """What-If 시나리오 분석을 시작합니다."""
+    job_id = _create_job()
+    bg.add_task(_run_whatif, job_id, req)
+    return {"job_id": job_id, "message": "What-If 시나리오 분석 시작"}
+
+
+@app.get("/api/report/whatif/status/{job_id}")
+async def whatif_status(job_id: str):
+    """What-If 분석 진행 상태 조회."""
+    job = jobs.get(job_id)
+    if not job:
+        return JSONResponse(status_code=404, content={"error": "Job not found"})
+    return {
+        "status": job["status"],
+        "progress": job["progress"],
+        "error": job.get("error"),
+        "result": job.get("result"),
+    }
+
+
+@app.get("/api/report/whatif/stats")
+async def whatif_stats():
+    """What-if 누적 실행 통계 — 운영 모니터링용."""
+    try:
+        return whatif_logger.get_stats()
+    except Exception as e:
+        logger.exception("whatif_stats failed")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+# ══════════════════════════════════════════════════════════════
+# SAR 빙산 탐지 모델 학습 API — 8003 전용 서버로 프록시
+# ══════════════════════════════════════════════════════════════
+# SAR 학습은 sar_server.py (포트 8003) 에서 독립 프로세스로 실행됩니다.
+# 이 서버(8002)는 RL 학습 전용으로 유지되어 이벤트루프 블로킹이 발생하지 않습니다.
+
+SAR_SERVER_URL = "http://127.0.0.1:8005"  # sar_server.py의 실제 포트 (코멘트엔 8003이지만 코드는 8005)
+
+
+async def _sar_proxy(method: str, path: str, body: bytes | None = None) -> dict:
+    """8003 SAR 서버로 요청을 프록시."""
+    import httpx
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        if method == "GET":
+            r = await client.get(f"{SAR_SERVER_URL}{path}")
+        else:
+            r = await client.post(f"{SAR_SERVER_URL}{path}", content=body,
+                                  headers={"Content-Type": "application/json"})
+        return r.json()
+
+
+@app.post("/api/report/sar/train")
+async def start_sar_training(req: SarTrainRequest):
+    """SAR 학습 시작 — sar_server(8003)로 위임."""
+    try:
+        import json as _json
+        result = await _sar_proxy("POST", "/api/sar/train", _json.dumps(req.dict()).encode())
+        return result
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "SAR 서버(8003)에 연결할 수 없습니다. 'python sar_server.py' 를 먼저 실행하세요."},
+        )
+
+
+@app.get("/api/report/sar/train-status")
+async def sar_train_status():
+    """SAR 학습 상태 — sar_server(8003)에서 조회."""
+    try:
+        return await _sar_proxy("GET", "/api/sar/status")
+    except Exception:
+        return {"error": "SAR 서버(8003) 응답 없음", "is_training": False}
+
+
+@app.get("/api/report/sar/model-info")
+async def sar_model_info():
+    """SAR 모델 메타데이터 — sar_server(8003)에서 조회."""
+    try:
+        return await _sar_proxy("GET", "/api/sar/model-info")
+    except Exception:
+        return {"error": "SAR 서버(8003) 응답 없음"}
+
+

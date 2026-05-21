@@ -164,7 +164,7 @@ class CDSEAuth:
             raise RuntimeError(f"CDSE 토큰 요청 실패: {e}") from e
 
         if resp.status_code == 401:
-            log.error("CDSE 인증 실패 — 이메일/비밀번호를 확인하세요.")
+            log.error("CDSE 인증 실패 - 이메일/비밀번호를 확인하세요.")
             log.error("Copernicus Marine Service와 별도 계정일 수 있습니다.")
             log.error("가입: https://dataspace.copernicus.eu")
             raise RuntimeError("CDSE 인증 실패 (401)")
@@ -583,7 +583,7 @@ def run_once(target_date=None, dry_run=False, backfill_days=0, max_disk_gb=DEFAU
             try:
                 file_path = download_product(session, auth, product, dry_run=dry_run)
             except Exception as e:
-                log.error(f"다운로드 실패: {product.get('Name', '?')} — {e}")
+                log.error(f"다운로드 실패: {product.get('Name', '?')} - {e}")
                 continue
 
             if file_path:
@@ -600,7 +600,7 @@ def run_once(target_date=None, dry_run=False, backfill_days=0, max_disk_gb=DEFAU
     session.close()
 
     log.info(f"\n{'='*50}")
-    log.info(f"  완료 — 신규 {total_new}건, 다운로드 {total_downloaded}건")
+    log.info(f"  완료 - 신규 {total_new}건, 다운로드 {total_downloaded}건")
     log.info(f"  디스크 사용: {get_archive_size_gb():.1f}GB / {max_disk_gb}GB")
     log.info(f"  카탈로그: {catalog['product_count']}건")
     log.info(f"{'='*50}")

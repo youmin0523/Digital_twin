@@ -9,6 +9,7 @@ import math
 import logging
 import time
 from dataclasses import dataclass
+from itertools import islice
 from typing import Optional
 
 import numpy as np
@@ -16,12 +17,13 @@ import numpy as np
 try:
     from stable_baselines3.common.callbacks import BaseCallback as _BaseCallback
 except ImportError:
-    class _BaseCallback:
-        def __init__(self, verbose=0): pass
-        def _on_step(self): return True
+    class _BaseCallback:  # type: ignore[no-redef]
+        def __init__(self, verbose: int = 0) -> None: self.verbose = verbose
+        def _on_step(self) -> bool: return True
 
-from .rl_agent import IcebergAvoidanceAgent
+from .rl_agent import IcebergAvoidanceAgent, _StopTraining
 from .rl_environment import IcebergAvoidanceEnv, Iceberg
+from .rl_reward import RewardWeights
 from .rl_ship_dynamics import approx_dist_km, bearing_deg, normalize_angle, km_per_deg_lon, KM_PER_DEG_LAT
 from .config import MAX_SAFE_CONCENTRATION
 
@@ -29,13 +31,19 @@ logger = logging.getLogger(__name__)
 
 
 class _StopCallback(_BaseCallback):
-    """stop_requested 플래그를 확인해 학습을 중단시키는 콜백."""
+    """stop_requested 플래그를 확인해 학습을 강제 종료하는 콜백.
+
+    단순히 False를 반환하는 방식은 SB3 버전에 따라 동작하지 않을 수 있어,
+    _StopTraining 예외를 발생시켜 model.learn()을 즉시 중단합니다.
+    """
     def __init__(self, trainer: "RLTrainer"):
-        super().__init__(verbose=0)
+        super().__init__(verbose=0)  # type: ignore[call-arg]
         self.trainer = trainer
 
     def _on_step(self) -> bool:
-        return not self.trainer.stop_requested
+        if self.trainer.stop_requested:
+            raise _StopTraining("사용자 중단 요청")
+        return True
 
 
 @dataclass
@@ -47,44 +55,78 @@ class CurriculumStage:
 
 
 CURRICULUM = [
-    CurriculumStage("stage_1_basic", "easy", 100_000, "단일 빙산, 개방 해수, 좋은 시정"),
-    CurriculumStage("stage_2_moderate", "medium", 200_000, "다중 빙산, 가벼운 해빙, 보통 시정"),
-    CurriculumStage("stage_3_hard", "hard", 200_000, "밀집 빙산군, 높은 해빙 농도, 낮은 시정"),
+    # 비율 기반 (합=100). train_curriculum()에서 base_timesteps에 비례 분배.
+    # easy 50%: 빙산 없음, 경로 완주 경험 집중 축적
+    CurriculumStage("stage_1_basic",    "easy",   50, "빙산 없음, 맑은 날씨 — 경로 완주 경험 최우선 축적"),
+    # medium 33%: 빙산 도입, 회피 학습
+    CurriculumStage("stage_2_moderate", "medium", 33, "다중 빙산, 가벼운 해빙, 보통 시정"),
+    # hard 17%: 고난이도
+    CurriculumStage("stage_3_hard",     "hard",   17, "밀집 빙산군, 높은 해빙 농도, 낮은 시정"),
 ]
+_CURRICULUM_RATIO_TOTAL = sum(s.timesteps for s in CURRICULUM)  # 100
 
 
 class RLTrainer:
     """빙산 회피 RL 학습 관리자"""
 
-    def __init__(self, hyperparams: dict | None = None):
-        self.agent = IcebergAvoidanceAgent(hyperparams)
+    def __init__(self, hyperparams: dict | None = None,
+                 model_key: str = "default",
+                 fixed_route: str | None = None,
+                 fixed_ice_class: str | None = None,
+                 ship_params=None):
+        self.agent = IcebergAvoidanceAgent(hyperparams, model_key=model_key)
+        self._fixed_route = fixed_route
+        self._fixed_ice_class = fixed_ice_class
+        self._ship_params = ship_params
         self.is_training = False
         self.stop_requested = False
         self.current_stage: Optional[str] = None
         self.training_log: list[dict] = []
 
-    def train_curriculum(self, stages: list[CurriculumStage] | None = None) -> dict:
+    def _create_env(self, difficulty: str, reward_weights: RewardWeights | None = None):
+        return self.agent.create_env(
+            difficulty=difficulty,
+            reward_weights=reward_weights,
+            fixed_route=self._fixed_route,
+            fixed_ice_class=self._fixed_ice_class,
+            ship_params=self._ship_params,
+        )
+
+    def train_curriculum(self, stages: list[CurriculumStage] | None = None,
+                         reward_weights: RewardWeights | None = None,
+                         base_timesteps: int | None = None) -> dict:
         stages = stages or CURRICULUM
         self.is_training = True
         self.stop_requested = False
         results = []
+
+        # base_timesteps가 주어지면 각 stage의 비율(stage.timesteps)에 따라 분배
+        # 예: base_timesteps=150_000, 비율=[50,33,17] → [75000, 49500, 25500]
+        total_ratio = sum(s.timesteps for s in stages)
+        def _stage_ts(stage: CurriculumStage) -> int:
+            if base_timesteps is None:
+                return stage.timesteps  # 비율 값 그대로 사용 (하위 호환)
+            return max(10_000, int(base_timesteps * stage.timesteps / total_ratio))
+
         try:
             for i, stage in enumerate(stages):
                 if self.stop_requested:
                     logger.info("[Trainer] 학습 중단 요청으로 커리큘럼 중단")
                     break
                 self.current_stage = stage.name
-                logger.info(f"[Trainer] === 커리큘럼 {i+1}/{len(stages)}: {stage.name} ===")
+                ts = _stage_ts(stage)
+                logger.info(f"[Trainer] === 커리큘럼 {i+1}/{len(stages)}: {stage.name} ({ts:,} steps) ===")
 
                 try:
-                    self.agent.create_env(difficulty=stage.difficulty)
+                    self._create_env(stage.difficulty, reward_weights)
                     if self.agent.model is None:
-                        self.agent.build_model(difficulty=stage.difficulty)
+                        self.agent.build_model(difficulty=stage.difficulty,
+                                               reward_weights=reward_weights)
                     else:
                         self.agent.model.set_env(self.agent.env)
 
                     start_time = time.time()
-                    metrics = self.agent.train(total_timesteps=stage.timesteps, extra_callback=_StopCallback(self))
+                    metrics = self.agent.train(total_timesteps=ts, extra_callback=_StopCallback(self))
                     elapsed = time.time() - start_time
 
                     result = {
@@ -94,8 +136,12 @@ class RLTrainer:
                     }
                     results.append(result)
                     self.training_log.append(result)
+
+                    # 중단 요청이 왔으면 스테이지 루프 종료
+                    if self.stop_requested:
+                        break
                 except Exception as e:
-                    logger.error(f"[Trainer] 스테이지 {stage.name} 실패 (다음 스테이지 계속): {e}", exc_info=True)
+                    logger.error(f"[Trainer] 스테이지 {stage.name} 실패: {e}", exc_info=True)
                     if self.stop_requested:
                         break
         finally:
@@ -103,14 +149,15 @@ class RLTrainer:
             self.current_stage = None
         return {"stages": results, "total_stages": len(stages)}
 
-    def train_single(self, difficulty: str = "medium", timesteps: int = 100_000) -> dict:
+    def train_single(self, difficulty: str = "medium", timesteps: int = 100_000,
+                     reward_weights: RewardWeights | None = None) -> dict:  # type: ignore[return]
         self.is_training = True
         self.stop_requested = False
         self.current_stage = f"single_{difficulty}"
         try:
-            self.agent.create_env(difficulty=difficulty)
+            self._create_env(difficulty, reward_weights)
             if self.agent.model is None:
-                self.agent.build_model(difficulty=difficulty)
+                self.agent.build_model(difficulty=difficulty, reward_weights=reward_weights)
             else:
                 self.agent.model.set_env(self.agent.env)
 
@@ -134,11 +181,22 @@ class RLTrainer:
             if not self.agent.load():
                 return {"error": "모델이 없습니다. 먼저 학습을 실행하세요."}
 
-        env = IcebergAvoidanceEnv(difficulty=difficulty)
-        rewards, deviations, episode_lengths = [], [], []
-        collisions, successes = 0, 0
+        # 학습과 동일한 route/ice_class 환경에서 평가 (불일치 방지)
+        env = IcebergAvoidanceEnv(
+            difficulty=difficulty,
+            fixed_route=self._fixed_route,
+            fixed_ice_class=self._fixed_ice_class,
+            ship_params=self._ship_params,
+        )
+        rewards: list[float] = []
+        deviations: list[float] = []
+        episode_lengths: list[int] = []
+        collisions: int = 0
+        successes: int = 0
 
         for _ in range(n_episodes):
+            if self.stop_requested:
+                break
             obs, _ = env.reset()
             total_reward, max_deviation, steps = 0, 0, 0
 
@@ -149,8 +207,8 @@ class RLTrainer:
                 max_deviation = max(max_deviation, info.get("cross_track_km", 0))
                 steps += 1
                 if terminated or truncated:
-                    if info.get("collision"): collisions += 1
-                    if info.get("success"): successes += 1
+                    if info.get("collision"): collisions += 1  # type: ignore[operator]
+                    if info.get("success"): successes += 1      # type: ignore[operator]
                     break
 
             rewards.append(total_reward)
@@ -158,16 +216,17 @@ class RLTrainer:
             episode_lengths.append(steps)
 
         return {
-            "episodes": n_episodes, "difficulty": difficulty,
-            "mean_reward": float(np.mean(rewards)),
-            "collision_rate": collisions / n_episodes,
-            "success_rate": successes / n_episodes,
-            "mean_max_deviation_km": float(np.mean(deviations)),
-            "mean_episode_length": float(np.mean(episode_lengths)),
+            "episodes": len(rewards),
+            "difficulty": difficulty,
+            "mean_reward": float(np.mean(rewards)) if rewards else 0.0,
+            "collision_rate": collisions / n_episodes if n_episodes > 0 else 0.0,  # type: ignore[operator]
+            "success_rate": successes / n_episodes if n_episodes > 0 else 0.0,      # type: ignore[operator]
+            "mean_max_deviation_km": float(np.mean(deviations)) if deviations else 0.0,
+            "mean_episode_length": float(np.mean(episode_lengths)) if episode_lengths else 0.0,
         }
 
     def infer(self, ship_state: dict, icebergs: list[dict],
-              ice_data: dict, weather: dict) -> dict:
+              ice_data: dict, weather: dict) -> dict:  # type: ignore[return]
         """실시간 추론 -- 프론트엔드 API 호출용"""
         if self.agent.model is None:
             if not self.agent.load():
@@ -265,5 +324,5 @@ class RLTrainer:
             "is_training": self.is_training,
             "current_stage": self.current_stage,
             "agent_status": self.agent.get_training_status(),
-            "training_log": self.training_log[-10:],
+            "training_log": list(reversed(list(islice(reversed(self.training_log), 10)))),
         }

@@ -13,6 +13,7 @@ export default defineConfig({
       },
       '/api/rl': 'http://localhost:8001',
       '/api/report': 'http://localhost:8002',
+      '/api/fuel': 'http://localhost:8003',
       '/api': 'http://localhost:8000',
       '/proxy': 'http://localhost:8000',
       '/nsidc-proxy': 'http://localhost:8000',

@@ -1,6 +1,6 @@
 // //! [Original Code] import React, { useState } from 'react';
-// //* [Modified Code] useRef, useCallback 추가 (Portal 기반 툴팁용)
-import React, { useState, useRef, useCallback } from 'react';
+// //* [Modified Code] useRef, useCallback, useEffect 추가 (Portal 기반 툴팁용 + ML 연료 비교)
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import './BottomPanel.css';
 import {
@@ -9,6 +9,7 @@ import {
   MIN_RESCUE_DAYS,
   MIN_TEMP_MARGIN,
 } from '../../services/polarisRIO';
+import { compareFuelCost } from '../../services/api';
 
 const DEFAULT_CHECKS = {
   pwom: true,
@@ -143,13 +144,15 @@ function DesignField({ label, value, unit, onChange }) {
   return (
     <div className="bp-design__field">
       <span className="bp-design__field-label">{label}</span>
-      <input
-        className="bp-design__input"
-        type="number"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      <span className="bp-design__field-unit">{unit}</span>
+      <span className="bp-design__field-value">
+        <input
+          className="bp-design__input"
+          type="number"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        {unit && <span className="bp-design__field-unit">{unit}</span>}
+      </span>
     </div>
   );
 }
@@ -163,9 +166,9 @@ function IceWeatherPanel({ hud }) {
   const windDir = Math.round(180 + Math.random() * 60);
 
   return (
-    <div className="bp-content">
+    <div className="bp-content" style={{ justifyContent: 'space-between', gap: 6 }}>
       <RioGauge value={rfiNum} level={rioLevel} />
-      <div className="bp-info-stack" style={{ width: 150 }}>
+      <div className="bp-info-stack" style={{ flex: '0 1 auto', minWidth: 0 }}>
         <DataRow label="Ice Class" value={hud.iceClass || 'PC2'} />
         <DataRow label="SIC" value={hud.sic} />
         <DataRow label="빙해상태" value={hud.iceState} />
@@ -173,7 +176,7 @@ function IceWeatherPanel({ hud }) {
         <DataRow label="해측상태" value={hud.seaLabel} />
       </div>
       <div className="bp-divider" />
-      <div className="bp-cards">
+      <div className="bp-cards" style={{ flex: '0 1 auto', minWidth: 0 }}>
         <InfoCard label="해빙 농도" value={hud.sic} unit="%" />
         <InfoCard
           label="해빙 두께"
@@ -193,9 +196,8 @@ function IceWeatherPanel({ hud }) {
         />
       </div>
       <div className="bp-divider" />
-      <div className="bp-info-stack" style={{ minWidth: 190 }}>
+      <div className="bp-info-stack" style={{ flex: '0 1 auto', minWidth: 0 }}>
         <DataRow label="파고 Hs" value={hud.hs} />
-        {/* //* [Modified Code] 가시거리 항목 추가 */}
         <DataRow label="가시거리" value={hud.vis} />
         <DataRow label="풍속" value={windSpeed + ' m/s'} />
         <DataRow label="풍향" value={windDir + '°'} />
@@ -233,9 +235,9 @@ function DesignInfoPanel({
         <div className="bp-design__presets">
           <button
             className="bp-design__preset-btn"
-            onClick={() => onPresetLoad('icebreaker')}
+            onClick={() => onPresetLoad('bulk')}
           >
-            쇄빙선
+            벌크선
           </button>
           <button
             className="bp-design__preset-btn"
@@ -283,44 +285,48 @@ function DesignInfoPanel({
           />
           <div className="bp-design__field">
             <span className="bp-design__field-label">Ice Class</span>
-            <select
-              className="bp-design__select"
-              value={specs.iceClass}
-              onChange={(e) => onSpecChange('iceClass', e.target.value)}
-            >
-              <option value="PC1">PC1</option>
-              <option value="PC2">PC2</option>
-              <option value="PC3">PC3</option>
-              <option value="PC4">PC4</option>
-              <option value="PC5">PC5</option>
-              <option value="PC6">PC6</option>
-              <option value="PC7">PC7</option>
-              <option value="NONE">일반</option>
-            </select>
+            <span className="bp-design__field-value">
+              <select
+                className="bp-design__select"
+                value={specs.iceClass}
+                onChange={(e) => onSpecChange('iceClass', e.target.value)}
+              >
+                <option value="PC1">PC1</option>
+                <option value="PC2">PC2</option>
+                <option value="PC3">PC3</option>
+                <option value="PC4">PC4</option>
+                <option value="PC5">PC5</option>
+                <option value="PC6">PC6</option>
+                <option value="PC7">PC7</option>
+                <option value="NONE">일반</option>
+              </select>
+            </span>
           </div>
         </div>
       </div>
       <div className="bp-divider" />
       <div className="bp-content__col">
         <span className="bp-design__col-title">POLAR CODE 안전 설계 기준</span>
-        <DesignField
-          label="Draft"
-          value={specs.draft || 8.5}
-          unit="m"
-          onChange={(v) => onSpecChange('draft', Number(v))}
-        />
-        <DesignField
-          label="Rescue"
-          value={rescueDays}
-          unit="일"
-          onChange={(v) => setRescueDays(Number(v))}
-        />
-        <DesignField
-          label="온도여유"
-          value={tempMargin}
-          unit="°C"
-          onChange={(v) => setTempMargin(Number(v))}
-        />
+        <div className="bp-design__fields">
+          <DesignField
+            label="Draft"
+            value={specs.draft || 8.5}
+            unit="m"
+            onChange={(v) => onSpecChange('draft', Number(v))}
+          />
+          <DesignField
+            label="Rescue"
+            value={rescueDays}
+            unit="일"
+            onChange={(v) => setRescueDays(Number(v))}
+          />
+          <DesignField
+            label="온도여유"
+            value={tempMargin}
+            unit="°C"
+            onChange={(v) => setTempMargin(Number(v))}
+          />
+        </div>
         <span className="bp-design__col-title" style={{ marginTop: 4 }}>
           항행 설비 안전 체크리스트
         </span>
@@ -485,9 +491,14 @@ function EvalTooltipPortal({ anchorRect, evaluationResult }) {
 }
 
 /* ── Tab 3: Ship Service Info ── */
-function ServiceInfoPanel({ hud, currentRoute, evaluationResult }) {
+function ServiceInfoPanel({ hud, currentRoute, evaluationResult, specs, araon }) {
   // //* [Modified Code] Portal 툴팁 상태 관리
   const [tooltipRect, setTooltipRect] = useState(null);
+
+  // ── ML 연료 비교 상태 ──────────────────────────────────────
+  const [fuelData, setFuelData] = useState(null);
+  const [fuelLoading, setFuelLoading] = useState(false);
+  const [fuelError, setFuelError] = useState(null);
   const badgeRef = useRef(null);
 
   const handleBadgeEnter = useCallback(() => {
@@ -496,6 +507,59 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult }) {
     }
   }, []);
   const handleBadgeLeave = useCallback(() => setTooltipRect(null), []);
+
+  // ── 선종 매핑 (shipSpecs.type → API vessel_type) ────────────
+  const vesselTypeMap = { bulk: 'bulk', lng_tanker: 'lng', container: 'container' };
+  const iceClassCodeMap = { PC2: 2, PC3: 3, PC4: 4, PC5: 5, PC6: 6, PC7: 7, NONE: 0 };
+  // 선종별 기본 엔진 출력 (kW)
+  const defaultEnginePower = { bulk: 18000, lng_tanker: 37000, container: 28000 };
+
+  // NSR 항로 거리 (해리) — ai-pipeline/config.py 기준
+  const routeDistanceNm = { NSR: 7200, NWP: 8100, TSR: 6600 };
+
+  // ── ML 연료 비교 API 호출 ──────────────────────────────────
+  useEffect(() => {
+    if (!specs) return;
+    const arcticRoutes = ['NSR', 'NWP', 'TSR'];
+    if (!arcticRoutes.includes(currentRoute)) {
+      setFuelData(null);
+      return;
+    }
+
+    const vtype = vesselTypeMap[specs.type] || 'container';
+    const iceCode = iceClassCodeMap[specs.iceClass] || 0;
+    const enginePower = defaultEnginePower[specs.type] || 28000;
+    const nsrDist = routeDistanceNm[currentRoute] || 7200;
+
+    // 현재 SIC(빙하 농도)를 HUD에서 가져옴
+    const sicStr = hud.sic || '0%';
+    const sicVal = parseFloat(sicStr) / 100 || 0;
+    // 빙하 두께는 농도에 기반한 추정값
+    const iceThickness = Math.min(3.0, 0.3 + 2.0 * Math.pow(sicVal, 1.5));
+
+    setFuelLoading(true);
+    setFuelError(null);
+    compareFuelCost({
+      displacement: specs.displacement || 20000,
+      draft: specs.draft || 8.5,
+      engine_power: enginePower,
+      ice_class_code: iceCode,
+      nsr_ice_thickness: iceThickness,
+      nsr_ice_concentration: sicVal,
+      nsr_distance_nm: nsrDist,
+      suez_distance_nm: 12400,
+      vessel_type: vtype,
+      speed_knots: 14.0,
+    })
+      .then((data) => {
+        setFuelData(data);
+        setFuelLoading(false);
+      })
+      .catch((err) => {
+        setFuelError(err.message);
+        setFuelLoading(false);
+      });
+  }, [specs?.type, specs?.displacement, specs?.draft, specs?.iceClass, currentRoute, hud.sic]);
 
   const allRoutes = [
     { name: 'NSR', dist: 7200, days: 14, cost: 280, co2: 1840, arctic: true },
@@ -561,9 +625,12 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult }) {
   };
 
   return (
-    <div className="bp-content">
+    <div className="bp-content bp-content--service">
       <SpeedGauge speed={hud.speed} />
-      <div className="bp-info-stack" style={{ minWidth: 150 }}>
+      <div
+        className="bp-info-stack bp-info-stack--compact"
+        style={{ minWidth: 140, paddingTop: 4 }}
+      >
         <DataRow
           label="침로"
           value={
@@ -575,6 +642,67 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult }) {
         <DataRow label="현재단계" value={hud.phase} />
         <DataRow label="위치" value={hud.position} />
         <DataRow label="빙결상태" value={hud.iceState} />
+        {/* ── 아라온호 (KOPRI 한국 유일 쇄빙선) ────────────────── */}
+        <div
+          style={{
+            marginTop: 6,
+            paddingTop: 4,
+            borderTop: '1px dashed rgba(34, 211, 238, 0.4)',
+            fontSize: 10,
+          }}
+        >
+          <div
+            style={{
+              color: '#22d3ee',
+              fontWeight: 600,
+              marginBottom: 3,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            🚢 아라온 (KOPRI)
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 6,
+              padding: '1px 0',
+            }}
+          >
+            <span style={{ color: '#94a3b8' }}>좌표</span>
+            <span
+              style={{
+                color: '#e2e8f0',
+                fontVariantNumeric: 'tabular-nums',
+                whiteSpace: 'nowrap',
+              }}
+              title={(araon && araon.position) || ''}
+            >
+              {(araon && araon.position) || '71.0N 179.5E'}
+            </span>
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 6,
+              padding: '1px 0',
+            }}
+          >
+            <span style={{ color: '#94a3b8' }}>상태</span>
+            <span
+              style={{
+                color: '#e2e8f0',
+                whiteSpace: 'nowrap',
+              }}
+              title={(araon && araon.statusKo) || ''}
+            >
+              {(araon && araon.statusKo) || '대기'}
+            </span>
+          </div>
+        </div>
       </div>
       <div className="bp-divider" />
       <div
@@ -582,8 +710,8 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult }) {
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          flex: 1,
-          minWidth: 0,
+          flex: '1 1 180px',
+          minWidth: 170,
         }}
       >
         {evaluationResult ? (
@@ -622,7 +750,7 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult }) {
               marginBottom: 4,
             }}
           >
-            평가 대기 — 제원 데이터를 적용하세요
+            평가 대기
           </div>
         )}
         <span className="bp-service__table-title">Route Comparison</span>
@@ -657,7 +785,7 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult }) {
       {isSuitable && (
         <>
           <div className="bp-divider" />
-          <div className="bp-info-stack" style={{ minWidth: 130 }}>
+          <div className="bp-info-stack" style={{ minWidth: 110 }}>
             <span className="bp-service__table-title">
               {currentRoute} vs SUEZ 절감
             </span>
@@ -684,6 +812,85 @@ function ServiceInfoPanel({ hud, currentRoute, evaluationResult }) {
           </div>
         </>
       )}
+      {/* ── ML 연료 비용 비교 (XGBoost 예측 기반) ── */}
+      {fuelData && !fuelData.error && (
+        <>
+          <div className="bp-divider" />
+          <div style={{
+            display: 'flex', flexDirection: 'column', justifyContent: 'center',
+            flex: '1 1 200px', minWidth: 190, maxWidth: 260,
+          }}>
+            <span className="bp-service__table-title" style={{ color: '#f59e0b' }}>
+              ML 연료 비용 분석
+            </span>
+            <table className="bp-service__table" style={{ fontSize: '10px' }}>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th style={{ color: '#38bdf8' }}>{currentRoute}</th>
+                  <th style={{ color: '#fb923c' }}>SUEZ</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style={{ color: '#94a3b8' }}>연료</td>
+                  <td>{fuelData.nsr.total_fuel_tons.toLocaleString()}t</td>
+                  <td>{fuelData.suez.total_fuel_tons.toLocaleString()}t</td>
+                </tr>
+                <tr>
+                  <td style={{ color: '#94a3b8' }}>연료비</td>
+                  <td>${(fuelData.nsr.fuel_cost_usd / 1000).toFixed(0)}K</td>
+                  <td>${(fuelData.suez.fuel_cost_usd / 1000).toFixed(0)}K</td>
+                </tr>
+                <tr>
+                  <td style={{ color: '#94a3b8' }}>부대비</td>
+                  <td>${(fuelData.nsr.additional_cost_usd / 1000).toFixed(0)}K</td>
+                  <td>${(fuelData.suez.additional_cost_usd / 1000).toFixed(0)}K</td>
+                </tr>
+                <tr style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                  <td style={{ color: '#e2e8f0', fontWeight: 'bold' }}>총비용</td>
+                  <td style={{ fontWeight: 'bold' }}>${(fuelData.nsr.total_cost_usd / 1000).toFixed(0)}K</td>
+                  <td style={{ fontWeight: 'bold' }}>${(fuelData.suez.total_cost_usd / 1000).toFixed(0)}K</td>
+                </tr>
+                <tr>
+                  <td style={{ color: '#94a3b8' }}>소요일</td>
+                  <td>{fuelData.nsr.transit_days}일</td>
+                  <td>{fuelData.suez.transit_days}일</td>
+                </tr>
+              </tbody>
+            </table>
+            {/* 절감 요약 배지 */}
+            <div style={{
+              marginTop: 4, padding: '4px 8px', borderRadius: 6, fontSize: '10px',
+              fontWeight: 'bold', textAlign: 'center',
+              background: fuelData.comparison.nsr_is_cheaper
+                ? 'rgba(52,211,153,0.15)' : 'rgba(239,68,68,0.15)',
+              border: `1px solid ${fuelData.comparison.nsr_is_cheaper
+                ? 'rgba(52,211,153,0.3)' : 'rgba(239,68,68,0.3)'}`,
+              color: fuelData.comparison.nsr_is_cheaper ? '#34d399' : '#f87171',
+            }}>
+              {fuelData.comparison.nsr_is_cheaper
+                ? `${currentRoute} 선택 시 $${(Math.abs(fuelData.comparison.cost_saving_usd) / 1000).toFixed(0)}K 절감 (${fuelData.comparison.cost_saving_percent}%) · ${Math.abs(fuelData.comparison.time_saving_days)}일 단축`
+                : `SUEZ 우회가 $${(Math.abs(fuelData.comparison.cost_saving_usd) / 1000).toFixed(0)}K 저렴`}
+            </div>
+            {/* NSR 부대비 상세 (에스코트·보험) */}
+            {fuelData.nsr.escort_cost_usd > 0 && (
+              <div style={{ fontSize: '9px', color: '#64748b', marginTop: 3, paddingLeft: 4 }}>
+                쇄빙 에스코트 ${(fuelData.nsr.escort_cost_usd / 1000).toFixed(0)}K
+                · 북극해 보험 ${(fuelData.nsr.insurance_cost_usd / 1000).toFixed(0)}K
+              </div>
+            )}
+          </div>
+        </>
+      )}
+      {fuelLoading && (
+        <>
+          <div className="bp-divider" />
+          <div style={{ display: 'flex', alignItems: 'center', color: '#64748b', fontSize: '10px' }}>
+            ML 연료 분석 중...
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -700,8 +907,7 @@ export default function BottomPanel({
   currentRoute,
   onRouteChange,
   onReset,
-  trendReportOpen,
-  onTrendReportToggle,
+  araon,
 }) {
   return (
     <div className="bp" style={{ position: 'relative' }}>
@@ -733,28 +939,7 @@ export default function BottomPanel({
         {/* 우: Service */}
         <div className="bp-section">
           <div className="bp-section__title bp-section__title--centered">
-            {/* TREND REPORT 토글 — 타이틀 좌측 absolute */}
-            <button
-              onClick={onTrendReportToggle}
-              style={{
-                position: 'absolute',
-                left: 8,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                padding: '2px 8px',
-                background: trendReportOpen ? 'rgba(37,99,235,0.35)' : 'transparent',
-                border: `1px solid ${trendReportOpen ? '#3b82f6' : '#1e3a8a'}`,
-                borderRadius: 3,
-                color: trendReportOpen ? '#93c5fd' : '#4a6490',
-                fontSize: 9,
-                fontWeight: 700,
-                letterSpacing: 0.5,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              TREND REPORT {trendReportOpen ? '▲' : '▼'}
-            </button>
+            {/* TREND REPORT / FUEL ANALYSIS 토글은 상단 메뉴로 이동해 중복 제거됨 */}
             Ship Service Info
             {/* //* [Modified Code] 초기화 아이콘 버튼 */}
             <button
@@ -781,6 +966,8 @@ export default function BottomPanel({
             hud={hud}
             currentRoute={currentRoute}
             evaluationResult={evaluationResult}
+            specs={specs}
+            araon={araon}
           />
         </div>
       </div>

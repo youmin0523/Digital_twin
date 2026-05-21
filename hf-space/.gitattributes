@@ -1,0 +1,43 @@
+# =====================================================================
+# Git LFS 추적 패턴
+#
+# HF Space repo 루트로 이 파일 복사 후 commit 하면, 매칭되는 파일은
+# 자동으로 LFS 로 업로드된다. (= 5GB 일반 파일 한도 회피)
+#
+# git lfs install   ← 한 번만 실행
+# 그 다음 git add . / commit / push 하면 자동 처리.
+# =====================================================================
+
+# ── 머신러닝 모델 가중치 ────────────────────────────────
+*.pkl filter=lfs diff=lfs merge=lfs -text
+*.pt filter=lfs diff=lfs merge=lfs -text
+*.pth filter=lfs diff=lfs merge=lfs -text
+*.onnx filter=lfs diff=lfs merge=lfs -text
+*.safetensors filter=lfs diff=lfs merge=lfs -text
+*.bin filter=lfs diff=lfs merge=lfs -text
+*.h5 filter=lfs diff=lfs merge=lfs -text
+
+# ── 압축된 RL 체크포인트 (stable-baselines3 가 .zip 로 저장) ──
+*.zip filter=lfs diff=lfs merge=lfs -text
+
+# ── 큰 데이터셋 ────────────────────────────────────────
+*.parquet filter=lfs diff=lfs merge=lfs -text
+*.feather filter=lfs diff=lfs merge=lfs -text
+*.npz filter=lfs diff=lfs merge=lfs -text
+*.npy filter=lfs diff=lfs merge=lfs -text
+
+# ── SAR / 위성 영상 ────────────────────────────────────
+*.tif filter=lfs diff=lfs merge=lfs -text
+*.tiff filter=lfs diff=lfs merge=lfs -text
+*.nc filter=lfs diff=lfs merge=lfs -text
+
+# ── PDF 출력물 (있다면) ────────────────────────────────
+*.pdf filter=lfs diff=lfs merge=lfs -text
+
+# ── 텍스트는 강제로 LF 로 통일 (Windows 작업자 위해) ─────
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
+Dockerfile text eol=lf

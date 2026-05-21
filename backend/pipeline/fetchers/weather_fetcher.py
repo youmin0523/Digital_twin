@@ -314,7 +314,7 @@ def _check_budget(needed: int) -> bool:
     if needed > remaining:
         print(f"  [LIMIT] 일일 API 호출 한도 도달: "
               f"사용 {usage['calls']}/{DAILY_CALL_LIMIT}, 필요 {needed}, 잔여 {remaining}")
-        print(f"  [LIMIT] 이번 주기 건너뜀 — 기존 캐시 데이터 유지")
+        print(f"  [LIMIT] 이번 주기 건너뜀 - 기존 캐시 데이터 유지")
         return False
     return True
 
@@ -358,21 +358,37 @@ def _chunked(lst: list, n: int):
 
 # --- Open-Meteo Batch API calls ---------------------------------------------
 
-def fetch_marine_batch(waypoints: list[dict]) -> list[float | None]:
-    """Open-Meteo Marine API에서 유의파고(m)를 배치 조회."""
+def fetch_marine_batch(waypoints: list[dict]) -> list[dict]:
+    """Open-Meteo Marine API에서 유의파고(m), 파향(°), 파주기(s)를 배치 조회.
+
+    반환 원소: {"height": float|None, "direction": float|None, "period": float|None}
+    - direction: meteorological convention (파가 오는 방향, 0°=북)
+    - period: 평균 파주기 (s)
+    """
     lats = ",".join(str(wp["lat"]) for wp in waypoints)
     lons = ",".join(str(wp["lon"]) for wp in waypoints)
-    url = f"{MARINE_API}?latitude={lats}&longitude={lons}&current=wave_height&cell_selection=nearest"
+    url = (
+        f"{MARINE_API}?latitude={lats}&longitude={lons}"
+        f"&current=wave_height,wave_direction,wave_period"
+        f"&cell_selection=nearest"
+    )
 
     data = _http_get(url)
     # 단일 좌표: dict 반환 / 다중 좌표: list 반환
     if isinstance(data, dict):
         data = [data]
 
-    results: list[float | None] = []
+    results: list[dict] = []
     for entry in data:
-        val = entry.get("current", {}).get("wave_height")
-        results.append(round(float(val), 2) if val is not None else None)
+        current = entry.get("current", {})
+        h_raw = current.get("wave_height")
+        d_raw = current.get("wave_direction")
+        p_raw = current.get("wave_period")
+        results.append({
+            "height": round(float(h_raw), 2) if h_raw is not None else None,
+            "direction": round(float(d_raw), 1) if d_raw is not None else None,
+            "period": round(float(p_raw), 2) if p_raw is not None else None,
+        })
 
     return results
 
@@ -411,19 +427,20 @@ def fetch_route_weather(route_key: str, waypoints: list[dict], dry_run: bool = F
     if dry_run:
         wp_results = [
             {"name": wp["name"], "lat": wp["lat"], "lon": wp["lon"],
-             "wave_height_m": None, "temperature_c": None, "visibility_km": None}
+             "wave_height_m": None, "wave_direction_deg": None, "wave_period_s": None,
+             "temperature_c": None, "visibility_km": None}
             for wp in waypoints
         ]
         return {"waypoints": wp_results, "route_summary": compute_route_summary(wp_results)}
 
-    # 배치 marine API (청킹)
-    wave_data: list[float | None] = []
+    # 배치 marine API (청킹) — 각 원소: {"height","direction","period"}
+    wave_data: list[dict] = []
     for chunk in _chunked(waypoints, CHUNK_SIZE):
         try:
             wave_data.extend(fetch_marine_batch(chunk))
         except RuntimeError as e:
             print(f"    [WARN] Marine API: {e}")
-            wave_data.extend([None] * len(chunk))
+            wave_data.extend([{"height": None, "direction": None, "period": None}] * len(chunk))
 
     # 배치 forecast API (청킹)
     forecast_data: list[tuple[float | None, float | None]] = []
@@ -464,13 +481,15 @@ def fetch_route_weather(route_key: str, waypoints: list[dict], dry_run: bool = F
     # 웨이포인트별 결합
     wp_results = []
     for i, wp in enumerate(waypoints):
-        wave = wave_data[i] if i < len(wave_data) else None
+        wave = wave_data[i] if i < len(wave_data) else {"height": None, "direction": None, "period": None}
         temp, vis = forecast_data[i] if i < len(forecast_data) else (None, None)
         wp_results.append({
             "name": wp["name"],
             "lat": wp["lat"],
             "lon": wp["lon"],
-            "wave_height_m": wave,
+            "wave_height_m": wave.get("height"),
+            "wave_direction_deg": wave.get("direction"),
+            "wave_period_s": wave.get("period"),
             "temperature_c": temp,
             "visibility_km": vis,
         })

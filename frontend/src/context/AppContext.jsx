@@ -35,13 +35,13 @@ const initialState = {
 
   // Ship specs
   shipSpecs: {
-    type: 'icebreaker',
-    displacement: 20000,
-    length: 160,
-    width: 30,
-    gm: 3.2,
-    draft: 8.5,
-    iceClass: 'PC2',
+    type: 'bulk',
+    displacement: 55000,
+    length: 225,
+    width: 32,
+    gm: 3.8,
+    draft: 14.5,
+    iceClass: 'Arc4',
   },
 
   // Ice data (3-tier fallback: Copernicus LIVE -> local monthly -> procedural)
@@ -59,7 +59,7 @@ const initialState = {
     phase: '\uCD9C\uD56D \uB300\uAE30',
     danger: '\uB0AE\uC74C \uD83D\uDFE2',
     dangerClass: 'safe',
-    iceClass: 'PC2',
+    iceClass: 'Arc4',
     sic: '0%',
     temp: '+2.1\u00B0C',
     rfi: '0.0',

@@ -90,17 +90,8 @@ export default function WeatherHud({ shipPos, weatherData, currentRouteKey, isMo
 
   return (
     <div style={{
-      position: 'absolute',
-      right: 10,
-      top: 60,
-      width: 240,
-      zIndex: 300,
-      background: 'rgba(13, 19, 41, 0.92)',
-      border: '1px solid #1a2a4a',
-      borderRadius: 8,
-      backdropFilter: 'blur(8px)',
-      boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
-      padding: '12px 16px',
+      width: '100%',
+      boxSizing: 'border-box',
       fontFamily: "'Segoe UI', system-ui, sans-serif",
     }}>
       {/* 제목 + 모드 표시 */}
@@ -142,93 +133,175 @@ export default function WeatherHud({ shipPos, weatherData, currentRouteKey, isMo
           : nearest.name}
       </div>
 
-      {/* 3개 기상 지표 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {/* 파고 */}
+      {/* 5개 기상 지표 */}
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
         <Row
           icon="〰"
           label="파고"
-          value={wave != null ? `${wave.toFixed(1)} m` : '—'}
+          value={wave != null ? `${wave.toFixed(1)}` : null}
+          unit="m"
           color={waveColor}
           bar={wave != null ? Math.min(wave / 8.0, 1.0) : 0}
           barColor={waveColor}
         />
-        {/* 가시거리 */}
         <Row
           icon="👁"
           label="가시거리"
-          value={vis != null ? `${vis.toFixed(1)} km` : '—'}
+          value={vis != null ? `${vis.toFixed(1)}` : null}
+          unit="km"
           color={visColor}
           bar={vis != null ? Math.min(vis / 20.0, 1.0) : 0}
           barColor={visColor}
         />
-        {/* 기온 */}
         <Row
           icon="🌡"
           label="기온"
-          value={temp != null ? `${temp > 0 ? '+' : ''}${temp.toFixed(1)} °C` : '—'}
+          value={temp != null ? `${temp > 0 ? '+' : ''}${temp.toFixed(1)}` : null}
+          unit="°C"
           color={tempColor}
           bar={temp != null ? Math.min(Math.max((temp + 30) / 60, 0), 1.0) : 0}
           barColor={tempColor}
         />
-        {/* SST (해수면 온도) */}
         <Row
           icon="🌊"
           label="해수면 온도"
-          value={sst != null ? `${sst > 0 ? '+' : ''}${sst.toFixed(1)} °C` : '—'}
+          value={sst != null ? `${sst > 0 ? '+' : ''}${sst.toFixed(1)}` : null}
+          unit="°C"
           color={sstColor}
           bar={sst != null ? Math.min(Math.max((sst + 5) / 40, 0), 1.0) : 0}
           barColor={sstColor}
         />
-        {/* 해무 위험도 */}
         <Row
           icon="🌫"
           label="해무 위험"
-          value={fogRisk ?? '—'}
+          value={fogRisk}
+          unit=""
           color={fogColor}
           bar={fogDiff != null ? Math.min(Math.max(fogDiff / 10, 0), 1.0) : 0}
           barColor={fogColor}
+          isLast
         />
       </div>
     </div>
   );
 }
 
-function Row({ icon, label, value, color, bar, barColor }) {
+function Row({ icon, label, value, unit, color, bar, barColor, isLast }) {
+  const hasValue = value != null && value !== '';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <div style={{
+    <div
+      style={{
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      }}>
-        <span style={{ fontSize: 11, color: '#94a3b8' }}>
-          {icon} {label}
+        flexDirection: 'column',
+        gap: 3,
+        padding: '6px 0',
+        borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+          minHeight: 16,
+        }}
+      >
+        {/* 좌측: 아이콘 + 라벨 */}
+        <span
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            flexShrink: 0,
+            fontSize: 12,
+            color: '#94a3b8',
+            whiteSpace: 'nowrap',
+            lineHeight: 1,
+          }}
+        >
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 14,
+              height: 14,
+              fontSize: 12,
+              flexShrink: 0,
+            }}
+          >
+            {icon}
+          </span>
+          <span>{label}</span>
         </span>
-        <span style={{
-          fontSize: 13,
-          fontWeight: 700,
-          color,
-          fontVariantNumeric: 'tabular-nums',
-        }}>
-          {value}
+        {/* 우측: 값 + 단위 */}
+        <span
+          style={{
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'flex-end',
+            flexShrink: 0,
+            textAlign: 'right',
+            whiteSpace: 'nowrap',
+            fontVariantNumeric: 'tabular-nums',
+            lineHeight: 1,
+          }}
+        >
+          {hasValue ? (
+            <>
+              <span
+                style={{ fontSize: 13, fontWeight: 700, color }}
+              >
+                {value}
+              </span>
+              {unit && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 400,
+                    color,
+                    opacity: 0.7,
+                    marginLeft: 3,
+                  }}
+                >
+                  {unit}
+                </span>
+              )}
+            </>
+          ) : (
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: '#94a3b8',
+                opacity: 0.4,
+              }}
+            >
+              —
+            </span>
+          )}
         </span>
       </div>
       {/* 바 게이지 */}
-      <div style={{
-        height: 3,
-        borderRadius: 2,
-        background: 'rgba(255,255,255,0.06)',
-        overflow: 'hidden',
-      }}>
-        <div style={{
-          height: '100%',
-          width: `${(bar * 100).toFixed(0)}%`,
+      <div
+        style={{
+          height: 3,
           borderRadius: 2,
-          background: barColor,
-          opacity: 0.7,
-          transition: 'width 0.6s ease',
-        }} />
+          background: 'rgba(255,255,255,0.06)',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            height: '100%',
+            width: `${(bar * 100).toFixed(0)}%`,
+            borderRadius: 2,
+            background: barColor,
+            opacity: 0.7,
+            transition: 'width 0.6s ease',
+          }}
+        />
       </div>
     </div>
   );

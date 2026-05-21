@@ -12,11 +12,9 @@ const ROUTE_META = [
 ];
 
 const VIEW_MODES = [
-  { key: 'BRIDGE', label: '선교 1인칭' },
   { key: 'FOLLOW', label: '선미 추적' },
   { key: 'SATELLITE', label: '위성 조감' },
   { key: 'WIDE', label: '광역 항로' },
-  { key: 'MANUAL', label: '수동 조종' },
 ];
 
 const WMS_LAYERS = [
@@ -50,6 +48,8 @@ export default function Sidebar({
   onDepartureChange,
   onArrivalChange,
   routeDistances = {}, // 동적 거리 프롭스 추가
+  currentRouteKey,     // 활성 항로 키
+  onRouteChange,       // 활성 항로 변경 콜백
 }) {
   const [iceMode, setIceMode] = useState('live');
   const [archiveEntries, setArchiveEntries] = useState([]);
@@ -87,15 +87,9 @@ export default function Sidebar({
   };
 
   const handleViewMode = (mode) => {
-    if (mode === 'MANUAL') {
-      onManualToggle();
-    } else {
-      if (manualMode) onManualToggle();
-      onModeChange(mode);
-    }
+    onModeChange(mode);
+    // 수동 조종 중에도 FOLLOW로 뷰를 전환할 수 있도록 manualMode를 유지
   };
-
-  const effectiveMode = manualMode ? 'MANUAL' : currentMode;
 
   return (
     <aside className="dt-sidebar">
@@ -144,21 +138,39 @@ export default function Sidebar({
           <span className="dt-sidebar__section-title">Routes</span>
           <button className="dt-sidebar__link" onClick={handleSelectAll}>Select All</button>
         </div>
-        {ROUTE_META.map(r => (
-          <label key={r.key} className="dt-sidebar__route-item">
-            <input
-              type="checkbox"
-              className="dt-sidebar__checkbox"
-              checked={routeVisibility[r.key] || false}
-              onChange={e => onRouteVisibilityChange(r.key, e.target.checked)}
-            />
-            <span className="dt-sidebar__route-bar" style={{ background: r.color }} />
-            <span className="dt-sidebar__route-label">{r.label}</span>
-            <span className="dt-sidebar__route-dist">
-              {routeDistances[r.key] === '-' ? '-' : (routeDistances[r.key] ? Math.round(routeDistances[r.key]).toLocaleString() + 'km' : r.dist)}
-            </span>
-          </label>
-        ))}
+        {ROUTE_META.map(r => {
+          const isActive = currentRouteKey === r.key;
+          return (
+            <div
+              key={r.key}
+              className={`dt-sidebar__route-item${isActive ? ' dt-sidebar__route-item--active' : ''}`}
+            >
+              <input
+                type="checkbox"
+                className="dt-sidebar__checkbox"
+                checked={routeVisibility[r.key] || false}
+                onChange={e => onRouteVisibilityChange(r.key, e.target.checked)}
+                title="항로 표시 토글"
+              />
+              <span className="dt-sidebar__route-bar" style={{ background: r.color }} />
+              <span
+                className="dt-sidebar__route-label"
+                onClick={() => onRouteChange && onRouteChange(r.key)}
+                title="이 항로를 활성 항로로 설정"
+                style={{
+                  cursor: onRouteChange ? 'pointer' : 'default',
+                  color: isActive ? '#22d3ee' : undefined,
+                  fontWeight: isActive ? 700 : undefined,
+                }}
+              >
+                {isActive ? '▶ ' : ''}{r.label}
+              </span>
+              <span className="dt-sidebar__route-dist">
+                {routeDistances[r.key] === '-' ? '-' : (routeDistances[r.key] ? Math.round(routeDistances[r.key]).toLocaleString() + 'km' : r.dist)}
+              </span>
+            </div>
+          );
+        })}
       </section>
 
       {/* ── View Mode ── */}
@@ -170,12 +182,32 @@ export default function Sidebar({
               type="radio"
               name="viewmode"
               className="dt-sidebar__radio"
-              checked={effectiveMode === m.key}
+              checked={currentMode === m.key}
               onChange={() => handleViewMode(m.key)}
             />
             <span className="dt-sidebar__radio-label">{m.label}</span>
           </label>
         ))}
+        {/* 수동 조종: 뷰 모드와 독립적인 토글 버튼 */}
+        <button
+          className={`dt-sidebar__manual-btn${manualMode ? ' active' : ''}`}
+          onClick={onManualToggle}
+          style={{
+            marginTop: 8,
+            width: '100%',
+            padding: '6px 0',
+            border: manualMode ? '2px solid #00f2fe' : '1px solid #555',
+            borderRadius: 4,
+            background: manualMode ? 'rgba(0,242,254,0.15)' : 'transparent',
+            color: manualMode ? '#00f2fe' : '#aaa',
+            cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: manualMode ? 700 : 400,
+            letterSpacing: 1,
+          }}
+        >
+          {manualMode ? '⚓ 수동 조종 ON' : '수동 조종'}
+        </button>
       </section>
 
       {/* ── WMS 데이터 레이어 ── */}

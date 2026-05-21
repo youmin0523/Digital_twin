@@ -334,6 +334,38 @@ class PdfGenerator:
     def __init__(self):
         self.styles = _get_styles()
 
+    @staticmethod
+    def _chart_whatif_comparison(scenarios: list[dict]):
+        """What-If 시나리오 비교 그룹 바 차트."""
+        if not scenarios:
+            return None
+
+        names = [sc.get("name", "")[:15] for sc in scenarios]
+        greens = [sc.get("route_summary", {}).get("green_days", 0) for sc in scenarios]
+        yellows = [sc.get("route_summary", {}).get("yellow_days", 0) for sc in scenarios]
+        reds = [sc.get("route_summary", {}).get("red_days", 0) for sc in scenarios]
+
+        fig, ax = plt.subplots(figsize=(6.5, 2.5))
+        x = np.arange(len(names))
+        w = 0.25
+        ax.barh(x - w, greens, w, color="#27ae60", label="안전(Green)")
+        ax.barh(x, yellows, w, color="#f39c12", label="주의(Yellow)")
+        ax.barh(x + w, reds, w, color="#e74c3c", label="위험(Red)")
+        ax.set_yticks(x)
+        ax.set_yticklabels(names, fontsize=7)
+        ax.set_xlabel("일수", fontsize=8)
+        ax.set_title("What-If 시나리오 비교", fontsize=9, fontweight="bold")
+        ax.legend(fontsize=7, loc="lower right")
+        ax.invert_yaxis()
+        fig.tight_layout()
+
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=120, bbox_inches="tight")
+        plt.close(fig)
+        buf.seek(0)
+
+        return Image(buf, width=160*mm, height=65*mm)
+
     def generate(
         self,
         output_path: Path,
@@ -362,6 +394,7 @@ class PdfGenerator:
         rl_avoidance_difficulties: dict = None,
         rl_model_info: dict = None,
         rl_calibration_info: dict = None,
+        whatif_result: dict = None,
     ) -> Path:
         """PDF 보고서 생성."""
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -497,16 +530,61 @@ class PdfGenerator:
             story.append(chart7)
         story.append(PageBreak())
 
-        # ── 섹션 7: AI 종합 결론 ─────────────────────────
-        story.append(Paragraph("6. AI 종합 결론 및 권고사항", s["KoHeading"]))
+        # ── 섹션 7: What-If 시나리오 분석 (선택) ──────────
+        if whatif_result and whatif_result.get("scenarios"):
+            story.append(Paragraph("6. What-If 시나리오 분석", s["KoHeading"]))
+
+            # 비교 테이블
+            scenarios = whatif_result["scenarios"]
+            tbl_data = [["시나리오", "평균 RIO", "안전일", "주의일", "위험일", "판정"]]
+            for sc in scenarios:
+                rs = sc.get("route_summary", {})
+                tbl_data.append([
+                    sc.get("name", "")[:20],
+                    str(rs.get("avg_rio", "-")),
+                    str(rs.get("green_days", "-")),
+                    str(rs.get("yellow_days", "-")),
+                    str(rs.get("red_days", "-")),
+                    sc.get("recommendation", "-"),
+                ])
+            wt = Table(tbl_data, colWidths=[45*mm, 22*mm, 18*mm, 18*mm, 18*mm, 22*mm])
+            wt.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a2a4a")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, -1), _KO_FONT_NAME),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#c0d0e0")),
+                ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+            ]))
+            story.append(wt)
+            story.append(Spacer(1, 5*mm))
+
+            # What-If 비교 차트
+            whatif_chart = self._chart_whatif_comparison(scenarios)
+            if whatif_chart:
+                story.append(whatif_chart)
+                story.append(Spacer(1, 5*mm))
+
+            # AI 종합 추천
+            rec = whatif_result.get("ai_recommendation", "")
+            if rec:
+                story.append(Paragraph("AI 시나리오 종합 추천", s["KoSubtitle"]))
+                for para in rec.split("\n\n"):
+                    if para.strip():
+                        story.append(Paragraph(para.strip(), s["KoBox"]))
+
+            story.append(PageBreak())
+
+        # ── 섹션 8: AI 종합 결론 ─────────────────────────
+        story.append(Paragraph("7. AI 종합 결론 및 권고사항", s["KoHeading"]))
         # 결론을 박스로 표시
         for para in ai_conclusions.split("\n\n"):
             if para.strip():
                 story.append(Paragraph(para.strip(), s["KoBox"]))
         story.append(PageBreak())
 
-        # ── 섹션 8: RL 모델 성능 ─────────────────────────
-        story.append(Paragraph("7. RL 모델 성능 보고", s["KoHeading"]))
+        # ── 섹션 9: RL 모델 성능 ─────────────────────────
+        story.append(Paragraph("8. RL 모델 성능 보고", s["KoHeading"]))
         chart6 = chart_rl_training_curve(rl_training_history)
         if chart6:
             story.append(chart6)

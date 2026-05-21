@@ -20,9 +20,11 @@ import WeatherHud from './components/hud/WeatherHud';
 import RLProgressOverlay from './components/hud/RLProgressOverlay';
 import TrendReportProgressOverlay from './components/hud/TrendReportProgressOverlay';
 import TrendReportPanel from './components/hud/TrendReportPanel';
+import WhatIfPanel from './components/hud/WhatIfPanel';
+import SarTrainingPanel from './components/hud/SarTrainingPanel';
+import FuelAnalysisPanel from './components/hud/FuelAnalysisPanel';
 import Header from './components/layout/Header';
 import Sidebar from './components/layout/Sidebar';
-import SimulationControls from './components/layout/SimulationControls';
 import TimelineBar from './components/layout/TimelineBar';
 import BottomPanel from './components/layout/BottomPanel';
 import ShipSpecsSummaryModal from './components/layout/ShipSpecsSummaryModal';
@@ -64,6 +66,23 @@ import {
   rerouteAroundIceberg,
 } from './services/icebergAvoidance';
 import { createRLAvoidanceController } from './services/rlAvoidanceController';
+import useVoyagePlayback from './hooks/useVoyagePlayback';
+import VoyagePlaybackLayer from './components/VoyagePlayback/VoyagePlaybackLayer';
+import VoyageHUD from './components/VoyagePlayback/VoyageHUD';
+import VoyageControls from './components/VoyagePlayback/VoyageControls';
+import VoyageEventToast from './components/VoyagePlayback/VoyageEventToast';
+import AraonLiveMarker from './components/VoyagePlayback/AraonLiveMarker';
+import VoyageAutoCam from './components/VoyagePlayback/VoyageAutoCam';
+import ForwardPreviewHUD from './components/hud/ForwardPreviewHUD';
+import FollowMiniMap from './components/hud/FollowMiniMap';
+import VoyageInfoPanel from './components/hud/VoyageInfoPanel';
+import { sampleShipAt, sampleIcebreakersAt } from './services/voyageTrace';
+import {
+  deriveSpeedKn as deriveVoySpeedKn,
+  deriveHeadingDeg as deriveVoyHeadingDeg,
+  nearestWaveAt,
+} from './services/derivedMetrics';
+import './components/VoyagePlayback/voyagePlayback.css';
 
 function AppInner() {
   const state = useAppState();
@@ -75,6 +94,195 @@ function AppInner() {
   const viewerRef = useRef(null);
   const [cesiumViewerState, setCesiumViewerState] = useState(null);
 
+  // Voyage Playback 모드 (쇄빙선 에스코트 시뮬 재생)
+  const [appMode, setAppMode] = useState('live'); // 'live' | 'voyage'
+  const voyage = useVoyagePlayback();
+  const voyageActive = appMode === 'voyage';
+
+  // VoyageInfoPanel / VoyageHUD 표시 여부 (X 버튼으로 닫기/다시 열기)
+  const [infoPanelVisible, setInfoPanelVisible] = useState(true);
+  const [voyageHudVisible, setVoyageHudVisible] = useState(true);
+  // 모드 전환 시 패널 자동으로 다시 열기
+  useEffect(() => {
+    setInfoPanelVisible(true);
+    setVoyageHudVisible(true);
+  }, [appMode]);
+  const currentRio = voyage.trace
+    ? (sampleShipAt(voyage.trace, voyage.tHours) || {}).rio
+    : 0;
+
+  // 아라온 HUD 정보 — voyage 모드면 trace 에서 보간, 아니면 Wrangel 정적값
+  const ARAON_STATUS_KO = {
+    idle: '대기',
+    dispatched: '출동',
+    rendezvous: '랑데부',
+    escorting: '동행',
+    released: '복귀',
+  };
+  // 컴팩트 좌표 (한 줄에 들어가도록)
+  const formatLatLonShort = (p) => {
+    if (!p) return '—';
+    const lat = `${p.lat.toFixed(1)}${p.lat >= 0 ? 'N' : 'S'}`;
+    const lon = `${p.lon.toFixed(1)}${p.lon >= 0 ? 'E' : 'W'}`;
+    return `${lat} ${lon}`;
+  };
+  let araonInfo = {
+    position: '71.0N 179.5E',
+    statusKo: '대기',
+  };
+  if (voyageActive && voyage.trace) {
+    const ibs = sampleIcebreakersAt(voyage.trace, voyage.tHours);
+    const araon = ibs.find((x) => x.id === 'ib-araon');
+    if (araon) {
+      araonInfo = {
+        position: formatLatLonShort(araon.position),
+        statusKo: ARAON_STATUS_KO[araon.status] || araon.status,
+      };
+    }
+  }
+
+  // ── Voyage Playback pitch/roll 거동 주입 + 아라온 3D 위치 ──────────────
+  // 매 tHours 변경마다 선박/아라온 상태를 읽어 ThreeOverlay 에 주입.
+  useEffect(() => {
+    const three = threeRef.current;
+    if (!three || !three.setVoyageMotionBias) return;
+    if (!voyageActive || !voyage.trace) {
+      three.setVoyageMotionBias(null);
+      if (three.setVoyageIceContext) three.setVoyageIceContext(null);
+      if (three.setAraonState) three.setAraonState(null);
+      return;
+    }
+    const ship = sampleShipAt(voyage.trace, voyage.tHours);
+    if (!ship) {
+      three.setVoyageMotionBias(null);
+      if (three.setVoyageIceContext) three.setVoyageIceContext(null);
+      if (three.setAraonState) three.setAraonState(null);
+      return;
+    }
+
+    // 선박 거동 bias — 얼음 두께 기반 현실 쇄빙 모델은 렌더 루프에서 처리.
+    // 여기선 RIO 기반 지속 roll 편향만 setVoyageMotionBias 로 주입.
+    const speedKn = deriveVoySpeedKn(voyage.trace, voyage.tHours);
+    const h = ship.effective_thickness_m || 0;
+    const rawH = ship.thickness_m || 0;
+    const rio = ship.rio || 0;
+    const rollBias = rio < -3 ? -0.04 : rio < 0 ? -0.02 : 0;
+    three.setVoyageMotionBias({
+      rollRad: rollBias,
+      pitchRad: 0, // pitch 는 렌더 루프 ice motion 이 전담
+      heaveM: 0,
+    });
+    // 얼음 컨텍스트 주입 (렌더 루프가 비선형 커브 + 램 사이클 계산)
+    if (three.setVoyageIceContext) {
+      three.setVoyageIceContext({
+        thicknessM: h,
+        speedKn,
+        // 유효 두께가 원본보다 눈에 띄게 낮으면 호위 받은 것으로 간주
+        isEscorted: rawH > 0 && h < rawH * 0.7,
+      });
+    }
+
+    // ── Three.js 본선 위치 동기화 (매 voyage tick) ──
+    // Voyage 모드에선 auto-sim 루프가 shipPivot 을 업데이트 안 하니 여기서 직접.
+    // position 은 직접 set (lerp 없음). rotation 은 state.shipState.heading 로 dispatch
+    // 해서 ThreeOverlay 렌더 루프의 heading lerp 가 자연스럽게 따라오도록.
+    const voyHeading = deriveVoyHeadingDeg(voyage.trace, voyage.tHours);
+    if (three.shipPivot) {
+      const depPort = PORTS[state.departurePort] || PORTS.BUSAN;
+      const M_PER_LAT = 111132.954;
+      const M_PER_LON =
+        111319.491 * Math.cos((ship.position.lat * Math.PI) / 180);
+      three.shipPivot.position.x =
+        ((ship.position.lon - depPort.lon) * M_PER_LON) / 1.5;
+      three.shipPivot.position.z =
+        -((ship.position.lat - depPort.lat) * M_PER_LAT) / 1.5;
+    }
+    // heading 을 state.shipState 에 dispatch → 렌더 루프 lerp 가 부드럽게 회전
+    dispatch({
+      type: 'SET_SHIP_STATE',
+      payload: {
+        lat: ship.position.lat,
+        lon: ship.position.lon,
+        heading: voyHeading || 0,
+      },
+    });
+
+    // Voyage 모드 HUD 데이터 동기화 (BottomPanel 속도계·상태 표시용)
+    const totalKm = voyage.trace.summary?.total_route_km || 0;
+    const sicVal = h > 0 ? Math.min(1, h / 3) : 0;
+    const phase = ship.km_along_route < 100
+      ? '출항'
+      : ship.position.lat > 66
+        ? '북극 항해 중'
+        : (ship.km_along_route || 0) > 12000
+          ? '입항 접근'
+          : '항해 중';
+    const dangerLabel = rio < -6 ? '위험 🔴' : rio < -3 ? '주의 🟠' : rio < 0 ? '경고 🟡' : '낮음 🟢';
+    const dangerCls = rio < -6 ? 'danger' : rio < -3 ? 'warn' : rio < 0 ? 'caution' : 'safe';
+    dispatch({
+      type: 'UPDATE_HUD',
+      payload: {
+        speed: speedKn.toFixed(1) + ' kn',
+        throttle: '자동 (Voyage)',
+        progress: totalKm > 0
+          ? ((ship.km_along_route || 0) / totalKm * 100).toFixed(1) + '%'
+          : '—',
+        position: ship.position.lat.toFixed(2) + '°N, ' + ship.position.lon.toFixed(2) + '°E',
+        iceState: h > 0.5 ? '결빙 수역' : h > 0.15 ? '해빙 경계' : '개방 수역',
+        phase,
+        danger: dangerLabel,
+        dangerClass: dangerCls,
+        sic: Math.round(sicVal * 100) + '%',
+        rfi: rio.toFixed(1),
+      },
+    });
+
+    // 아라온 3D 위치 주입
+    if (three.setAraonState) {
+      const ibs = sampleIcebreakersAt(voyage.trace, voyage.tHours);
+      const araon = ibs.find((x) => x.id === 'ib-araon');
+      if (!araon) {
+        three.setAraonState(null);
+      } else {
+        const isEscorting =
+          araon.status === 'escorting' || araon.status === 'rendezvous';
+
+        if (isEscorting) {
+          // 호위/랑데부 중 — trace 좌표 무시하고 본선 앞에 강제 배치
+          // forwardM: 본선 뱃머리 앞 거리 (Three.js 유닛, 3D 모델 크기 고려)
+          three.setAraonState({
+            visible: true,
+            escortOverride: {
+              forwardM: 600,   // 본선 전방 ~600 유닛 (살짝 왼쪽으로 offset 가능)
+              sideM: -80,      // 본선 좌측으로 살짝 비켜서 뱃머리 시야 확보
+            },
+          });
+        } else {
+          // 그 외 상태 — trace 좌표 사용, 20km 이내만 씬 렌더
+          const dLat = araon.position.lat - ship.position.lat;
+          const dLon = araon.position.lon - ship.position.lon;
+          const mPerLat = 111132.954;
+          const mPerLon =
+            111319.491 * Math.cos((ship.position.lat * Math.PI) / 180);
+          const distM = Math.sqrt(
+            (dLat * mPerLat) ** 2 + (dLon * mPerLon) ** 2,
+          );
+          const visible = distM < 20000;
+          const headingDeg =
+            deriveVoyHeadingDeg(voyage.trace, voyage.tHours) || 0;
+          three.setAraonState({
+            visible,
+            deltaLatDeg: dLat,
+            deltaLonDeg: dLon,
+            refLat: ship.position.lat,
+            headingDeg,
+            status: araon.status,
+          });
+        }
+      }
+    }
+  }, [voyageActive, voyage.trace, voyage.tHours]);
+
   const animFrameRef = useRef(null);
 
   // 키보드 수동 조종
@@ -82,12 +290,114 @@ function AppInner() {
 
   // 텔레포트 오버레이 상태
   const [teleportOpen, setTeleportOpen] = useState(false);
-  // Trend Report 패널 상태
-  const [trendReportOpen, setTrendReportOpen] = useState(false);
+
+  // 상단바 메뉴에서 제어하는 활성 패널
+  // 'rl_curriculum' | 'trend_learning' | 'whatif' | 'sar' | 'trend_report' | 'fuel' | null
+  const [activePanel, setActivePanel] = useState(null);
+  const handleSelectPanel = useCallback((id) => {
+    setActivePanel(prev => (prev === id ? null : id));
+  }, []);
+  const trendReportOpen = activePanel === 'trend_report';
+  const fuelAnalysisOpen = activePanel === 'fuel';
+  const toggleTrendReport = useCallback(() => handleSelectPanel('trend_report'), [handleSelectPanel]);
+  const toggleFuelAnalysis = useCallback(() => handleSelectPanel('fuel'), [handleSelectPanel]);
 
   // 토스트 알림 상태
   const [toastMsg, setToastMsg] = useState('');
   const toastTimerRef = useRef(null);
+
+  // ── RL 학습 중 멀티 선박 시각화 ──────────────────────────────
+  const [rlShips, setRlShips] = useState([]);
+  const rlShipProgressRef = useRef({}); // id → progress(0~1), 시간 기반 자동 전진
+
+  useEffect(() => {
+    let alive = true;
+    async function pollMultiStatus() {
+      try {
+        const [r1, r2] = await Promise.allSettled([
+          fetch('/api/rl/multi/status'),
+          fetch('/api/report/rl/multi/status'),
+        ]);
+        const ships = [];
+
+        // route별 TWP 캐시
+        const twpCache = {};
+        function getTWP(routeKey) {
+          if (!twpCache[routeKey]) {
+            const wps = ROUTES[routeKey] || ROUTES.NSR;
+            twpCache[routeKey] = buildTimings(wps);
+          }
+          return twpCache[routeKey];
+        }
+
+        // rl-pipeline (NSR/NWP/TSR × 빙급 × 선종)
+        if (r1.status === 'fulfilled' && r1.value.ok) {
+          const data = await r1.value.json();
+          const models = data.models ?? {};
+          Object.entries(models).forEach(([key, m]) => {
+            if (!m.is_running) return;
+            // key: NSR_PC7_bulk 형식
+            const parts = key.split('_');
+            const route = parts[0]; // NSR/NWP/TSR
+            const shipType = parts[parts.length - 1];
+            if (!rlShipProgressRef.current[key]) rlShipProgressRef.current[key] = Math.random();
+            const routeWps = ROUTES[route] || ROUTES.NSR;
+            const twp = getTWP(route);
+            const prog = rlShipProgressRef.current[key];
+            const pos = routePos(prog, twp, routeWps);
+            const hdg = routeHeading(prog, twp, routeWps);
+            ships.push({
+              id: `rl_${key}`,
+              route, shipType,
+              lat: pos.lat, lon: pos.lon, heading: hdg,
+              label: `${route} #${m.current_iteration}`,
+              iteration: m.current_iteration,
+            });
+          });
+        }
+
+        // report-service (빙급 × 선종)
+        if (r2.status === 'fulfilled' && r2.value.ok) {
+          const data = await r2.value.json();
+          const models = data.models ?? {};
+          Object.entries(models).forEach(([key, m]) => {
+            if (!m.is_running) return;
+            const parts = key.split('_');
+            const shipType = parts[parts.length - 1];
+            const routeWps = ROUTES.NSR;
+            const twp = getTWP('NSR');
+            if (!rlShipProgressRef.current[`dep_${key}`]) {
+              rlShipProgressRef.current[`dep_${key}`] = 0.3 + Math.random() * 0.4;
+            }
+            const prog = rlShipProgressRef.current[`dep_${key}`];
+            const pos = routePos(prog, twp, routeWps);
+            const hdg = routeHeading(prog, twp, routeWps);
+            ships.push({
+              id: `dep_${key}`,
+              route: 'NSR', shipType,
+              lat: pos.lat, lon: pos.lon, heading: hdg,
+              label: `출항 #${m.current_iteration}`,
+              iteration: m.current_iteration,
+            });
+          });
+        }
+
+        // 진행률 자동 전진 (poll마다 += 0.0024 → 약 21분에 경로 한 바퀴)
+        Object.keys(rlShipProgressRef.current).forEach(k => {
+          rlShipProgressRef.current[k] = (rlShipProgressRef.current[k] + 0.0024) % 1.0;
+        });
+
+        if (alive) setRlShips(ships);
+      } catch {}
+    }
+
+    pollMultiStatus();
+    const id = setInterval(pollMultiStatus, 3000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  // RL 선박 진행률 시간 기반 자동 증가 (3초 poll마다 += 0.0024, ~21분 1바퀴)
+  // pollMultiStatus 내에서 진행률 갱신하므로 별도 interval 불필요
   const showToast = useCallback((msg, duration = 4000) => {
     setToastMsg(msg);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -173,7 +483,8 @@ function AppInner() {
       // //* [Modified Code] 실측 거리 기반 동적 초 산출 (15노트 기준)
       const dynamicDays = Math.max(1, Math.round(distKm / (15 * 1.852 * 24)));
       const totalSec = dynamicDays * 86400;
-      const speedKmH = (distKm / totalSec) * state.multiplier * 3600;
+      // 선박 물리 속도는 시뮬 배율과 무관 (배율은 시간 압축일 뿐)
+      const speedKmH = distKm / (totalSec / 3600);
       const kn = (speedKmH / 1.852).toFixed(1);
       speedText = kn + ' kn';
       throttleText = '자동 ×' + Math.round(state.multiplier / 20);
@@ -379,6 +690,7 @@ function AppInner() {
   useEffect(() => {
     let lastTime = performance.now();
     let lastHudUpdate = 0;
+    let manualFrameCount = 0; // 수동 모드 HUD 업데이트 프레임 카운터
 
     function loop(now) {
       animFrameRef.current = requestAnimationFrame(loop);
@@ -427,7 +739,9 @@ function AppInner() {
         if (lastHudUpdate >= 10) {
           lastHudUpdate = 0;
           const distKm = calculateRouteDistanceKM(wps);
-          const speedKmH = (distKm / routeTotalSec) * mult * 3600;
+          // 선박 물리 속도는 시뮬 배율(mult)과 무관 — 시간 압축은 "보여지는 속도"를 키우면 안 됨.
+          // speed (km/h) = 총 거리 / 총 시뮬 시간(h)
+          const speedKmH = distKm / (routeTotalSec / 3600);
           const speedKnots = (speedKmH / 1.852).toFixed(1);
           const sea = getSeaState(pos.lat);
 
@@ -554,18 +868,21 @@ function AppInner() {
         }
 
         // BRIDGE / FOLLOW 모드: Three.js 선박 시각 이동
-        if (curMode === 'BRIDGE' || curMode === 'FOLLOW') {
+        if (curMode === 'FOLLOW') {
           const three = threeRef.current;
           if (three?.shipPivot) {
-            // Base Reference: 출발항 기준 위/경도 직사영 사용 (렌더링 동기화)
+            // Base Reference: 현재 위도 기준 mPerDegLon 사용 (고위도 경도 보정)
             const depPort = PORTS[state.departurePort] || PORTS.BUSAN;
             const METERS_PER_DEGREE_LAT = 111132.954;
             const mPerDegLon =
-              111319.491 * Math.cos((depPort.lat * Math.PI) / 180);
+              111319.491 * Math.cos((pos.lat * Math.PI) / 180);
             three.shipPivot.position.x =
               ((pos.lon - depPort.lon) * mPerDegLon) / 1.5;
             three.shipPivot.position.z =
               (-(pos.lat - depPort.lat) * METERS_PER_DEGREE_LAT) / 1.5;
+            // 선박 회전: route heading 에 맞춤 — 카메라(heading 기준 후방 배치)와 정렬
+            // (rotation.y = -heading; 수동 조종 블록과 동일 규약)
+            three.shipPivot.rotation.y = -hdg;
             // 선박 흔들림 (roll/pitch/heave)
             if (three.updateShipMotion) three.updateShipMotion(dt, pos.lat);
           }
@@ -584,91 +901,96 @@ function AppInner() {
         }
       }
 
-      // ── 수동 조종 키보드 입력 처리 ──
+      // ── 수동 조종 키보드 입력 처리 (manualMode일 때만) ──
       const k = keys.current;
-      if (
-        k &&
-        (k['KeyW'] || k['KeyS'] || k['KeyA'] || k['KeyD'] || k['KeyX'])
-      ) {
-        // 스로틀 (W/S) — 천천히 올라가고 천천히 내려감
-        if (k['KeyW'])
-          manualThrottleRef.current = Math.min(
-            manualThrottleRef.current + dt * 25,
-            100,
-          );
-        if (k['KeyS'])
-          manualThrottleRef.current = Math.max(
-            manualThrottleRef.current - dt * 25,
-            -20,
-          );
-        if (k['KeyX']) manualThrottleRef.current *= 0.9; // 급정지 대신 부드럽게 감속
+      if (manualModeRef.current && k) {
+        const hasInput = k['KeyW'] || k['KeyS'] || k['KeyA'] || k['KeyD'] || k['KeyX'];
 
-        // 타 (A/D) — 관성 기반 선회: 천천히 돌기 시작, 천천히 멈춤
-        const maxTurnRate = 0.4;
-        let targetTurn = 0;
-        if (k['KeyA']) targetTurn = -maxTurnRate;
-        if (k['KeyD']) targetTurn = maxTurnRate;
-        manualTurnRateRef.current +=
-          (targetTurn - manualTurnRateRef.current) * dt * 1.5; // 부드럽게 가감속
-        if (Math.abs(manualTurnRateRef.current) < 0.001)
-          manualTurnRateRef.current = 0;
-        manualHeadingRef.current += manualTurnRateRef.current * dt;
+        // 키 입력 시 스로틀/방향 갱신
+        if (hasInput) {
+          if (k['KeyW'])
+            manualThrottleRef.current = Math.min(
+              manualThrottleRef.current + dt * 30,
+              100,
+            );
+          if (k['KeyS'])
+            manualThrottleRef.current = Math.max(
+              manualThrottleRef.current - dt * 30,
+              -20,
+            );
+          if (k['KeyX']) manualThrottleRef.current *= 0.9;
 
-        // 속도 계산 — 관성 강하게 (느리게 반응)
-        const targetSpeed = manualThrottleRef.current * 0.3;
+          const maxTurnRate = 0.4;
+          let targetTurn = 0;
+          if (k['KeyA']) targetTurn = -maxTurnRate;
+          if (k['KeyD']) targetTurn = maxTurnRate;
+          manualTurnRateRef.current +=
+            (targetTurn - manualTurnRateRef.current) * dt * 1.5;
+          if (Math.abs(manualTurnRateRef.current) < 0.001)
+            manualTurnRateRef.current = 0;
+          manualHeadingRef.current += manualTurnRateRef.current * dt;
+        } else {
+          // 키 안 누를 때: 스로틀 서서히 감소 (관성 감속)
+          manualThrottleRef.current *= (1 - dt * 2.0);
+          if (Math.abs(manualThrottleRef.current) < 0.5) manualThrottleRef.current = 0;
+        }
+
+        // 속도 계산 (매 프레임, dispatch 없이 ref만 갱신)
+        const targetSpeed = manualThrottleRef.current * 0.5;
         manualSpeedRef.current +=
-          (targetSpeed - manualSpeedRef.current) * dt * 0.8;
+          (targetSpeed - manualSpeedRef.current) * dt * 3.0;
 
-        // Three.js 선박 위치 업데이트
-        const moveScale = 40;
+        // Three.js 선박 위치 업데이트 (dispatch 없이 직접 3D 오브젝트만 이동)
+        const moveScale = 200;
         const three = threeRef.current;
         if (three && three.shipPivot) {
           three.shipPivot.rotation.y = -manualHeadingRef.current;
+          if (Math.abs(manualSpeedRef.current) > 0.01) {
+            const dx = Math.sin(manualHeadingRef.current) * manualSpeedRef.current * dt * moveScale;
+            const dz = Math.cos(manualHeadingRef.current) * manualSpeedRef.current * dt * moveScale;
+            three.shipPivot.position.x += dx;
+            three.shipPivot.position.z -= dz;
+          }
+        }
 
-          // 수동 이동 시 Three.js 좌표 평면을 기준으로 전역 위도/경도를 역산출해 동기화
-          three.shipPivot.position.x +=
-            Math.sin(manualHeadingRef.current) *
-            manualSpeedRef.current *
-            dt *
-            moveScale;
-          three.shipPivot.position.z -=
-            Math.cos(manualHeadingRef.current) *
-            manualSpeedRef.current *
-            dt *
-            moveScale;
+        // React state 동기화: 10프레임마다만 dispatch (무한 리렌더 방지)
+        manualFrameCount++;
+        if (manualFrameCount >= 10) {
+          manualFrameCount = 0;
+          const three = threeRef.current;
+          if (three && three.shipPivot) {
+            const depPortM = PORTS[state.departurePort] || PORTS.BUSAN;
+            const METERS_PER_DEGREE_LAT = 111132.954;
+            const newLat =
+              depPortM.lat -
+              (three.shipPivot.position.z * 1.5) / METERS_PER_DEGREE_LAT;
+            const mPerDegLon =
+              111319.491 * Math.cos((newLat * Math.PI) / 180);
+            const newLon =
+              depPortM.lon + (three.shipPivot.position.x * 1.5) / mPerDegLon;
 
-          const depPortM = PORTS[state.departurePort] || PORTS.BUSAN;
-          const METERS_PER_DEGREE_LAT = 111132.954;
-          const mPerDegLon =
-            111319.491 * Math.cos((depPortM.lat * Math.PI) / 180);
-          const newLon =
-            depPortM.lon + (three.shipPivot.position.x * 1.5) / mPerDegLon;
-          const newLat =
-            depPortM.lat -
-            (three.shipPivot.position.z * 1.5) / METERS_PER_DEGREE_LAT;
-
+            dispatch({
+              type: 'SET_SHIP_STATE',
+              payload: {
+                lat: newLat,
+                lon: newLon,
+                heading: ((manualHeadingRef.current * 180) / Math.PI + 360) % 360,
+              },
+            });
+          }
           dispatch({
-            type: 'SET_SHIP_STATE',
+            type: 'SET_MANUAL',
             payload: {
-              lat: newLat,
-              lon: newLon,
-              heading: ((manualHeadingRef.current * 180) / Math.PI + 360) % 360,
+              manualThrottle: Math.round(manualThrottleRef.current),
+              manualSpeed: Math.round(manualSpeedRef.current * 10) / 10,
+              manualHeading: Math.round(
+                ((manualHeadingRef.current * 180) / Math.PI + 360) % 360,
+              ),
+              manualYawRate: Math.round(manualTurnRateRef.current * 100) / 100,
             },
           });
         }
 
-        // HUD 수동 계기 업데이트
-        dispatch({
-          type: 'SET_MANUAL',
-          payload: {
-            manualThrottle: Math.round(manualThrottleRef.current),
-            manualSpeed: Math.round(manualSpeedRef.current * 10) / 10,
-            manualHeading: Math.round(
-              ((manualHeadingRef.current * 180) / Math.PI + 360) % 360,
-            ),
-            manualYawRate: Math.round(manualTurnRateRef.current * 100) / 100,
-          },
-        });
       }
 
       // deck.gl Cesium 카메라 싱크
@@ -681,7 +1003,7 @@ function AppInner() {
 
       // BRIDGE/FOLLOW: WMS 데이터 레이어 → 바다 색상 오버레이
       const curMode = currentModeRef.current;
-      if (curMode === 'BRIDGE' || curMode === 'FOLLOW') {
+      if (curMode === 'FOLLOW') {
         const three = threeRef.current;
         if (three && three.updateOceanOverlay) {
           const ship = shipStateRef.current;
@@ -827,6 +1149,56 @@ function AppInner() {
       .catch(() => {}); // 데이터 없으면 수동 입력 fallback
   }, []);
 
+  // ── Real wave 주입 ─────────────────────────────────────────────────
+  // 실제 파고/파향/주기를 선박 현재 위치 기준 최근접 waypoint 에서 조회,
+  // ThreeOverlay updateShipMotion 의 합성 sea state 를 override.
+  // weatherData 없거나 근접 waypoint 없으면 null 전달 → lat 기반 fallback.
+  useEffect(() => {
+    const three = threeRef.current;
+    if (!three || !three.setRealWaveInput) return;
+    if (!weatherData) {
+      three.setRealWaveInput(null);
+      return;
+    }
+    let lat;
+    let lon;
+    let headingDeg;
+    if (voyageActive && voyage.trace) {
+      const ship = sampleShipAt(voyage.trace, voyage.tHours);
+      if (!ship) {
+        three.setRealWaveInput(null);
+        return;
+      }
+      lat = ship.position.lat;
+      lon = ship.position.lon;
+      headingDeg = deriveVoyHeadingDeg(voyage.trace, voyage.tHours);
+    } else if (state.shipState && typeof state.shipState.lat === 'number') {
+      lat = state.shipState.lat;
+      lon = state.shipState.lon;
+      headingDeg = state.shipState.heading;
+    } else {
+      three.setRealWaveInput(null);
+      return;
+    }
+    const wave = nearestWaveAt(weatherData, lat, lon);
+    if (!wave || typeof wave.height !== 'number') {
+      three.setRealWaveInput(null);
+      return;
+    }
+    three.setRealWaveInput({
+      Hs: wave.height,
+      Tp: wave.period ?? 8,
+      dirDeg: wave.direction,
+      headingDeg,
+    });
+  }, [
+    weatherData,
+    voyageActive,
+    voyage.trace,
+    voyage.tHours,
+    state.shipState,
+  ]);
+
   // Cesium viewer 준비되면 LIVE 빙산 데이터 로딩 + 카메라 상호작용 감지
   useEffect(() => {
     if (!cesiumViewerState) return;
@@ -939,11 +1311,11 @@ function AppInner() {
       dispatch({ type: 'SET_MODE', payload: mode });
       dispatch({
         type: 'SET_BRIDGE_VISIBLE',
-        payload: mode === 'BRIDGE' || mode === 'FOLLOW',
+        payload: mode === 'FOLLOW',
       });
 
-      // BRIDGE/FOLLOW 전환 시 선박 위치 동기화 + 빙산 즉시 갱신
-      if (mode === 'BRIDGE' || mode === 'FOLLOW') {
+      // FOLLOW 전환 시 선박 위치 동기화 + 빙산 즉시 갱신
+      if (mode === 'FOLLOW') {
         const { lon, lat } = state.shipState;
         const three = threeRef.current;
         console.log('[ModeSwitch]', mode, 'shipState:', lat, lon,
@@ -953,7 +1325,7 @@ function AppInner() {
           const depPort = PORTS[state.departurePort] || PORTS.BUSAN;
           const METERS_PER_DEGREE_LAT = 111132.954;
           const mPerDegLon =
-            111319.491 * Math.cos((depPort.lat * Math.PI) / 180);
+            111319.491 * Math.cos((lat * Math.PI) / 180);
           three.shipPivot.position.x =
             ((lon - depPort.lon) * mPerDegLon) / 1.5;
           three.shipPivot.position.z =
@@ -1009,17 +1381,21 @@ function AppInner() {
 
   const handleManualToggle = useCallback(() => {
     const nextManual = !state.manualMode;
-    // //* [Modified Code] 수동 조종 시작 시 현재 선박의 물리 상태를 Ref에 초기화하여 연속성 확보
     if (nextManual) {
       manualHeadingRef.current = (state.shipState.heading * Math.PI) / 180;
-      // 현재 속도가 자동 항해 중이었다면 그 속도를 초기값으로 사용
-      const currentSpeedKnots = parseFloat(state.hud.speed) || 0;
-      manualSpeedRef.current = currentSpeedKnots / 0.3; // manualSpeed * 0.3 = knots 공식 역산
-      manualThrottleRef.current = currentSpeedKnots / 0.3;
+      manualSpeedRef.current = 0;
+      manualThrottleRef.current = 0;
       manualTurnRateRef.current = 0;
+      // 수동 조종 시작 시 SATELLITE/WIDE 모드이면 자동으로 FOLLOW 전환
+      // (Three.js shipPivot이 없으면 이동 불가)
+      const curMode = state.currentMode;
+      if (curMode !== 'FOLLOW') {
+        dispatch({ type: 'SET_MODE', payload: 'FOLLOW' });
+        dispatch({ type: 'SET_BRIDGE_VISIBLE', payload: true });
+      }
     }
     dispatch({ type: 'SET_MANUAL_MODE', payload: nextManual });
-  }, [state.manualMode, state.shipState, state.hud, dispatch]);
+  }, [state.manualMode, state.shipState, state.hud, state.currentMode, dispatch]);
 
   // 배속/타임라인
   const handleMultiplierChange = useCallback(
@@ -1115,7 +1491,7 @@ function AppInner() {
         }
 
         if (
-          (curMode === 'BRIDGE' || curMode === 'FOLLOW') &&
+          (curMode === 'FOLLOW') &&
           threeRef.current &&
           threeRef.current.shipPivot
         ) {
@@ -1127,6 +1503,8 @@ function AppInner() {
             ((pos.lon - depPort.lon) * mPerDegLon) / 1.5;
           threeRef.current.shipPivot.position.z =
             (-(pos.lat - depPort.lat) * METERS_PER_DEGREE_LAT) / 1.5;
+          // 선박 회전: route heading 에 맞춤 (카메라 정렬을 위해)
+          threeRef.current.shipPivot.rotation.y = -hdg;
           if (threeRef.current.updateShipMotion)
             threeRef.current.updateShipMotion(0, pos.lat);
           // 타임라인 변경 시 빙산 위치도 즉시 갱신
@@ -1149,13 +1527,65 @@ function AppInner() {
     ],
   );
 
-  // 항로/선박 제원
+  // 항로 변경 (BottomPanel 드롭다운, AI 재라우팅 등) — 진행도/본선위치 유지
   const handleRouteChange = useCallback(
     (routeKey) => {
       dispatch({ type: 'SET_ROUTE', payload: routeKey });
-      dispatch({ type: 'SET_GENERATED_WAYPOINTS', payload: null }); // 경로 변경 시 리셋
+      dispatch({ type: 'SET_GENERATED_WAYPOINTS', payload: null });
     },
     [dispatch],
+  );
+
+  // 항로 선택 (사이드바 Routes 클릭) — 처음부터 다시 항해 시작
+  // visibility ON, 진행도 0 리셋, 본선을 출발항으로 즉시 점프
+  const handleRouteSelect = useCallback(
+    (routeKey) => {
+      dispatch({ type: 'SET_ROUTE', payload: routeKey });
+      dispatch({ type: 'SET_GENERATED_WAYPOINTS', payload: null });
+      setRouteVisibility((prev) => {
+        if (prev[routeKey]) return prev;
+        return { ...prev, [routeKey]: true };
+      });
+      dispatch({ type: 'SET_PROGRESS', payload: 0 });
+      dispatch({ type: 'SET_ELAPSED', payload: 0 });
+      simElapsedRef.current = 0;
+
+      // 새 항로의 첫 waypoint와 두 번째 waypoint 사이의 bearing 으로 초기 heading 설정
+      // (출발항에서 즉시 정확한 방향 표시 — 다음 sim tick 까지 깜빡임 방지)
+      const newWps = ROUTES[routeKey] || ROUTES.NSR;
+      const depPort = PORTS[state.departurePort] || PORTS.BUSAN;
+      let initHdgDeg = 0;
+      if (newWps.length >= 2) {
+        const a = newWps[0];
+        const b = newWps[1];
+        const φ1 = (a.lat * Math.PI) / 180;
+        const φ2 = (b.lat * Math.PI) / 180;
+        const Δλ = ((b.lon - a.lon) * Math.PI) / 180;
+        const y = Math.sin(Δλ) * Math.cos(φ2);
+        const x =
+          Math.cos(φ1) * Math.sin(φ2) -
+          Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+        initHdgDeg = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+      }
+
+      dispatch({
+        type: 'SET_SHIP_STATE',
+        payload: { lat: depPort.lat, lon: depPort.lon, heading: initHdgDeg },
+      });
+      if (cesiumRef.current && cesiumRef.current.updateShipEntity) {
+        cesiumRef.current.updateShipEntity(
+          { lat: depPort.lat, lon: depPort.lon },
+          initHdgDeg,
+          shipSpecsRef.current,
+        );
+      }
+      if (threeRef.current?.shipPivot) {
+        threeRef.current.shipPivot.position.x = 0;
+        threeRef.current.shipPivot.position.z = 0;
+        threeRef.current.shipPivot.rotation.y = -(initHdgDeg * Math.PI) / 180;
+      }
+    },
+    [dispatch, state.departurePort],
   );
 
   const handleSpecChange = useCallback(
@@ -1414,14 +1844,10 @@ function AppInner() {
           `${source} 로드 완료 — ${cellCount.toLocaleString()}개 셀, WMS 위성영상 갱신됨`,
         );
       } catch (err) {
-        console.warn('[IceData] fetch 실패, 절차적 폴백 유지:', err.message);
         dispatch({
           type: 'SET_ICE_DATA',
           payload: { data: null, key: month, source: '절차적 폴백' },
         });
-        showToast(
-          `해빙 데이터 로드 실패: ${err.message} — 절차적 폴백 사용 중`,
-        );
       }
     },
     [state.shipState, dispatch, showToast],
@@ -1442,6 +1868,55 @@ function AppInner() {
     const key = `${Math.round(lat)},${Math.round(lon)}`;
     return grid.get(key) ?? 0;
   }, []);
+
+  // ── Live 모드 아라온 3D 모델 동적 배치 ──────────────────────────────
+  // 개방 수역: Wrangel 정박
+  // 얼음 농도 > 0.3: 자동 호위 override + 쇄빙 거동
+  useEffect(() => {
+    const three = threeRef.current;
+    if (!three || !three.setAraonState) return;
+    if (voyageActive) return; // voyage 전용 useEffect 가 처리
+    const ship = state.shipState;
+    if (!ship || typeof ship.lat !== 'number') {
+      three.setAraonState(null);
+      return;
+    }
+
+    const sic = sampleIceFn(ship.lon, ship.lat);
+    const needsEscort = sic > 0.3;
+
+    if (needsEscort) {
+      three.setAraonState({
+        visible: true,
+        escortOverride: { forwardM: 600, sideM: -80 },
+      });
+      if (three.setVoyageIceContext) {
+        const estThickness = 0.3 + sic * 2.0;
+        three.setVoyageIceContext({
+          thicknessM: estThickness,
+          speedKn: parseFloat(state.manualSpeed) || 0,
+          isEscorted: true,
+        });
+      }
+    } else {
+      const ARAON_LAT = 71.0;
+      const ARAON_LON = 179.5;
+      const dLat = ARAON_LAT - ship.lat;
+      const dLon = ARAON_LON - ship.lon;
+      const mPerLat = 111132.954;
+      const mPerLon = 111319.491 * Math.cos((ship.lat * Math.PI) / 180);
+      const distM = Math.sqrt((dLat * mPerLat) ** 2 + (dLon * mPerLon) ** 2);
+      three.setAraonState({
+        visible: distM < 30000,
+        deltaLatDeg: dLat,
+        deltaLonDeg: dLon,
+        refLat: ship.lat,
+        headingDeg: 0,
+        status: 'idle',
+      });
+      if (three.setVoyageIceContext) three.setVoyageIceContext(null);
+    }
+  }, [voyageActive, state.shipState, state.manualSpeed, sampleIceFn]);
 
   const handleLayerToggle = useCallback(
     (layerKey, checked) => {
@@ -1620,7 +2095,7 @@ function AppInner() {
         oceanOverlayModeRef.current = overlayMode;
 
         const mode = currentModeRef.current;
-        if (mode === 'BRIDGE' || mode === 'FOLLOW') {
+        if (mode === 'FOLLOW') {
           const { lat, lon } = state.shipState;
           threeRef.current?.updateOceanOverlay(
             overlayMode,
@@ -1881,7 +2356,7 @@ function AppInner() {
       if (three && three.shipPivot) {
         const depPort = PORTS[state.departurePort] || PORTS.BUSAN;
         const METERS_PER_DEGREE_LAT = 111132.954;
-        const mPerDegLon = 111319.491 * Math.cos((depPort.lat * Math.PI) / 180);
+        const mPerDegLon = 111319.491 * Math.cos((lat * Math.PI) / 180);
 
         three.shipPivot.position.x = ((lon - depPort.lon) * mPerDegLon) / 1.5;
         three.shipPivot.position.z =
@@ -1930,10 +2405,97 @@ function AppInner() {
 
   const waypoints = activeWaypoints;
 
+  // 아라온 통합 위치 (Minimap + TeleportOverlay 공유)
+  // Voyage 모드: trace 기반 / Live 모드: 얼음 농도 기반 호위 판정
+  const araonStatusLabelKo = {
+    idle: '대기 중',
+    dispatched: '출동 중',
+    rendezvous: '본선 접근',
+    escorting: '호위 중',
+    released: '호위 해제',
+  };
+  // 북극 항로만 아라온 호위 대상 — SUEZ/CAPE/ETC 같은 비-북극 항로에선 아라온 마커 숨김
+  const ARCTIC_ROUTE_KEYS = ['NSR', 'NWP', 'TSR'];
+  const isArcticRoute = ARCTIC_ROUTE_KEYS.includes(state.currentRouteKey);
+
+  let araonDisplayPos = null;
+  if (voyageActive && voyage.trace) {
+    const ibs = sampleIcebreakersAt(voyage.trace, voyage.tHours);
+    const a = ibs.find((x) => x.id === 'ib-araon');
+    if (a) {
+      // 직전 0.1h 위치를 샘플링해 trace 기반 heading 계산 (본선 heading과 무관)
+      const dtH = 0.1;
+      const prev = sampleIcebreakersAt(
+        voyage.trace,
+        Math.max(0, voyage.tHours - dtH),
+      ).find((x) => x.id === 'ib-araon');
+      let aHdg = 0;
+      if (
+        prev &&
+        (prev.position.lat !== a.position.lat ||
+          prev.position.lon !== a.position.lon)
+      ) {
+        const φ1 = (prev.position.lat * Math.PI) / 180;
+        const φ2 = (a.position.lat * Math.PI) / 180;
+        const Δλ = ((a.position.lon - prev.position.lon) * Math.PI) / 180;
+        const y = Math.sin(Δλ) * Math.cos(φ2);
+        const x =
+          Math.cos(φ1) * Math.sin(φ2) -
+          Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+        aHdg = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+      }
+      araonDisplayPos = {
+        lat: a.position.lat,
+        lon: a.position.lon,
+        status: a.status,
+        label: araonStatusLabelKo[a.status] || a.status,
+        heading: aHdg,
+      };
+    }
+  } else if (
+    isArcticRoute &&
+    state.shipState &&
+    typeof state.shipState.lat === 'number'
+  ) {
+    const sic = sampleIceFn(state.shipState.lon, state.shipState.lat);
+    if (sic > 0.3) {
+      // 호위 연출: 아라온이 항로 위 본선 앞쪽에서 선도
+      // 항로 길이에 따라 lead 거리 자동 조정 (짧은 구간이면 비례 축소)
+      const totalKm = Math.max(1, calculateRouteDistanceKM(activeWaypoints));
+      const remainKm = totalKm * (1 - state.simProgress);
+      // 기본 100km, 남은 거리의 30% 와 100km 중 작은 값 (마지막 구간에서 도착항 박힘 방지)
+      const leadKm = Math.min(100, Math.max(5, remainKm * 0.3));
+      const aheadProgress = Math.min(
+        0.999,
+        state.simProgress + leadKm / totalKm,
+      );
+      const aheadPos = routePos(aheadProgress, timedWaypoints, activeWaypoints);
+      const aheadHdgRad = routeHeading(aheadProgress, timedWaypoints, activeWaypoints);
+      const aheadHdgDeg = ((aheadHdgRad * 180) / Math.PI + 360) % 360;
+      araonDisplayPos = {
+        lat: aheadPos.lat,
+        lon: aheadPos.lon,
+        status: 'escorting',
+        label: '호위 중',
+        heading: aheadHdgDeg,
+      };
+    } else {
+      // 결빙 수역 아닐 때만 Wrangel 정박
+      araonDisplayPos = {
+        lat: 71.0,
+        lon: 179.5,
+        status: 'idle',
+        label: 'Wrangel 정박',
+        heading: 0,
+      };
+    }
+  }
+  // isArcticRoute=false 면 araonDisplayPos=null → AraonLiveMarker 가 entity 미생성/제거
+
   return (
     <div className="dt-app">
       {/* ═══ Header ═══ */}
-      <Header />
+      <Header activePanel={activePanel} onSelectPanel={handleSelectPanel} />
 
       {/* ═══ Main Area (Sidebar + Viewport) ═══ */}
       <div className="dt-main">
@@ -1959,6 +2521,8 @@ function AppInner() {
             dispatch({ type: 'SET_ARRIVAL_PORT', payload: v })
           }
           routeDistances={routeDistances}
+          currentRouteKey={state.currentRouteKey}
+          onRouteChange={handleRouteSelect}
         />
 
         <div className="dt-viewport">
@@ -1970,16 +2534,18 @@ function AppInner() {
             activeWaypoints={activeWaypoints}
             routeVisibility={routeVisibility}
             generatedRoutes={generatedRoutes}
+            rlShips={rlShips}
           />
           <ThreeOverlay
             ref={threeRef}
             visible={
-              state.currentMode === 'BRIDGE' || state.currentMode === 'FOLLOW'
+              state.currentMode === 'FOLLOW'
             }
             shipState={state.shipState}
             specs={state.shipSpecs}
             mode={state.currentMode}
             baseRef={PORTS[state.departurePort] || PORTS.BUSAN}
+            manualMode={state.manualMode}
           />
           <DeckOverlay
             ref={deckRef}
@@ -1996,21 +2562,12 @@ function AppInner() {
             heading={state.shipState.heading}
             speed={state.hud.speed}
             rollAngle={parseFloat(state.hud.roll) || 0}
-            mode={state.currentMode}
           />
           <BinocularsMask
             visible={state.binocularsActive}
             label="x 8.0 BINOCULARS"
           />
 
-          {/* Viewport Overlays */}
-          <SimulationControls
-            isSimulating={state.isSimulating}
-            onStart={handleStart}
-            onReset={handleReset}
-            multiplier={state.multiplier}
-            onMultiplierChange={handleMultiplierChange}
-          />
           <TimelineBar
             simProgress={state.simProgress}
             timelineDay={state.timelineDay}
@@ -2034,6 +2591,71 @@ function AppInner() {
             copVisible={layerStates.copThick}
           />
 
+          {/* Live Simulation 모드: 아라온이 본선과 함께 움직임 (호위 시 본선 옆, 평시 Wrangel) */}
+          <AraonLiveMarker
+            cesiumRef={cesiumRef}
+            visible={appMode === 'live'}
+            displayPos={araonDisplayPos}
+          />
+          {voyageActive && (
+            <>
+              <VoyagePlaybackLayer
+                cesiumRef={cesiumRef}
+                trace={voyage.trace}
+                tHours={voyage.tHours}
+                active={voyageActive}
+              />
+              {voyageHudVisible && (
+                <VoyageHUD
+                  trace={voyage.trace}
+                  tHours={voyage.tHours}
+                  currentRio={currentRio}
+                />
+              )}
+              <VoyageEventToast newEvents={voyage.newEvents} />
+              <VoyageAutoCam
+                active={voyageActive}
+                newEvents={voyage.newEvents}
+                currentMode={state.currentMode}
+                dispatch={dispatch}
+              />
+              <ForwardPreviewHUD
+                visible={state.currentMode === 'FOLLOW'}
+                trace={voyage.trace}
+                tHours={voyage.tHours}
+              />
+            </>
+          )}
+          {/* 선미추적 미니 세계지도 — FOLLOW 뷰에서 지리적 맥락 제공 */}
+          <FollowMiniMap
+            visible={state.currentMode === 'FOLLOW'}
+            shipPos={state.shipState}
+            heading={state.shipState.heading}
+            waypoints={waypoints}
+            departurePort={PORTS[state.departurePort] || PORTS.BUSAN}
+            arrivalPort={PORTS[state.arrivalPort] || PORTS.ROTTERDAM}
+            araonPos={araonDisplayPos}
+          />
+
+          {/* VoyageInfoPanel — Voyage/Live 이중 모드, 사용자가 X로 닫을 수 있음 */}
+          {infoPanelVisible && (
+            <VoyageInfoPanel
+              trace={voyage.trace}
+              tHours={voyage.tHours}
+              active={voyageActive}
+              shipSpecs={state.shipSpecs}
+              liveShipState={state.shipState}
+              liveHud={state.hud}
+              liveManual={{
+                manualMode: state.manualMode,
+                manualSpeed: state.manualSpeed,
+                manualHeading: state.manualHeading,
+              }}
+              sampleIceFn={sampleIceFn}
+              araonDisplayPos={araonDisplayPos}
+            />
+          )}
+
           {/* Indicators */}
           {state.manualMode && (
             <div id="manual-indicator">⚑ 수동 조종 모드</div>
@@ -2043,36 +2665,276 @@ function AppInner() {
           <div id="banner" />
           <div id="gebco-depth-popup" />
 
-          {/* 해역 기상 HUD — 출항 전: 마우스 위치 / 출항 후: 선박 위치 */}
-          <WeatherHud
-            shipPos={
-              state.isSimulating || state.simProgress > 0
-                ? state.shipState
-                : mouseGlobePos || state.shipState
-            }
-            weatherData={weatherData}
-            currentRouteKey={state.currentRouteKey}
-            isMouseMode={
-              !state.isSimulating && state.simProgress === 0 && !!mouseGlobePos
-            }
+          {/* 상단바 메뉴에서 토글되는 패널들 */}
+          {(activePanel === 'rl_curriculum' || activePanel === 'trend_learning') && (
+            <div style={{ position: 'absolute', left: 10, top: 10, zIndex: 300, display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 8, maxHeight: 'calc(100vh - 20px)' }}>
+              {activePanel === 'rl_curriculum' && <RLProgressOverlay />}
+              {activePanel === 'trend_learning' && <TrendReportProgressOverlay />}
+            </div>
+          )}
+          <TrendReportPanel open={trendReportOpen} onToggle={toggleTrendReport} />
+          <FuelAnalysisPanel
+            open={fuelAnalysisOpen}
+            onToggle={toggleFuelAnalysis}
+            currentRoute={state.currentRouteKey}
+            shipSpecs={state.shipSpecs}
           />
-
-          {/* RL 커리큘럼 학습 진행 오버레이 */}
-          <RLProgressOverlay />
-          <TrendReportProgressOverlay />
-          <TrendReportPanel open={trendReportOpen} onToggle={() => setTrendReportOpen(o => !o)} />
-
-          {/* //* [Modified Code] 레이더(미니맵)을 메인 뷰포트 영역 내부 우측 하단에 부착하여 패널에 가려지지 않게 함 */}
-          <Minimap
-            shipPos={state.shipState}
-            progress={state.simProgress}
-            heading={state.shipState.heading}
-            waypoints={waypoints}
-            onOpenTeleport={() => setTeleportOpen(true)}
-            departurePort={PORTS[state.departurePort] || PORTS.BUSAN}
-            arrivalPort={PORTS[state.arrivalPort] || PORTS.ROTTERDAM}
-          />
+          {activePanel === 'whatif' && (
+            <WhatIfPanel route={state.currentRouteKey} iceClass={state.shipSpecs?.iceClass || 'PC5'} />
+          )}
+          {activePanel === 'sar' && <SarTrainingPanel />}
         </div>
+
+        {/* ═══ Right Sidebar — 좌측 Sidebar와 대칭 구조 (static flex item) ═══ */}
+        <aside className="dt-sidebar dt-sidebar--right">
+          {/* ── 1. Simulation Mode 토글 (같은 버튼 재클릭 → 해당 모드 패널 on/off) ── */}
+          <section className="dt-sidebar__section">
+            <span className="dt-sidebar__section-title">Simulation Mode</span>
+            <div className="voyage-mode-toggle">
+              <button
+                type="button"
+                className={
+                  appMode === 'live' && infoPanelVisible ? 'active' : ''
+                }
+                onClick={() => {
+                  if (appMode === 'live') {
+                    // 이미 live 모드 — info 패널 on/off 토글
+                    setInfoPanelVisible((v) => !v);
+                  } else {
+                    // 다른 모드에서 진입 — live 로 전환 + 패널 열기
+                    setAppMode('live');
+                    dispatch({ type: 'SET_MODE', payload: 'SATELLITE' });
+                    setInfoPanelVisible(true);
+                  }
+                }}
+                title={
+                  appMode === 'live'
+                    ? (infoPanelVisible
+                        ? '다시 누르면 Live 패널 숨김'
+                        : '다시 누르면 Live 패널 표시')
+                    : 'Live 모드로 전환'
+                }
+              >
+                Live Simulation
+              </button>
+              <button
+                type="button"
+                className={
+                  appMode === 'voyage' && (infoPanelVisible || voyageHudVisible)
+                    ? 'active'
+                    : ''
+                }
+                onClick={async () => {
+                  if (appMode === 'voyage') {
+                    // 이미 voyage — 두 패널 같이 토글 (둘 중 하나라도 보이면 모두 닫기, 아니면 모두 열기)
+                    const anyVisible = infoPanelVisible || voyageHudVisible;
+                    setInfoPanelVisible(!anyVisible);
+                    setVoyageHudVisible(!anyVisible);
+                  } else {
+                    // 다른 모드에서 진입 — voyage 로 전환 + 두 패널 모두 열기
+                    if (state.isSimulating) {
+                      handleReset();
+                    }
+                    dispatch({ type: 'SET_MODE', payload: 'VOYAGE_PLAYBACK' });
+                    setAppMode('voyage');
+                    setInfoPanelVisible(true);
+                    setVoyageHudVisible(true);
+                    if (!voyage.trace) {
+                      try {
+                        await voyage.loadIceClass('Arc4');
+                      } catch (e) {
+                        // 로드 실패는 콘솔에 이미 로깅됨
+                      }
+                    }
+                  }
+                }}
+                title={
+                  appMode === 'voyage'
+                    ? (infoPanelVisible || voyageHudVisible
+                        ? '다시 누르면 Voyage 패널 숨김'
+                        : '다시 누르면 Voyage 패널 표시')
+                    : 'Voyage 모드로 전환'
+                }
+              >
+                Voyage Playback
+              </button>
+            </div>
+          </section>
+
+          {/* ── 2a. Voyage 모드: 재생 컨트롤 ── */}
+          {voyageActive && (
+            <section className="dt-sidebar__section">
+              <span className="dt-sidebar__section-title">재생 컨트롤</span>
+              <VoyageControls
+                iceClass={voyage.iceClass}
+                onLoadIceClass={voyage.loadIceClass}
+                trace={voyage.trace}
+                tHours={voyage.tHours}
+                isPlaying={voyage.isPlaying}
+                speed={voyage.speed}
+                onPlay={voyage.play}
+                onPause={voyage.pause}
+                onSeek={voyage.seek}
+                onSetSpeed={voyage.setSpeed}
+              />
+            </section>
+          )}
+
+          {/* ── 2b. Live 모드: 자동 항해 컨트롤 ── */}
+          {!voyageActive && (
+            <section className="dt-sidebar__section">
+              <span className="dt-sidebar__section-title">자동 항해</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {/* 현재 선택된 항로 표시 */}
+                <div
+                  style={{
+                    padding: '6px 8px',
+                    background: 'rgba(15,23,42,0.5)',
+                    border: '1px solid rgba(34,211,238,0.25)',
+                    borderRadius: 4,
+                    fontSize: 10,
+                    lineHeight: 1.5,
+                    color: '#cbd5e1',
+                  }}
+                >
+                  <div style={{ color: '#22d3ee', fontWeight: 700, marginBottom: 2 }}>
+                    📍 항로: {state.currentRouteKey || 'NSR'}
+                  </div>
+                  <div style={{ color: '#94a3b8' }}>
+                    {PORTS[state.departurePort]?.name || '부산'}
+                    {' → '}
+                    {PORTS[state.arrivalPort]?.name || '로테르담'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleStart}
+                  disabled={state.manualMode}
+                  style={{
+                    padding: '8px 12px',
+                    border: state.isSimulating
+                      ? '2px solid #ef4444'
+                      : '2px solid #22d3ee',
+                    borderRadius: 4,
+                    background: state.isSimulating
+                      ? 'rgba(239,68,68,0.15)'
+                      : 'rgba(34,211,238,0.15)',
+                    color: state.isSimulating ? '#ef4444' : '#22d3ee',
+                    cursor: state.manualMode ? 'not-allowed' : 'pointer',
+                    opacity: state.manualMode ? 0.4 : 1,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    letterSpacing: 1,
+                  }}
+                  title={
+                    state.manualMode
+                      ? '수동 조종 중 — 먼저 해제하세요'
+                      : state.isSimulating
+                        ? '자동 항해 일시 정지'
+                        : '선택된 항로의 waypoint 를 따라 자동 항해 시작'
+                  }
+                >
+                  {state.isSimulating ? '⏸ 자동 항해 정지' : '▶ 자동 항해 시작'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  style={{
+                    padding: '6px 12px',
+                    border: '1px solid #64748b',
+                    borderRadius: 4,
+                    background: 'transparent',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                  }}
+                  title="출발항 위치로 리셋"
+                >
+                  ⟲ 리셋
+                </button>
+                {/* 시뮬 시간 배율 슬라이더 */}
+                <div
+                  style={{
+                    marginTop: 2,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: 10,
+                      color: '#94a3b8',
+                    }}
+                  >
+                    <span>시뮬 배율</span>
+                    <span style={{ color: '#22d3ee', fontWeight: 700 }}>
+                      ×{Math.round(state.multiplier / 20)}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="50"
+                    max="5000"
+                    step="50"
+                    value={state.multiplier}
+                    onChange={(e) => handleMultiplierChange(e.target.value)}
+                    disabled={state.manualMode}
+                    style={{
+                      width: '100%',
+                      opacity: state.manualMode ? 0.4 : 1,
+                      cursor: state.manualMode ? 'not-allowed' : 'pointer',
+                    }}
+                  />
+                </div>
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 10,
+                    color: '#64748b',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {state.manualMode
+                    ? '⚑ 수동 조종 중 — 자동 항해 비활성'
+                    : state.isSimulating
+                      ? `진행률 ${(state.simProgress * 100).toFixed(1)}%`
+                      : '항로는 좌측 사이드바 Routes 에서 변경 가능'}
+                </div>
+              </div>
+            </section>
+          )}
+
+          <section className="dt-sidebar__section">
+            <WeatherHud
+              shipPos={
+                state.isSimulating || state.simProgress > 0
+                  ? state.shipState
+                  : mouseGlobePos || state.shipState
+              }
+              weatherData={weatherData}
+              currentRouteKey={state.currentRouteKey}
+              isMouseMode={
+                !state.isSimulating && state.simProgress === 0 && !!mouseGlobePos
+              }
+            />
+          </section>
+
+          <section className="dt-sidebar__section">
+            <Minimap
+              shipPos={state.shipState}
+              progress={state.simProgress}
+              heading={state.shipState.heading}
+              waypoints={waypoints}
+              onOpenTeleport={() => setTeleportOpen(true)}
+              departurePort={PORTS[state.departurePort] || PORTS.BUSAN}
+              arrivalPort={PORTS[state.arrivalPort] || PORTS.ROTTERDAM}
+              araonPos={araonDisplayPos}
+            />
+          </section>
+        </aside>
       </div>
 
       {/* ═══ Bottom Panel ═══ */}
@@ -2088,8 +2950,7 @@ function AppInner() {
         currentRoute={state.currentRouteKey}
         onRouteChange={handleRouteChange}
         onReset={handleResetEvaluation}
-        trendReportOpen={trendReportOpen}
-        onTrendReportToggle={() => setTrendReportOpen(o => !o)}
+        araon={araonInfo}
       />
 
       {/* Ship Specs Summary Modal */}
@@ -2124,6 +2985,15 @@ function AppInner() {
         waypoints={waypoints}
         shipPos={state.shipState}
         heading={state.shipState.heading}
+        araonPos={
+          araonDisplayPos
+            ? {
+                lat: araonDisplayPos.lat,
+                lon: araonDisplayPos.lon,
+                status: araonDisplayPos.label, // TeleportOverlay 는 한글 라벨 표시
+              }
+            : null
+        }
         onTeleport={handleTeleport}
         onClose={() => setTeleportOpen(false)}
       />

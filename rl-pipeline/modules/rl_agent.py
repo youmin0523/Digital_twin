@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import deque
+from itertools import islice
 from pathlib import Path
 from typing import Optional
 
@@ -28,22 +30,38 @@ except ImportError:
 
 from gymnasium.wrappers import RecordEpisodeStatistics
 from .rl_environment import IcebergAvoidanceEnv
+from .rl_reward import RewardWeights
+
+
+class _StopTraining(Exception):
+    """중단 요청 시 model.learn()을 강제 종료하는 sentinel 예외."""
+    pass
 
 logger = logging.getLogger(__name__)
 
-MODEL_DIR = Path(__file__).resolve().parent.parent / "models" / "sac_iceberg"
+_BASE_MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
+MODEL_DIR = _BASE_MODEL_DIR / "sac_iceberg"
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
+
+def _model_dir_for(model_key: str) -> Path:
+    """model_key별 전용 디렉토리 반환."""
+    if model_key == "default":
+        return MODEL_DIR
+    d = _BASE_MODEL_DIR / f"sac_{model_key}"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
 DEFAULT_HYPERPARAMS = {
-    "learning_rate": 3e-4,
-    "buffer_size": 500_000,
-    "batch_size": 256,
-    "gamma": 0.99,
+    "learning_rate": 3e-4,        # 유지
+    "buffer_size": 300_000,       # [재학습] 500K→300K: 최근 경험 집중
+    "batch_size": 128,            # [재학습] 256→128: 더 잦은 업데이트
+    "gamma": 0.95,                # [재학습] 0.99→0.95: 단기 보상(완주) 집중
     "tau": 0.005,
     "ent_coef": "auto",
     "train_freq": 1,
     "gradient_steps": 1,
-    "learning_starts": 10_000,
+    "learning_starts": 1_000,     # [재학습] 5K→1K: 빠른 학습 시작
     "policy_kwargs": {
         "net_arch": [256, 256],
     },
@@ -53,34 +71,37 @@ DEFAULT_HYPERPARAMS = {
 class TrainingMetricsCallback(BaseCallback):
     """학습 중 메트릭 수집 콜백"""
 
+    _MAX_EPISODE_HISTORY = 2000  # 메모리 누수 방지
+    _MAX_METRICS_HISTORY = 500
+
     def __init__(self, log_interval: int = 1000, verbose: int = 0):
         super().__init__(verbose)
         self.log_interval = log_interval
-        self.episode_rewards = []
-        self.episode_lengths = []
-        self.collision_count = 0
-        self.success_count = 0
-        self.total_episodes = 0
-        self.metrics_history = []
+        self.episode_rewards: deque[float] = deque(maxlen=self._MAX_EPISODE_HISTORY)
+        self.episode_lengths: deque[int] = deque(maxlen=self._MAX_EPISODE_HISTORY)
+        self.collision_count: int = 0
+        self.success_count: int = 0
+        self.total_episodes: int = 0
+        self.metrics_history: deque[dict] = deque(maxlen=self._MAX_METRICS_HISTORY)
 
     def _on_step(self) -> bool:
         infos = self.locals.get("infos", [])
         for info in infos:
             if "episode" in info:
                 self.total_episodes += 1
-                self.episode_rewards.append(info["episode"]["r"])
-                self.episode_lengths.append(info["episode"]["l"])
+                self.episode_rewards.append(float(info["episode"]["r"]))
+                self.episode_lengths.append(int(info["episode"]["l"]))
             if info.get("collision", False):
                 self.collision_count += 1
             if info.get("success", False):
                 self.success_count += 1
 
         if self.num_timesteps % self.log_interval == 0 and self.total_episodes > 0:
-            recent_rewards = self.episode_rewards[-100:]
+            recent: list[float] = list(islice(reversed(self.episode_rewards), 100))
             metrics = {
                 "timestep": self.num_timesteps,
                 "episodes": self.total_episodes,
-                "mean_reward_100": float(np.mean(recent_rewards)) if recent_rewards else 0,
+                "mean_reward_100": float(np.mean(recent)) if recent else 0.0,
                 "collision_rate": self.collision_count / max(1, self.total_episodes),
                 "success_rate": self.success_count / max(1, self.total_episodes),
             }
@@ -101,28 +122,55 @@ class TrainingMetricsCallback(BaseCallback):
 
 
 class IcebergAvoidanceAgent:
-    """빙산 회피 SAC 에이전트"""
+    """빙산 회피 SAC 에이전트
 
-    def __init__(self, hyperparams: dict | None = None):
+    model_key를 지정하면 경로(NSR/NWP/TSR), 빙급, 선종별로
+    독립된 모델 디렉토리에 저장/로드합니다.
+    """
+
+    def __init__(self, hyperparams: dict | None = None, model_key: str = "default"):
         self.hyperparams = {**DEFAULT_HYPERPARAMS, **(hyperparams or {})}
+        self.model_key = model_key
+        self.model_dir = _model_dir_for(model_key)
         self.model: Optional[SAC] = None
         self.env: Optional[IcebergAvoidanceEnv] = None
         self.callback = TrainingMetricsCallback()
-        self._model_version = 0
+        self._model_version = self._detect_version()
 
-    def create_env(self, difficulty: str = "medium"):
-        raw_env = IcebergAvoidanceEnv(difficulty=difficulty)
+    def _detect_version(self) -> int:
+        """기존 저장된 모델에서 최대 버전 번호 감지 (재시작 시 덮어쓰기 방지)."""
+        versions = sorted(self.model_dir.glob("sac_v*.zip"))
+        if not versions:
+            return 0
+        try:
+            return max(int(p.stem.split("_v")[1]) for p in versions)
+        except (ValueError, IndexError):
+            return len(versions)
+
+    def create_env(self, difficulty: str = "medium",
+                   reward_weights: RewardWeights | None = None,
+                   fixed_route: str | None = None,
+                   fixed_ice_class: str | None = None,
+                   ship_params=None):
+        raw_env = IcebergAvoidanceEnv(
+            difficulty=difficulty,
+            reward_weights=reward_weights,
+            fixed_route=fixed_route,
+            fixed_ice_class=fixed_ice_class,
+            ship_params=ship_params,
+        )
         self.env = RecordEpisodeStatistics(raw_env)
         return self.env
 
-    def build_model(self, difficulty: str = "medium"):
+    def build_model(self, difficulty: str = "medium",
+                    reward_weights: RewardWeights | None = None):
         if not HAS_SB3:
             raise ImportError(
                 "stable-baselines3가 설치되지 않았습니다. "
                 "pip install stable-baselines3[extra] torch 를 실행하세요."
             )
         if self.env is None:
-            self.create_env(difficulty)
+            self.create_env(difficulty, reward_weights=reward_weights)
 
         self.model = SAC(
             "MlpPolicy",
@@ -149,17 +197,36 @@ class IcebergAvoidanceAgent:
         self.callback = TrainingMetricsCallback(log_interval=5000)
         logger.info(f"[RL] 학습 시작: {total_timesteps} 스텝")
 
-        from stable_baselines3.common.callbacks import CallbackList
-        callbacks = CallbackList([self.callback, extra_callback]) if extra_callback else self.callback
+        from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
 
-        self.model.learn(
-            total_timesteps=total_timesteps,
-            callback=callbacks,
-            progress_bar=False,
+        # 10,000 스텝마다 체크포인트 저장 — 서버 강제 종료 시에도 복구 가능
+        checkpoint_cb = CheckpointCallback(
+            save_freq=10_000,
+            save_path=str(self.model_dir / "checkpoints"),
+            name_prefix="sac_ckpt",
+            verbose=0,
         )
 
-        self._model_version += 1
-        self.save()
+        cb_list = [self.callback, checkpoint_cb]
+        if extra_callback:
+            cb_list.append(extra_callback)
+        callbacks = CallbackList(cb_list)
+
+        try:
+            self.model.learn(
+                total_timesteps=total_timesteps,
+                callback=callbacks,
+                progress_bar=False,
+            )
+        except _StopTraining:
+            # 중단 요청 — 정상 종료로 처리 (finally에서 저장)
+            logger.info("[RL] 중단 요청으로 학습 종료")
+        finally:
+            # 정상 완료, 사용자 중단, 예외, 서버 종료 모든 케이스에서 저장
+            self._model_version += 1
+            self.save()
+            self._cleanup_checkpoints(keep=3)
+            logger.info(f"[RL] 모델 자동 저장 완료 (v{self._model_version})")
 
         metrics = self.callback.get_latest_metrics()
         logger.info(f"[RL] 학습 완료: {metrics}")
@@ -218,14 +285,30 @@ class IcebergAvoidanceAgent:
 
         return sequence
 
+    def _cleanup_checkpoints(self, keep: int = 3):
+        """오래된 체크포인트 삭제 — 최근 keep개만 유지 (디스크 절약)."""
+        ckpt_dir = self.model_dir / "checkpoints"
+        if not ckpt_dir.exists():
+            return
+        ckpts = sorted(ckpt_dir.glob("sac_ckpt_*.zip"))
+        for old in ckpts[:-keep]:
+            try:
+                old.unlink()
+                meta = old.with_name(old.stem + "_meta.json")
+                if meta.exists():
+                    meta.unlink()
+            except Exception:
+                pass
+
     def save(self, path: str | None = None):
         if self.model is None:
             return
-        save_path = path or str(MODEL_DIR / f"sac_v{self._model_version}")
+        save_path = path or str(self.model_dir / f"sac_v{self._model_version}")
         self.model.save(save_path)
 
         meta = {
             "version": self._model_version,
+            "model_key": self.model_key,
             "hyperparams": {k: str(v) for k, v in self.hyperparams.items()},
             "metrics": self.callback.get_latest_metrics(),
         }
@@ -238,7 +321,7 @@ class IcebergAvoidanceAgent:
         if path:
             load_path = path
         else:
-            versions = sorted(MODEL_DIR.glob("sac_v*.zip"))
+            versions = sorted(self.model_dir.glob("sac_v*.zip"))
             if not versions:
                 logger.warning("[RL] 저장된 모델 없음")
                 return False
@@ -259,5 +342,5 @@ class IcebergAvoidanceAgent:
             "model_loaded": self.model is not None,
             "version": self._model_version,
             "metrics": self.callback.get_latest_metrics(),
-            "metrics_history": self.callback.metrics_history[-50:],
+            "metrics_history": list(reversed(list(islice(reversed(self.callback.metrics_history), 50)))),
         }

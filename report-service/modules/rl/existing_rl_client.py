@@ -94,12 +94,18 @@ async def get_segment_avoidance_difficulty(
                 return DEFAULT_DIFFICULTY
 
             result = resp.json()
-            action = result.get("action", {})
-            heading_change = abs(action.get("heading_change_deg", 0))
-            speed_factor = action.get("speed_factor", 1.0)
+            # action은 [heading_delta, speed_factor] 리스트로 반환됨
+            action = result.get("action", [0.0, 1.0])
+            if isinstance(action, list) and len(action) >= 2:
+                heading_change = abs(float(action[0]))
+                speed_factor = float(action[1])
+            else:
+                # 혹시 dict 형태로 오면 fallback
+                heading_change = abs(float(action.get("heading_delta", 0))) if isinstance(action, dict) else 0.0
+                speed_factor = float(action.get("speed_factor", 1.0)) if isinstance(action, dict) else 1.0
 
-            # 행동 크기를 난이도로 변환 (0~1)
-            difficulty = min(1.0, (heading_change / 45.0 + abs(1 - speed_factor)) / 2)
+            # 행동 크기를 난이도로 변환 (0~1): heading 최대 15°, speed 최소 0.5
+            difficulty = min(1.0, (heading_change / 15.0 + abs(1.0 - speed_factor) / 0.5) / 2.0)
             return round(difficulty, 4)
 
     except Exception as e:

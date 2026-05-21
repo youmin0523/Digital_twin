@@ -78,3 +78,39 @@ export async function triggerPipeline(task = 'all') {
   if (!res.ok) throw new Error(`triggerPipeline failed: ${res.status} ${res.statusText}`);
   return res.json();
 }
+
+/**
+ * ML 연료 예측 서비스 헬스 체크.
+ * @returns {Promise<Object>} { status, model_loaded, metrics }
+ */
+export async function fetchFuelHealth() {
+  const res = await fetch(`${API_BASE}/fuel/health`);
+  if (!res.ok) throw new Error(`fetchFuelHealth failed: ${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+/**
+ * 북극항로 vs 수에즈 운하 경제성 비교 (ML 연료 예측 기반).
+ * @param {Object} params - 비교 요청 파라미터
+ * @param {number} params.displacement - 배수량 (tons)
+ * @param {number} params.draft - 흘수 (m)
+ * @param {number} params.engine_power - 엔진 출력 (kW)
+ * @param {number} params.ice_class_code - 내빙등급 코드 (0, 2, 4)
+ * @param {number} params.nsr_ice_thickness - NSR 평균 빙하 두께 (m)
+ * @param {number} params.nsr_ice_concentration - NSR 평균 빙하 농도 (0~1)
+ * @param {number} params.nsr_distance_nm - NSR 총 거리 (nm)
+ * @param {number} params.suez_distance_nm - 수에즈 총 거리 (nm)
+ * @param {string} params.vessel_type - 선종 (container, lng, icebreaker)
+ * @param {number} params.speed_knots - 운항 속도 (knots)
+ * @returns {Promise<Object>} 비교 결과 { nsr, suez, comparison }
+ */
+export async function compareFuelCost(params) {
+  const res = await fetch(`${API_BASE}/fuel/compare`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) throw new Error(`compareFuelCost failed: ${res.status} ${res.statusText}`);
+  return res.json();
+}
+

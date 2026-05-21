@@ -61,10 +61,9 @@ export default function useManualControl() {
         e.preventDefault();
       }
 
-      // B key — binoculars (only in BRIDGE + manual mode, and not already active)
+      // B key — binoculars (manual mode only; mode-agnostic after BRIDGE removal)
       if (
         e.code === 'KeyB' &&
-        currentModeRef.current === 'BRIDGE' &&
         manualModeRef.current &&
         !binocularsRef.current
       ) {

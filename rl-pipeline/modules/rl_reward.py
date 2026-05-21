@@ -15,14 +15,15 @@ from .config import MAX_SAFE_CONCENTRATION, ICE_CLASS_FACTORS
 @dataclass
 class RewardWeights:
     """보상 함수 가중치 (튜닝 가능)"""
-    collision: float = -100.0
-    proximity: float = -2.0
-    route_deviation: float = -0.5
-    progress: float = 2.0
-    smoothness: float = -0.3
-    fuel: float = -0.1
-    ice_concentration: float = -0.5
-    episode_success: float = 50.0
+    collision: float = -50.0        # 충돌 패널티 (에피소드 종료 시 1회)
+    proximity: float = -0.5         # 빙산 근접 패널티 (스텝마다)
+    danger_zone: float = -1.0       # 위험 구역 패널티 (스텝마다)
+    route_deviation: float = -0.5   # 경로 이탈 패널티 (스텝마다, 0~1 범위)
+    progress: float = 10.0          # 전진 보상: along_track_progress는 누적 0~1값 사용
+    smoothness: float = -0.01
+    fuel: float = -0.005
+    ice_concentration: float = -0.1
+    episode_success: float = 200.0  # 성공 보너스: collision(-50) 대비 명확한 양의 인센티브
 
 
 @dataclass
@@ -76,26 +77,41 @@ def compute_reward(ctx: RewardContext, weights: RewardWeights | None = None) -> 
     # 1. 충돌 패널티
     components["collision"] = weights.collision if ctx.collision else 0.0
 
-    # 2. 빙산 근접 패널티 (가우시안 감쇠)
+    # 2. 빙산 근접 패널티 (가우시안 감쇠) + 위험 구역 강력 경보
     safety_radius = compute_dynamic_safety_radius(
         base_radius_km=10.0,
         speed_knots=ctx.ship_speed_knots,
         visibility_km=ctx.visibility_km,
     )
-    proximity_penalty = 0.0
+    proximity_penalty: float = 0.0
+    danger_zone_penalty: float = 0.0
     for i, dist_km in enumerate(ctx.iceberg_distances_km):
-        if dist_km < safety_radius * 3:
-            size_m = ctx.iceberg_sizes_m[i] if i < len(ctx.iceberg_sizes_m) else 5000.0
-            size_factor = min(2.0, size_m / 5000.0)
-            proximity_penalty += math.exp(-(dist_km / safety_radius) ** 2) * size_factor
+        size_m = ctx.iceberg_sizes_m[i] if i < len(ctx.iceberg_sizes_m) else 5000.0
+        size_factor = min(2.0, size_m / 5000.0)
+        collision_r = max(0.5, size_m / 1000.0 / 2.0)
+        # 충돌 반경 2배 이내: 위험 구역 강력 경보
+        if dist_km < collision_r * 2.0:
+            danger_zone_penalty = danger_zone_penalty + float(size_factor * (1.0 - dist_km / (collision_r * 2.0)))
+        # 안전 반경 3배 이내: 가우시안 근접 패널티
+        elif dist_km < safety_radius * 3:
+            proximity_penalty = proximity_penalty + float(math.exp(-(dist_km / safety_radius) ** 2) * size_factor)
     components["proximity"] = weights.proximity * proximity_penalty
+    components["danger_zone"] = weights.danger_zone * danger_zone_penalty
 
-    # 3. 경로 이탈 패널티
+    # 3. 경로 이탈 패널티 (2차 → 선형: 초기 회피 기동 시 패널티 완화)
     deviation_ratio = min(1.0, abs(ctx.cross_track_error_km) / ctx.max_allowed_deviation_km)
-    components["route_deviation"] = weights.route_deviation * deviation_ratio ** 2
+    components["route_deviation"] = weights.route_deviation * deviation_ratio
 
     # 4. 전진 보상
-    components["progress"] = weights.progress * max(0.0, ctx.along_track_progress)
+    # along_track_progress = 이번 스텝의 delta_progress (극소값 ~0.0004/step)
+    # → delta에 큰 가중치를 곱하면 스케일이 불안정해지므로
+    #   대신 delta > 0 (전진)이면 고정 보상, 후진이면 패널티로 처리
+    if ctx.along_track_progress > 1e-5:
+        components["progress"] = weights.progress        # 전진: 고정 보상
+    elif ctx.along_track_progress < -1e-5:
+        components["progress"] = weights.progress * 0.5  # 후진: 절반 패널티
+    else:
+        components["progress"] = 0.0
 
     # 5. 부드러움 패널티
     turn_ratio = abs(ctx.heading_change_deg) / 15.0
