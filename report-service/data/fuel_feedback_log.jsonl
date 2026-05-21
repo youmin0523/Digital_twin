@@ -1,1 +1,0 @@
-{"ts": "2026-04-29T02:39:42.575225Z", "kind": "feedback", "request": {"vessel_type": "container", "displacement": 22000.0, "draft": 9.0, "engine_power": 33000.0, "ice_thickness": 2.0, "ice_concentration": 0.9}, "predicted": 1.553, "actual": 1.45, "abs_error": 0.10299999999999998, "rel_error": -0.07103448275862068, "note": "voyage A-23"}
