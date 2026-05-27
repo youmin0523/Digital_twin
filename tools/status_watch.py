@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib import request as ur
 
 INTERVAL = 180  # 3분
-BASE = Path(__file__).resolve().parent
+BASE = Path(__file__).resolve().parent.parent  # tools/ → 프로젝트 루트
 
 def query(url):
     try:
@@ -33,7 +33,7 @@ def read_history(path, key):
         return 0, 0.0, 0
 
 def read_wi():
-    p = BASE / "report-service" / "data" / "whatif_iterative_history.json"
+    p = BASE / "digital_twin_row_models/report-service" / "data" / "whatif_iterative_history.json"
     if not p.exists():
         return 0, 0
     try:
@@ -45,7 +45,7 @@ def read_wi():
         return 0, 0
 
 def read_rl_files():
-    files = list((BASE / "rl-pipeline" / "models").glob("iterative_history_*.json"))
+    files = list((BASE / "digital_twin_row_models/rl-pipeline" / "models").glob("iterative_history_*.json"))
     ti = 0; cv = 0
     for f in files:
         try:
@@ -86,9 +86,9 @@ def report():
 
     # 파일 히스토리
     rl_files, rl_iters, rl_conv = read_rl_files()
-    rp_files2 = list((BASE / "report-service" / "data").glob("departure_iterative_history_*.json"))
+    rp_files2 = list((BASE / "digital_twin_row_models/report-service" / "data").glob("departure_iterative_history_*.json"))
     sar_iters, sar_best, _ = read_history(str(BASE / "backend" / "pipeline" / "models" / "iceberg_iterative_history.json"), "mAP50")
-    fuel_iters, fuel_best, _ = read_history(str(BASE / "ml-pipeline" / "models" / "fuel_iterative_history.json"), "R2")
+    fuel_iters, fuel_best, _ = read_history(str(BASE / "digital_twin_row_models/ml-pipeline" / "models" / "fuel_iterative_history.json"), "R2")
     wi_iters, wi_best = read_wi()
     ct_log = read_ct_log()
 

@@ -13,22 +13,22 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+BASE = Path(__file__).resolve().parent.parent  # tools/ → 프로젝트 루트
 
 PIPELINES = [
     {
         "name": "rl-pipeline",
-        "log": BASE / "rl-pipeline/logs/train_all.log",
+        "log": BASE / "digital_twin_row_models/rl-pipeline/logs/train_all.log",
         "script": "train_all.py",
-        "venv_python": BASE / "rl-pipeline/venv/Scripts/python.exe",
-        "cwd": BASE / "rl-pipeline",
+        "venv_python": BASE / "digital_twin_row_models/rl-pipeline/venv/Scripts/python.exe",
+        "cwd": BASE / "digital_twin_row_models/rl-pipeline",
     },
     {
         "name": "report-service",
-        "log": BASE / "report-service/logs/train_departure.log",
+        "log": BASE / "digital_twin_row_models/report-service/logs/train_departure.log",
         "script": "train_departure.py",
-        "venv_python": BASE / "report-service/venv/Scripts/python.exe",
-        "cwd": BASE / "report-service",
+        "venv_python": BASE / "digital_twin_row_models/report-service/venv/Scripts/python.exe",
+        "cwd": BASE / "digital_twin_row_models/report-service",
     },
 ]
 

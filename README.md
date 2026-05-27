@@ -128,12 +128,14 @@ git checkout Hijin   # 작업 브랜치
 ```
 
 클론 직후 다음이 있어야 합니다:
+- `backend/` — Node.js(Express) API 게이트웨이 (포트 8000) — 해빙·빙산·항로·기상 API + 정적 데이터
 - `backend/model/` — 학습된 모델 47개 (RL 회피 9 + 출항 ONNX 29 + 항법 6 + fuel 1 + yolo 1, 총 ~591MB)
 - `backend/data/` — 해빙·기상 데이터 일부 (없는 데이터는 외부 API에서 자동 fetch)
-- `digital_twin_row_models/` — 3개 백엔드 서비스 소스 (rl-pipeline / report-service / ml-pipeline)
-- `services-launcher/` — 서버 launcher + AI 모델 테스트 스크립트
+- `digital_twin_row_models/` — 3개 AI 서비스 소스 (rl-pipeline / report-service / ml-pipeline)
 - `sar_server.py` — SAR 빙산 탐지 서버 (포트 8005)
-- `frontend/` — React + Vite
+- `services-launcher/` — AI 서버 launcher(.ps1) + 모델 테스트 스크립트
+- `tools/` — 개발·학습·모니터링 유틸 스크립트 (모니터·워치독·트리거 등)
+- `frontend/` — React + Vite (포트 5173)
 
 ### 2. 환경변수 (선택)
 
@@ -180,7 +182,23 @@ cd ../..
 
 > 💡 **간단하게 하나의 venv 로 묶고 싶다면**: Digital_twin 루트에 venv 만들고 위 3개 requirements.txt 를 모두 install 해도 됨. 다만 stable-baselines3 / claude-agent-sdk / xgboost 가 한 환경에 다 들어가서 무거움.
 
-### 4. 백엔드 4개 서버 띄우기
+### 4. Node API 백엔드 (포트 8000)
+
+프론트엔드의 해빙·빙산·항로·기상 API와 정적 데이터(`/data`)는 이 서버가 담당합니다. **AI를 배포본(HF Space)으로 쓸 거면 이 단계 + 프론트엔드(step 7)만으로 화면이 동작합니다.**
+
+```bash
+cd backend
+npm install
+npm run dev        # → http://localhost:8000  (정지: Ctrl+C)
+```
+
+> ⚠️ **로컬 AI 구동 방법은 둘 중 하나만 고르세요.** Node 백엔드는 `digital_twin_row_models/<service>/venv` 가 **있으면** RL/Report/Fuel(8001~8003)을 자동 기동합니다.
+> - **(A) Node 자동 기동**: step 3 으로 venv 만들어두고 위 `npm run dev` → 8001~8003 자동 실행.
+> - **(B) 수동 기동**: venv 없이 두고(자동 기동 skip) 아래 step 5 의 `services-launcher` 로 직접 실행.
+>
+> (A)·(B)를 동시에 켜면 같은 포트를 두 번 잡아 충돌합니다. AI 없이 배포본만 쓸 거면 venv 를 안 만들면 됩니다.
+
+### 5. AI 서버 직접 띄우기 (로컬 AI — 선택, 방법 B)
 
 각각 별도 PowerShell/터미널 창에서:
 
@@ -206,7 +224,7 @@ cd ../..
 - http://127.0.0.1:8003/api/fuel/health
 - http://127.0.0.1:8005/api/sar/status
 
-### 5. AI 모델 검증 (서버 없이도 가능)
+### 6. AI 모델 검증 (서버 없이도 가능)
 
 `services-launcher/` 의 테스트 스크립트로 모든 모델 로드·추론 한 번에 확인:
 
@@ -220,7 +238,7 @@ python services-launcher/test_departure_models.py
 
 ✅ 정상이면 `OK 9/9`, `OK 29/29` 로 끝남.
 
-### 6. 프론트엔드 실행
+### 7. 프론트엔드 실행
 
 ```bash
 cd frontend
@@ -233,13 +251,14 @@ npm run dev
 **프록시 설정** (`frontend/vite.config.js` 상단):
 - 기본값: `/api/rl`, `/api/report`, `/api/fuel` → HF Space (배포본)
 - `/api/sar` → localhost:8005 (로컬 서버)
+- `/api`(해빙·항로 등 일반)·`/data`·`/proxy` → localhost:8000 (Node 백엔드, step 4)
 - 로컬 백엔드로 테스트하려면 해당 상수를 `'http://localhost:<port>'` 로 바꾸기
 
-### 7. 문제 해결
+### 8. 문제 해결
 
 | 증상 | 원인 / 해결 |
 |------|------------|
-| `ECONNREFUSED` 가 vite proxy 에서 뜸 | 해당 백엔드가 안 떠있음. step 4 확인. |
+| `ECONNREFUSED` 가 vite proxy 에서 뜸 | 해당 백엔드가 안 떠있음. Node(step 4)·AI 서버(step 5) 확인. |
 | 8002 가 `rl_model_loaded: false` | `backend/model/report-service/*.onnx` 가 안 받아진 거 — `git lfs pull` 또는 git pull 재시도 |
 | `ModuleNotFoundError: gymnasium` 등 | step 3 의존성 설치 누락. 해당 venv 활성 + `pip install -r requirements.txt`. |
 | Python 3.14 에서 `NoEventLoopError` | 이미 패치됨. `anyio.to_thread` / `BackgroundTask` 가 server.py 상단에서 monkey-patch. |

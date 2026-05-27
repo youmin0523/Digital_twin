@@ -13,21 +13,21 @@ import subprocess, sys, time, json, os
 from pathlib import Path
 from urllib import request as urllib_request, error as urllib_error
 
-BASE = Path(__file__).parent
+BASE = Path(__file__).resolve().parent.parent  # tools/ → 프로젝트 루트
 
 # ── 설정 ──────────────────────────────────────────────────────
 SERVERS = [
     {
         "name": "rl-pipeline",
         "port": 8001,
-        "cwd":  BASE / "rl-pipeline",
+        "cwd":  BASE / "digital_twin_row_models/rl-pipeline",
         "cmd":  ["venv/Scripts/uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8001"],
         "health": "http://127.0.0.1:8001/docs",
     },
     {
         "name": "report-service",
         "port": 8002,
-        "cwd":  BASE / "report-service",
+        "cwd":  BASE / "digital_twin_row_models/report-service",
         "cmd":  ["venv/Scripts/uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8002"],
         "health": "http://127.0.0.1:8002/api/report/health",
     },
@@ -41,7 +41,7 @@ SERVERS = [
     {
         "name": "ml-training-service",
         "port": 8004,
-        "cwd":  BASE / "ml-pipeline",
+        "cwd":  BASE / "digital_twin_row_models/ml-pipeline",
         "cmd":  ["venv/Scripts/uvicorn", "train_server:app", "--host", "0.0.0.0", "--port", "8004"],
         "health": "http://127.0.0.1:8004/api/ml/health",
     },
@@ -165,6 +165,6 @@ if __name__ == "__main__":
 
     print("\n" + "=" * 60)
     print("  모든 학습이 시작되었습니다.")
-    print("  진행 상황: python monitor.py")
+    print("  진행 상황: python tools/monitor.py")
     print("  로그 위치: Digital_twin/logs/")
     print("=" * 60)

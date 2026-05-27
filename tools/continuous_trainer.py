@@ -30,7 +30,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib import request as ur
 
-BASE = Path(__file__).parent
+BASE = Path(__file__).resolve().parent.parent  # tools/ → 프로젝트 루트
 LOG_FILE  = BASE / "logs" / "continuous_trainer.log"
 STATE_FILE = BASE / "logs" / "continuous_trainer_state.json"
 LOG_FILE.parent.mkdir(exist_ok=True)
@@ -60,8 +60,8 @@ RAM_MIN_FREE_GB     = 2.0    # 최소 여유 RAM (GB)
 RL_WAIT_POLL_SEC    = 60     # RL 대기 중 확인 주기 (초)
 RESOURCE_POLL_SEC   = 30     # 리소스 대기 중 확인 주기 (초)
 
-ML_DIR     = BASE / "ml-pipeline"
-REPORT_DIR = BASE / "report-service"
+ML_DIR     = BASE / "digital_twin_row_models/ml-pipeline"
+REPORT_DIR = BASE / "digital_twin_row_models/report-service"
 TRAINERS   = BASE / "backend" / "pipeline" / "trainers"
 
 for p in [str(ML_DIR), str(REPORT_DIR), str(TRAINERS)]:

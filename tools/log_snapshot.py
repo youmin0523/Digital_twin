@@ -10,9 +10,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-BASE    = Path(__file__).resolve().parent
-RL_LOG  = BASE / "rl-pipeline" / "logs" / "train_all.log"
-DEP_LOG = BASE / "report-service" / "logs" / "train_departure.log"
+BASE    = Path(__file__).resolve().parent.parent  # tools/ → 프로젝트 루트
+RL_LOG  = BASE / "digital_twin_row_models/rl-pipeline" / "logs" / "train_all.log"
+DEP_LOG = BASE / "digital_twin_row_models/report-service" / "logs" / "train_departure.log"
 OUT     = BASE / "log_snapshot.txt"
 INTERVAL = 180  # 3분
 
