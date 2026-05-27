@@ -16,10 +16,16 @@ import numpy as np
 logger = logging.getLogger("report-service.rl.departure_agent")
 
 MODEL_DIR = Path(__file__).resolve().parents[1] / ".." / "data" / "departure_rl_model"
-# 중앙 ONNX 모델 폴더 (학습 완료된 29개 모델) — Digital_twin/backend/model/report-service
-# 본 파일 위치: Digital_twin/digital_twin_row_models/report-service/modules/rl/departure_agent.py
-# parents[4] = Digital_twin/
-CENTRAL_ONNX_DIR = Path(__file__).resolve().parents[4] / "backend" / "model" / "report-service"
+# 중앙 ONNX 모델 폴더 (학습 완료된 29개 모델). 두 가지 레이아웃 지원:
+#   - 로컬: Digital_twin/digital_twin_row_models/report-service/modules/rl/departure_agent.py
+#           → parents[4] = Digital_twin/
+#   - HF Space: <root>/report-service/modules/rl/departure_agent.py
+#           → parents[3] = <root>
+_ONNX_CANDIDATES = [
+    Path(__file__).resolve().parents[4] / "backend" / "model" / "report-service",
+    Path(__file__).resolve().parents[3] / "backend" / "model" / "report-service",
+]
+CENTRAL_ONNX_DIR = next((p for p in _ONNX_CANDIDATES if p.exists()), _ONNX_CANDIDATES[0])
 
 
 class _StopTraining(Exception):

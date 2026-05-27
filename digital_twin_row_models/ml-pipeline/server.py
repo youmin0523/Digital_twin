@@ -32,10 +32,23 @@ app.add_middleware(
 
 # ── 모델 로드 ───────────────────────────────────────────────
 # 중앙 모델 폴더 우선, 없으면 서비스 로컬 폴더로 폴백
-_CENTRAL_MODEL = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "..", "..", "backend", "model",
-    "nevigation-service", "fuel_xgb_model.pkl",
-))
+# 두 가지 레이아웃 지원:
+#   - 로컬: Digital_twin/digital_twin_row_models/ml-pipeline/server.py
+#           → ../../backend = digital_twin_row_models/backend (없음)
+#           → ../../../backend = Digital_twin/backend (있음)
+#   - HF Space: <root>/ml-pipeline/server.py
+#           → ../backend = <root>/backend (있음)
+_MODEL_CANDIDATES = [
+    os.path.normpath(os.path.join(
+        os.path.dirname(__file__), "..", "..", "backend", "model",
+        "nevigation-service", "fuel_xgb_model.pkl",
+    )),
+    os.path.normpath(os.path.join(
+        os.path.dirname(__file__), "..", "backend", "model",
+        "nevigation-service", "fuel_xgb_model.pkl",
+    )),
+]
+_CENTRAL_MODEL = next((p for p in _MODEL_CANDIDATES if os.path.exists(p)), _MODEL_CANDIDATES[0])
 _LOCAL_MODEL = os.path.join(os.path.dirname(__file__), "models", "fuel_xgb_model.pkl")
 MODEL_PATH = _CENTRAL_MODEL if os.path.exists(_CENTRAL_MODEL) else _LOCAL_MODEL
 artifact = None
