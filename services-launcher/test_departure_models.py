@@ -7,7 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
-REPORT_DIR = Path(r"c:/Hijin/pjbingha/digital_twin_row_models/report-service")
+# Digital_twin/services-launcher/ 위치 기준 상대경로
+REPORT_DIR = Path(__file__).resolve().parent.parent / "digital_twin_row_models" / "report-service"
 sys.path.insert(0, str(REPORT_DIR))
 
 from modules.rl.departure_agent import DepartureAgent  # noqa: E402
