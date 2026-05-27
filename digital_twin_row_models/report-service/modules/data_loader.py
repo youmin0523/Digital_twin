@@ -20,9 +20,11 @@ import numpy as np
 
 logger = logging.getLogger("report-service.data_loader")
 
-# 본 파일 위치: Digital_twin/digital_twin_row_models/report-service/modules/data_loader.py
-# parents[3] = Digital_twin/, 그 아래 backend/data 를 우선 사용.
-# (서비스를 단독 폴더에서 돌리는 경우 parents[2]/backend/data 폴백)
+# 두 가지 레이아웃 지원:
+#   - 로컬: Digital_twin/digital_twin_row_models/report-service/modules/data_loader.py
+#           → parents[3] = Digital_twin/
+#   - HF Space: <root>/report-service/modules/data_loader.py
+#           → parents[2] = <root>
 _CANDIDATES = [
     Path(__file__).resolve().parents[3] / "backend" / "data",
     Path(__file__).resolve().parents[2] / "backend" / "data",
