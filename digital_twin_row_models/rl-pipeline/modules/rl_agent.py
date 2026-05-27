@@ -37,8 +37,10 @@ class _StopTraining(Exception):
 
 logger = logging.getLogger(__name__)
 
-# 중앙 모델 폴더 우선 (Digital_twin/model/avoidance-route/models), 없으면 로컬 폴백
-_CENTRAL_BASE = Path(__file__).resolve().parents[3] / "Digital_twin" / "model" / "avoidance-route" / "models"
+# 중앙 모델 폴더 우선 (Digital_twin/model/avoidance-route/models), 없으면 로컬 폴백.
+# 본 파일 위치: Digital_twin/digital_twin_row_models/rl-pipeline/modules/rl_agent.py
+# parents[3] = Digital_twin/
+_CENTRAL_BASE = Path(__file__).resolve().parents[3] / "model" / "avoidance-route" / "models"
 _LOCAL_BASE = Path(__file__).resolve().parent.parent / "models"
 _BASE_MODEL_DIR = _CENTRAL_BASE if _CENTRAL_BASE.exists() else _LOCAL_BASE
 
