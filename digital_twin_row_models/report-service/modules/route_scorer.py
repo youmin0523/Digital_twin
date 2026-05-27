@@ -16,10 +16,11 @@ from dataclasses import dataclass, field
 import numpy as np
 
 # arctic_master_router.py import를 위한 sys.path 설정
-# digital_twin_row_models/backend/pipeline 가 없으면 Digital_twin/backend/pipeline 사용
+# 본 코드는 Digital_twin/digital_twin_row_models/report-service/modules/route_scorer.py 위치 가정.
+# parents[3] = Digital_twin/, 거기 아래 backend/pipeline 사용. (서비스 단독 동작 시엔 로컬 폴백)
 _candidates = [
+    Path(__file__).resolve().parents[3] / "backend" / "pipeline",
     Path(__file__).resolve().parents[2] / "backend" / "pipeline",
-    Path(__file__).resolve().parents[3] / "Digital_twin" / "backend" / "pipeline",
 ]
 for _p in _candidates:
     if _p.exists():
