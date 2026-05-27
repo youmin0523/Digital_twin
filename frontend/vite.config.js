@@ -2,15 +2,20 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import cesium from 'vite-plugin-cesium';
 
-// AI 백엔드 4종(rl/report/fuel/sar)은 HF Space 배포본 사용.
-// 로컬 8001/8002/8003/8005 를 직접 띄우고 싶으면 아래 상수만 'http://localhost' 로 바꿔두면 됨.
-const AI_BACKEND = 'https://heejin-oh-arctic-digital-twin-backend.hf.space';
+// AI 백엔드 라우팅 (서비스별 개별 설정 가능)
+// - 기본값은 HF Space 배포본. 로컬에서 띄우면 해당 상수만 'http://localhost:<port>' 로 바꾸면 됨.
+// - SAR 은 HF 에 모델이 없어서 기본값을 로컬(8005) 로 둠.
+const HF_BACKEND = 'https://heejin-oh-arctic-digital-twin-backend.hf.space';
+const RL_BACKEND     = HF_BACKEND;                  // 또는 'http://localhost:8001'
+const REPORT_BACKEND = HF_BACKEND;                  // 또는 'http://localhost:8002'
+const FUEL_BACKEND   = HF_BACKEND;                  // 또는 'http://localhost:8003'
+const SAR_BACKEND    = 'http://localhost:8005';     // 또는 HF_BACKEND
 
-const aiProxy = {
-  target: AI_BACKEND,
+const mkProxy = (target) => ({
+  target,
   changeOrigin: true,
-  secure: true,
-};
+  secure: target.startsWith('https'),
+});
 
 export default defineConfig({
   plugins: [react(), cesium()],
@@ -18,13 +23,13 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/ai-api': {
-        ...aiProxy,
+        ...mkProxy(RL_BACKEND),
         rewrite: (path) => path.replace(/^\/ai-api/, '/api'),
       },
-      '/api/rl':     aiProxy,
-      '/api/report': aiProxy,
-      '/api/fuel':   aiProxy,
-      '/api/sar':    aiProxy,
+      '/api/rl':     mkProxy(RL_BACKEND),
+      '/api/report': mkProxy(REPORT_BACKEND),
+      '/api/fuel':   mkProxy(FUEL_BACKEND),
+      '/api/sar':    mkProxy(SAR_BACKEND),
       // 그 외 일반 /api/* 와 정적 자원은 로컬 node 백엔드(8000) 가 처리
       '/api': 'http://localhost:8000',
       '/proxy': 'http://localhost:8000',

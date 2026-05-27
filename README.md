@@ -112,42 +112,116 @@
 
 ---
 
-## 🚀 로컬 실행
+## 🚀 로컬 실행 (팀원용 셋업 가이드)
 
-### 사전 준비
-- Python 3.11+
-- Node.js 20+
-- Git LFS
+### 0. 사전 준비
+- **Python 3.11 이상** (3.14도 OK — async 패치 적용됨)
+- **Node.js 20 이상**
+- **Git** (모델 파일이 ~600MB 라 pull 시간 좀 걸림)
 
 ### 1. 저장소 클론
+
 ```bash
-git clone https://github.com/Hijin554/digital-twin
+git clone https://github.com/Hijin554/digital-twin.git
 cd digital-twin
+git checkout Hijin   # 작업 브랜치
 ```
 
-### 2. 환경변수 설정
+클론 직후 다음이 있어야 합니다:
+- `backend/model/` — 학습된 모델 47개 (RL 회피 9 + 출항 ONNX 29 + 항법 6 + fuel 1 + yolo 1, 총 ~591MB)
+- `backend/data/` — 해빙·기상 데이터 일부 (없는 데이터는 외부 API에서 자동 fetch)
+- `digital_twin_row_models/` — 3개 백엔드 서비스 소스 (rl-pipeline / report-service / ml-pipeline)
+- `services-launcher/` — 서버 launcher + AI 모델 테스트 스크립트
+- `sar_server.py` — SAR 빙산 탐지 서버 (포트 8005)
+- `frontend/` — React + Vite
+
+### 2. 환경변수 (선택)
+
 ```bash
 cp backend/.env.example backend/.env
-# .env 파일 편집해서 API 키 입력
+# .env 편집 — 키가 없으면 해당 기능만 비활성화, 다른 건 정상 동작
 ```
 
-필요한 키:
-- `ANTHROPIC_API_KEY` (Claude)
-- `COPERNICUS_MARINE_USER` / `COPERNICUS_MARINE_PASSWORD`
-- `CDSE_USER` / `CDSE_PASSWORD`
+| 키 | 용도 | 없을 때 영향 |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | What-If Claude 분석 | What-If 탭 비활성 |
+| `COPERNICUS_MARINE_USER` / `_PASSWORD` | 실시간 해양 데이터 | 캐시된 데이터 사용 |
+| `CDSE_USER` / `CDSE_PASSWORD` | Sentinel-1 SAR | 샘플 이미지 사용 |
 
-### 3. 백엔드 실행
+### 3. Python 의존성 설치
+
+서비스별로 별도의 venv를 권장 (모듈 충돌 회피):
+
 ```bash
-# 각 백엔드 폴더에서
+# rl-pipeline (RL 빙산 회피, 포트 8001)
+cd digital_twin_row_models/rl-pipeline
 python -m venv venv
-venv\Scripts\activate   # Windows
+venv\Scripts\activate          # macOS/Linux: source venv/bin/activate
 pip install -r requirements.txt
+deactivate
+cd ../..
 
-# 자동 시작 (4개 서버 한 번에)
-auto_start.bat   # Windows
+# report-service (출항 결정 + Claude What-If, 포트 8002)
+cd digital_twin_row_models/report-service
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+deactivate
+cd ../..
+
+# ml-pipeline (XGBoost 연료 예측, 포트 8003)
+cd digital_twin_row_models/ml-pipeline
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+deactivate
+cd ../..
 ```
 
-### 4. 프론트엔드 실행
+> 💡 **간단하게 하나의 venv 로 묶고 싶다면**: Digital_twin 루트에 venv 만들고 위 3개 requirements.txt 를 모두 install 해도 됨. 다만 stable-baselines3 / claude-agent-sdk / xgboost 가 한 환경에 다 들어가서 무거움.
+
+### 4. 백엔드 4개 서버 띄우기
+
+각각 별도 PowerShell/터미널 창에서:
+
+```powershell
+# 창 1 — RL 회피 (8001)
+.\services-launcher\start-rl-pipeline.ps1
+
+# 창 2 — Report (8002)
+.\services-launcher\start-report-service.ps1
+
+# 창 3 — Fuel (8003)
+.\services-launcher\start-ml-pipeline.ps1
+
+# 창 4 — SAR (8005)
+.\services-launcher\start-sar-server.ps1
+```
+
+> macOS/Linux: 각 폴더에 들어가서 `python -m uvicorn server:app --host 127.0.0.1 --port <port>` 실행. SAR 는 `python sar_server.py`.
+
+각 서버 health check:
+- http://127.0.0.1:8001/api/rl/health
+- http://127.0.0.1:8002/api/report/health  → `rl_model_loaded: true` 떠야 정상
+- http://127.0.0.1:8003/api/fuel/health
+- http://127.0.0.1:8005/api/sar/status
+
+### 5. AI 모델 검증 (서버 없이도 가능)
+
+`services-launcher/` 의 테스트 스크립트로 모든 모델 로드·추론 한 번에 확인:
+
+```bash
+# 9개 회피 모델 (NSR/NWP/TSR × easy/normal/hard)
+python services-launcher/test_avoidance_models.py
+
+# 29개 출항 ONNX 모델 (IA/PC3~7 × bulk/container/lng/tanker)
+python services-launcher/test_departure_models.py
+```
+
+✅ 정상이면 `OK 9/9`, `OK 29/29` 로 끝남.
+
+### 6. 프론트엔드 실행
+
 ```bash
 cd frontend
 npm install
@@ -155,6 +229,21 @@ npm run dev
 ```
 
 브라우저에서 http://localhost:5173 열기.
+
+**프록시 설정** (`frontend/vite.config.js` 상단):
+- 기본값: `/api/rl`, `/api/report`, `/api/fuel` → HF Space (배포본)
+- `/api/sar` → localhost:8005 (로컬 서버)
+- 로컬 백엔드로 테스트하려면 해당 상수를 `'http://localhost:<port>'` 로 바꾸기
+
+### 7. 문제 해결
+
+| 증상 | 원인 / 해결 |
+|------|------------|
+| `ECONNREFUSED` 가 vite proxy 에서 뜸 | 해당 백엔드가 안 떠있음. step 4 확인. |
+| 8002 가 `rl_model_loaded: false` | `backend/model/report-service/*.onnx` 가 안 받아진 거 — `git lfs pull` 또는 git pull 재시도 |
+| `ModuleNotFoundError: gymnasium` 등 | step 3 의존성 설치 누락. 해당 venv 활성 + `pip install -r requirements.txt`. |
+| Python 3.14 에서 `NoEventLoopError` | 이미 패치됨. `anyio.to_thread` / `BackgroundTask` 가 server.py 상단에서 monkey-patch. |
+| What-If 가 0% 멈춤 | `ANTHROPIC_API_KEY` 가 backend/.env 에 있는지 확인. |
 
 ---
 
