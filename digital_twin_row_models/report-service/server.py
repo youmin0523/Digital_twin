@@ -43,8 +43,14 @@ async def _patched_bg_call(self):
 
 _sb.BackgroundTask.__call__ = _patched_bg_call
 
-# backend/.env 로드
-load_dotenv(Path(__file__).parent.parent / "backend" / ".env")
+# backend/.env 로드 — Digital_twin/backend/.env 우선, 단독 폴더 폴백
+for _env in [
+    Path(__file__).resolve().parents[2] / "backend" / ".env",  # Digital_twin/backend/.env
+    Path(__file__).parent.parent / "backend" / ".env",  # 단독 배포(HF) 시
+]:
+    if _env.exists():
+        load_dotenv(_env)
+        break
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("report-service")
@@ -442,9 +448,16 @@ async def rl_calibrate():
 
     from modules.route_scorer import ARCTIC_SEGMENTS, concentration_to_ice_conditions
     import sys as _sys
-    _router_path = str(Path(__file__).parent.parent / "backend" / "pipeline")
-    if _router_path not in _sys.path:
-        _sys.path.insert(0, _router_path)
+    # Digital_twin/backend/pipeline 우선, 단독 배포(HF) 폴더 폴백
+    for _cand in [
+        Path(__file__).resolve().parents[2] / "backend" / "pipeline",
+        Path(__file__).parent.parent / "backend" / "pipeline",
+    ]:
+        if _cand.exists():
+            _router_path = str(_cand)
+            if _router_path not in _sys.path:
+                _sys.path.insert(0, _router_path)
+            break
     from arctic_master_router import calculate_rio
 
     predicted_rios = []

@@ -5,8 +5,9 @@
 import sys
 from pathlib import Path
 
-# rl-pipeline 모듈 경로 추가
-RL_DIR = Path(r"c:/Hijin/pjbingha/digital_twin_row_models/rl-pipeline")
+# rl-pipeline 모듈 경로 추가 (스크립트 위치 기준 상대경로)
+# Digital_twin/services-launcher/test_*.py 위치 가정
+RL_DIR = Path(__file__).resolve().parent.parent / "digital_twin_row_models" / "rl-pipeline"
 sys.path.insert(0, str(RL_DIR))
 
 from modules.rl_agent import IcebergAvoidanceAgent  # noqa: E402
