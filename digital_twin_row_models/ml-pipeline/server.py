@@ -33,7 +33,7 @@ app.add_middleware(
 # ── 모델 로드 ───────────────────────────────────────────────
 # 중앙 모델 폴더 우선, 없으면 서비스 로컬 폴더로 폴백
 _CENTRAL_MODEL = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "..", "..", "model",
+    os.path.dirname(__file__), "..", "..", "backend", "model",
     "nevigation-service", "fuel_xgb_model.pkl",
 ))
 _LOCAL_MODEL = os.path.join(os.path.dirname(__file__), "models", "fuel_xgb_model.pkl")
