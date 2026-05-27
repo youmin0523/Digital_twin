@@ -103,7 +103,7 @@ ml-pipeline/models/
 *.weights
 yolov8n.pt
 
-# 이미지 (학습 데이터·임시 캡처) — frontend UI 리소스는 예외
+# 이미지 (학습 데이터·임시 캡처) — frontend UI 리소스는 예외 
 *.png
 *.jpg
 *.jpeg
@@ -119,6 +119,11 @@ yolov8n.pt
 *.tar.gz
 *.7z
 *.rar
+
+# ── 중앙 모델 폴더는 위 전역 ignore 규칙에서 제외하고 GitHub 에 포함 ──
+# (avoidance-route / nevigation-service / report-service 의 학습 산출물)
+!backend/model/
+!backend/model/**
 
 # Archive
 _archive/
