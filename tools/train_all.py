@@ -9,9 +9,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger("train_all")
 
 # 경로 설정
-BASE_DIR = Path(__file__).parent
-RL_PIPELINE_PATH = BASE_DIR / "rl-pipeline"
-REPORT_SERVICE_PATH = BASE_DIR / "report-service"
+BASE_DIR = Path(__file__).resolve().parent.parent  # tools/ → 프로젝트 루트
+RL_PIPELINE_PATH = BASE_DIR / "digital_twin_row_models/rl-pipeline"
+REPORT_SERVICE_PATH = BASE_DIR / "digital_twin_row_models/report-service"
 
 # PYTHONPATH 추가
 sys.path.append(str(RL_PIPELINE_PATH))

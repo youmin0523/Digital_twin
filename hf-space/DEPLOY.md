@@ -78,9 +78,9 @@ Copy-Item "$src\.gitattributes"    -Destination .
 
 # B. 4개 백엔드 서비스 복사
 $proj = "C:\Hijin\pjbingha\Digital_twin"
-robocopy "$proj\rl-pipeline"     ".\rl-pipeline"     /E /XD venv __pycache__ logs runs
-robocopy "$proj\report-service"  ".\report-service"  /E /XD venv __pycache__ output
-robocopy "$proj\ml-pipeline"     ".\ml-pipeline"     /E /XD venv __pycache__
+robocopy "$proj\digital_twin_row_models\rl-pipeline"     ".\rl-pipeline"     /E /XD venv __pycache__ logs runs
+robocopy "$proj\digital_twin_row_models\report-service"  ".\report-service"  /E /XD venv __pycache__ output
+robocopy "$proj\digital_twin_row_models\ml-pipeline"     ".\ml-pipeline"     /E /XD venv __pycache__
 Copy-Item  "$proj\sar_server.py" -Destination .
 
 # C. SAR 서버가 참조하는 backend/pipeline 만 복사 (Node.js 코드는 제외)

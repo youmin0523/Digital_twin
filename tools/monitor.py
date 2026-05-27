@@ -14,14 +14,14 @@ def _tail(seq: Any, n: int) -> "deque[Any]":
     """리스트/Any에서 마지막 n개를 반환 (슬라이싱 타입 오류 우회)."""
     return deque(seq, maxlen=n)
 
-BASE = Path(__file__).parent
-RL_MODELS     = BASE / "rl-pipeline" / "models"
-REPORT_DATA   = BASE / "report-service" / "data"
+BASE = Path(__file__).resolve().parent.parent  # tools/ → 프로젝트 루트
+RL_MODELS     = BASE / "digital_twin_row_models/rl-pipeline" / "models"
+REPORT_DATA   = BASE / "digital_twin_row_models/report-service" / "data"
 SAR_META      = BASE / "backend" / "pipeline" / "models" / "iceberg_yolov8_meta.json"
 SAR_ITER_HIST = BASE / "backend" / "pipeline" / "models" / "iceberg_iterative_history.json"
-FUEL_ITER_HIST = BASE / "ml-pipeline" / "models" / "fuel_iterative_history.json"
-ML_STATE_FILE  = BASE / "ml-pipeline" / "models" / "training_state.json"
-WHATIF_ITER_HIST = BASE / "report-service" / "data" / "whatif_iterative_history.json"
+FUEL_ITER_HIST = BASE / "digital_twin_row_models/ml-pipeline" / "models" / "fuel_iterative_history.json"
+ML_STATE_FILE  = BASE / "digital_twin_row_models/ml-pipeline" / "models" / "training_state.json"
+WHATIF_ITER_HIST = BASE / "digital_twin_row_models/report-service" / "data" / "whatif_iterative_history.json"
 
 MAX_ITER_RL   = 15      # rl-pipeline 목표 반복 수
 MAX_ITER_DEP  = 15      # report-service 목표 반복 수

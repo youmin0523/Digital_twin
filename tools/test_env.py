@@ -13,7 +13,7 @@ try:
     print(f"Gymnasium loaded: {gymnasium.__version__}")
     
     # 육지 마스크 테스트
-    sys.path.append(os.path.join(os.getcwd(), 'rl-pipeline'))
+    sys.path.append(os.path.join(os.getcwd(), 'digital_twin_row_models', 'rl-pipeline'))
     from modules.rl_land_mask import LandMask
     lm = LandMask()
     print("LandMask initialized successfully")

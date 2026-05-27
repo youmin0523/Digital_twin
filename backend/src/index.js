@@ -158,7 +158,7 @@ function makePythonServer({ tag, port, python, args, cwd, healthPath = '/' }) {
 // ── RL Pipeline (포트 8001) ───────────────────────────────────
 const RL_PORT = 8001;
 const RL_VENV_PYTHON = path.join(
-  __dirname, '..', '..', 'rl-pipeline', 'venv',
+  __dirname, '..', '..', 'digital_twin_row_models', 'rl-pipeline', 'venv',
   process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
 );
 
@@ -168,7 +168,7 @@ const rlServer = makePythonServer({
   python: RL_VENV_PYTHON,
   // --reload 제거: 파일 수정이 학습 스레드를 죽이지 않도록
   args: ['-m', 'uvicorn', 'server:app', '--host', '127.0.0.1', '--port', String(RL_PORT)],
-  cwd: path.join(__dirname, '..', '..', 'rl-pipeline'),
+  cwd: path.join(__dirname, '..', '..', 'digital_twin_row_models', 'rl-pipeline'),
   healthPath: '/api/rl/health',
 });
 
@@ -206,7 +206,7 @@ app.use(createProxyMiddleware('/api/rl', {
 // ── Report Service (포트 8002) ────────────────────────────────
 const REPORT_PORT = 8002;
 const REPORT_VENV_PYTHON = path.join(
-  __dirname, '..', '..', 'report-service', 'venv',
+  __dirname, '..', '..', 'digital_twin_row_models', 'report-service', 'venv',
   process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
 );
 
@@ -215,7 +215,7 @@ const reportServer = makePythonServer({
   port: REPORT_PORT,
   python: REPORT_VENV_PYTHON,
   args: ['-m', 'uvicorn', 'server:app', '--host', '127.0.0.1', '--port', String(REPORT_PORT)],
-  cwd: path.join(__dirname, '..', '..', 'report-service'),
+  cwd: path.join(__dirname, '..', '..', 'digital_twin_row_models', 'report-service'),
   healthPath: '/api/report/health',
 });
 
@@ -251,7 +251,7 @@ app.use(createProxyMiddleware('/api/report', {
 // ── ML Fuel Pipeline (포트 8003) ──────────────────────────────
 const ML_PORT = 8003;
 const ML_VENV_PYTHON = path.join(
-  __dirname, '..', '..', 'ml-pipeline', 'venv',
+  __dirname, '..', '..', 'digital_twin_row_models', 'ml-pipeline', 'venv',
   process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
 );
 
@@ -260,7 +260,7 @@ const mlServer = makePythonServer({
   port: ML_PORT,
   python: ML_VENV_PYTHON,
   args: ['-m', 'uvicorn', 'server:app', '--host', '127.0.0.1', '--port', String(ML_PORT)],
-  cwd: path.join(__dirname, '..', '..', 'ml-pipeline'),
+  cwd: path.join(__dirname, '..', '..', 'digital_twin_row_models', 'ml-pipeline'),
   healthPath: '/',
 });
 

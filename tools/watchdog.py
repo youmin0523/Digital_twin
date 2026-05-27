@@ -12,7 +12,7 @@ import subprocess, sys, time, json, os, logging
 from pathlib import Path
 from urllib import request as ur
 
-BASE = Path(__file__).parent
+BASE = Path(__file__).resolve().parent.parent  # tools/ → 프로젝트 루트
 LOGS = BASE / "logs"
 LOGS.mkdir(exist_ok=True)
 
@@ -28,8 +28,8 @@ SERVERS = [
     {
         "name": "rl-pipeline",
         "port": 8001,
-        "cwd":  BASE / "rl-pipeline",
-        "cmd":  [str(BASE / "rl-pipeline/venv/Scripts/uvicorn"),
+        "cwd":  BASE / "digital_twin_row_models/rl-pipeline",
+        "cmd":  [str(BASE / "digital_twin_row_models/rl-pipeline/venv/Scripts/uvicorn"),
                  "server:app", "--host", "0.0.0.0", "--port", "8001"],
         "health": "http://127.0.0.1:8001/docs",
         "train_url": "http://127.0.0.1:8001/api/rl/multi/train",
@@ -40,8 +40,8 @@ SERVERS = [
     {
         "name": "report-service",
         "port": 8002,
-        "cwd":  BASE / "report-service",
-        "cmd":  [str(BASE / "report-service/venv/Scripts/uvicorn"),
+        "cwd":  BASE / "digital_twin_row_models/report-service",
+        "cmd":  [str(BASE / "digital_twin_row_models/report-service/venv/Scripts/uvicorn"),
                  "server:app", "--host", "0.0.0.0", "--port", "8002"],
         "health": "http://127.0.0.1:8002/api/report/health",
         "train_url": "http://127.0.0.1:8002/api/report/rl/multi/train",
@@ -63,8 +63,8 @@ SERVERS = [
     {
         "name": "ml-training",
         "port": 8004,
-        "cwd":  BASE / "ml-pipeline",
-        "cmd":  [str(BASE / "ml-pipeline/venv/Scripts/uvicorn"),
+        "cwd":  BASE / "digital_twin_row_models/ml-pipeline",
+        "cmd":  [str(BASE / "digital_twin_row_models/ml-pipeline/venv/Scripts/uvicorn"),
                  "train_server:app", "--host", "0.0.0.0", "--port", "8004"],
         "health": "http://127.0.0.1:8004/api/ml/health",
         "train_url": "http://127.0.0.1:8004/api/ml/train",
